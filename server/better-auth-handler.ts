@@ -6,7 +6,7 @@ import {
 } from "@universal-middleware/core";
 import { betterAuth } from "better-auth";
 import { getAuthConfig } from "./better-auth";
-import { getPublicAuthOrigin, rewriteRequestOrigin, withAuthNoStore } from "./auth-origin";
+import { resolveAuthOrigin, rewriteRequestOrigin, withAuthNoStore } from "./auth-origin";
 import { bootstrapFirstRoot, isRoot } from "./admin";
 
 // On Cloudflare the D1 binding is request-scoped (fresh instance per request); elsewhere it's memoized.
@@ -23,8 +23,8 @@ export const betterAuthSessionMiddleware: UniversalMiddleware = enhance(
   // The context we add here is automatically merged into pageContext
   async (request, context, runtime) => {
     try {
-      const publicOrigin = await getPublicAuthOrigin(runtime);
-      const authRequest = publicOrigin ? rewriteRequestOrigin(request, publicOrigin) : request;
+      const publicOrigin = await resolveAuthOrigin(request, runtime);
+      const authRequest = rewriteRequestOrigin(request, publicOrigin);
       const data = await getAuth(runtime, publicOrigin).api.getSession({ headers: authRequest.headers });
       return {
         ...context,
@@ -54,8 +54,8 @@ export const betterAuthSessionMiddleware: UniversalMiddleware = enhance(
  **/
 export const betterAuthHandler = enhance(
   async (request, _context, runtime) => {
-    const publicOrigin = await getPublicAuthOrigin(runtime);
-    const authRequest = publicOrigin ? rewriteRequestOrigin(request, publicOrigin) : request;
+    const publicOrigin = await resolveAuthOrigin(request, runtime);
+    const authRequest = rewriteRequestOrigin(request, publicOrigin);
     const response = await getAuth(runtime, publicOrigin).handler(authRequest);
 
     // Better Auth creates the user before returning sign-up. A singleton insert

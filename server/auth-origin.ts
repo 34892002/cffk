@@ -13,16 +13,17 @@ function normalizeOrigin(value: string): string | null {
 
 // The configured public site URL is authoritative when a third-party CDN
 // changes the request Host while proxying to a Cloudflare Worker custom domain.
-// The shared site-settings cache prevents an extra D1 read on every auth request.
-export async function getPublicAuthOrigin(runtime: RuntimeAdapter): Promise<string | undefined> {
-  if (runtime.runtime !== "workerd" || !runtime.env?.DB) return undefined;
-  const database = runtime.env.DB as D1Database;
+// Before the first configuration is saved, use the current request origin so
+// Better Auth always receives an explicit baseURL.
+export async function resolveAuthOrigin(request: Request, runtime: RuntimeAdapter): Promise<string> {
+  const requestOrigin = new URL(request.url).origin;
+  if (runtime.runtime !== "workerd" || !runtime.env?.DB) return requestOrigin;
 
   try {
-    const setting = await getSiteSettings(database);
-    return setting.siteUrl ? normalizeOrigin(setting.siteUrl) ?? undefined : undefined;
+    const setting = await getSiteSettings(runtime.env.DB as D1Database);
+    return setting.siteUrl ? normalizeOrigin(setting.siteUrl) ?? requestOrigin : requestOrigin;
   } catch {
-    return undefined;
+    return requestOrigin;
   }
 }
 
