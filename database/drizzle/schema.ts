@@ -60,20 +60,6 @@ export const verification = sqliteTable("verification", {
   updatedAt: integer("updatedAt", { mode: "timestamp_ms" }),
 });
 
-// Store operators are Better Auth users with an administrator profile.
-export const adminProfile = sqliteTable(
-  "adminProfile",
-  {
-    userId: text("userId").primaryKey().references(() => user.id),
-    status: text("status", { enum: ["ACTIVE", "DISABLED"] }).notNull().default("ACTIVE"),
-    twoFactorEnabled: integer("twoFactorEnabled", { mode: "boolean" }).notNull().default(false),
-    twoFactorSecret: text("twoFactorSecret"),
-    twoFactorEnabledAt: integer("twoFactorEnabledAt", { mode: "timestamp_ms" }),
-    createdAt,
-    updatedAt,
-  },
-  (table) => [index("adminProfile_status_idx").on(table.status)],
-);
 
 // A singleton row makes first-administrator assignment race-safe.
 export const adminBootstrap = sqliteTable("adminBootstrap", {
@@ -375,19 +361,6 @@ export const emailRetry = sqliteTable(
   (table) => [index("emailRetry_status_nextAttemptAt_idx").on(table.status, table.nextAttemptAt), index("emailRetry_emailLogId_idx").on(table.emailLogId)],
 );
 
-export const adminOperationLog = sqliteTable(
-  "adminOperationLog",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    adminUserId: text("adminUserId").notNull().references(() => user.id),
-    action: text("action").notNull(),
-    targetType: text("targetType").notNull(),
-    targetId: text("targetId"),
-    detail: text("detail"),
-    createdAt,
-  },
-  (table) => [index("adminOperationLog_admin_createdAt_idx").on(table.adminUserId, table.createdAt)],
-);
 
 export const s3Config = sqliteTable("s3Config", {
   id: integer("id").primaryKey().default(1),
@@ -421,7 +394,6 @@ export const schema = {
   session,
   account,
   verification,
-  adminProfile,
   adminBootstrap,
   siteSetting,
   category,
@@ -438,7 +410,6 @@ export const schema = {
   pushConfig,
   pushLog,
   emailRetry,
-  adminOperationLog,
   s3Config,
   media,
 };

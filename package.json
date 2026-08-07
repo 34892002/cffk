@@ -3,7 +3,7 @@
   "scripts": {
     "dev": "vike dev",
     "build": "vike build",
-    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
+    "test": "bun test tests",
     "preview": "vike build && vike preview",
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",

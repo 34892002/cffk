@@ -1,5 +1,5 @@
 import { and, count, desc, eq, like } from "drizzle-orm";
-import { adminOperationLog, order, orderDelivery, paymentLog, product } from "@/database/drizzle/schema";
+import { order, orderDelivery, paymentLog, product } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { notifyOrderDeliveryFailure, notifyOrderEmailEvents } from "@/server/email/order-events";
 import { requireAdmin } from "@/server/telefunc-context";
@@ -8,9 +8,6 @@ import { closePendingOrder, deliverPaidOrder } from "./service";
 type OrderStatus = "PENDING" | "PAID" | "DELIVERED" | "CLOSED" | "FAILED";
 type DeliveryStatus = "NOT_DELIVERED" | "DELIVERED" | "FAILED";
 
-async function audit(db: ReturnType<typeof requireAdmin>["db"], adminUserId: string, action: string, orderId: number, detail: string) {
-  await db.insert(adminOperationLog).values({ adminUserId, action, targetType: "order", targetId: String(orderId), detail, createdAt: new Date() });
-}
 
 export async function onGetAdminOrders(input?: { query?: string; status?: OrderStatus; deliveryStatus?: DeliveryStatus; page?: number; pageSize?: number }) {
   const { db } = requireAdmin();
@@ -40,28 +37,26 @@ export async function onGetAdminOrderDetail(input: { orderId: number }) {
 }
 
 export async function onCloseAdminOrder(input: { orderId: number }) {
-  const { database, db, adminUserId } = requireAdmin();
+  const { database, db } = requireAdmin();
   await closePendingOrder(database, input.orderId);
   const [record] = await db.select({ id: order.id, status: order.status }).from(order).where(eq(order.id, input.orderId)).limit(1);
   if (!record) appError("ORDER_NOT_FOUND");
   if (record.status !== "CLOSED") appError("ORDER_CANNOT_CLOSE");
-  await audit(db, adminUserId, "CLOSE_ORDER", record.id, "closed pending order");
   return record;
 }
 
 export async function onRetryAutomaticDelivery(input: { orderId: number }) {
-  const { database, runtime, db, adminUserId } = requireAdmin();
+  const { database, runtime, db } = requireAdmin();
   await deliverPaidOrder(database, input.orderId);
   await notifyOrderEmailEvents(database, runtime, input.orderId);
   const [record] = await db.select({ id: order.id, deliveryStatus: order.deliveryStatus }).from(order).where(eq(order.id, input.orderId)).limit(1);
   if (!record) appError("ORDER_NOT_FOUND");
   if (record.deliveryStatus !== "DELIVERED") appError("ORDER_DELIVERY_NOT_COMPLETED");
-  await audit(db, adminUserId, "RETRY_AUTOMATIC_DELIVERY", record.id, "delivery completed");
   return record;
 }
 
 export async function onRecordManualDelivery(input: { orderId: number; content: string; failed?: boolean }) {
-  const { database, runtime, db, adminUserId } = requireAdmin();
+  const { database, runtime, db } = requireAdmin();
   const content = input.content.trim();
   if (!content) appError("DELIVERY_CONTENT_REQUIRED");
   const [record] = await db.select({ id: order.id, orderNo: order.orderNo, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, productId: order.productId, deliveryType: product.deliveryType }).from(order).innerJoin(product, eq(order.productId, product.id)).where(eq(order.id, input.orderId)).limit(1);
@@ -74,12 +69,10 @@ export async function onRecordManualDelivery(input: { orderId: number; content: 
   if (input.failed) {
     await db.update(order).set({ status: "FAILED", deliveryStatus: "FAILED", updatedAt: now }).where(eq(order.id, record.id));
     await notifyOrderDeliveryFailure(database, runtime, record.id, content);
-    await audit(db, adminUserId, "MARK_DELIVERY_FAILED", record.id, content);
     return { ...record, deliveryStatus: "FAILED" as const };
   }
   await db.insert(orderDelivery).values({ orderId: record.id, deliveryType: record.deliveryType, contentSnapshot: JSON.stringify([content]), status: "SUCCESS", createdAt: now }).onConflictDoNothing();
   await db.update(order).set({ status: "DELIVERED", deliveryStatus: "DELIVERED", deliveredAt: now, updatedAt: now }).where(eq(order.id, record.id));
   await notifyOrderEmailEvents(database, runtime, record.id);
-  await audit(db, adminUserId, "RECORD_MANUAL_DELIVERY", record.id, `type=${record.deliveryType}`);
   return { ...record, deliveryStatus: "DELIVERED" as const };
 }

@@ -73,6 +73,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { PlusIcon, RefreshCwIcon } from "@lucide/vue";
+import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetCatalogAdminData, onSaveCategory, onSetCategoryStatus } from "@/server/catalog/admin.telefunc";
 
 type Catalog = Awaited<ReturnType<typeof onGetCatalogAdminData>>;
@@ -114,11 +115,11 @@ watch(query, () => { currentPage.value = 1; });
 watch(statusFilter, () => { currentPage.value = 1; });
 watch(pageSize, () => { currentPage.value = 1; });
 watch(totalPages, (pages) => { if (currentPage.value > pages) currentPage.value = pages; });
-async function loadCategories() { loading.value = true; error.value = null; try { categories.value = (await onGetCatalogAdminData()).categories; } catch (cause) { error.value = messageFor(cause); } finally { loading.value = false; } }
+async function loadCategories() { loading.value = true; error.value = null; try { categories.value = (await runTelefunc(() => onGetCatalogAdminData(), { notifyError: false })).categories; } catch (cause) { error.value = userErrorMessage(cause); } finally { loading.value = false; } }
 function openCreate() { resetForm(); dialogOpen.value = true; }
 function openEdit(item: Category) { Object.assign(form, { id: item.id, name: item.name, slug: item.slug, description: item.description ?? "", sort: item.sort }); error.value = null; dialogOpen.value = true; }
-async function saveCategory() { saving.value = true; error.value = null; try { await onSaveCategory({ ...form }); dialogOpen.value = false; resetForm(); await loadCategories(); } catch (cause) { error.value = messageFor(cause); } finally { saving.value = false; } }
-async function setStatus(item: Category) { error.value = null; try { await onSetCategoryStatus({ id: item.id, status: item.status === "ACTIVE" ? "DISABLED" : "ACTIVE" }); await loadCategories(); } catch (cause) { error.value = messageFor(cause); } }
+async function saveCategory() { saving.value = true; error.value = null; try { await runTelefunc(() => onSaveCategory({ ...form }), { notifyError: false }); dialogOpen.value = false; resetForm(); await loadCategories(); } catch (cause) { error.value = userErrorMessage(cause); } finally { saving.value = false; } }
+async function setStatus(item: Category) { error.value = null; try { await runTelefunc(() => onSetCategoryStatus({ id: item.id, status: item.status === "ACTIVE" ? "DISABLED" : "ACTIVE" }), { notifyError: false }); await loadCategories(); } catch (cause) { error.value = userErrorMessage(cause); } }
 function resetForm() { Object.assign(form, { id: undefined, name: "", slug: "", description: "", sort: 0 }); }
-function messageFor(cause: unknown) { const value = cause instanceof Error ? cause.message : String(cause); return ({ CATEGORY_NAME_REQUIRED: "分类名称不能为空。", CATEGORY_SLUG_CONFLICT: "分类 Slug 已存在。", CATEGORY_HAS_ACTIVE_PRODUCTS: "请先下架该分类下的全部商品，再停用分类。", SLUG_REQUIRED: "Slug 只能包含英文、数字和连字符。" } as Record<string, string>)[value] ?? "请求未能完成，请检查输入后重试。"; }
+
 </script>

@@ -23,30 +23,6 @@ CREATE TABLE `adminBootstrap` (
 	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `adminOperationLog` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`adminUserId` text NOT NULL,
-	`action` text NOT NULL,
-	`targetType` text NOT NULL,
-	`targetId` text,
-	`detail` text,
-	`createdAt` integer NOT NULL,
-	FOREIGN KEY (`adminUserId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE INDEX `adminOperationLog_admin_createdAt_idx` ON `adminOperationLog` (`adminUserId`,`createdAt`);--> statement-breakpoint
-CREATE TABLE `adminProfile` (
-	`userId` text PRIMARY KEY NOT NULL,
-	`status` text DEFAULT 'ACTIVE' NOT NULL,
-	`twoFactorEnabled` integer DEFAULT false NOT NULL,
-	`twoFactorSecret` text,
-	`twoFactorEnabledAt` integer,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE INDEX `adminProfile_status_idx` ON `adminProfile` (`status`);--> statement-breakpoint
 CREATE TABLE `card` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`productId` integer NOT NULL,
@@ -280,6 +256,41 @@ CREATE TABLE `product` (
 CREATE UNIQUE INDEX `product_slug_unique` ON `product` (`slug`);--> statement-breakpoint
 CREATE INDEX `product_categoryId_idx` ON `product` (`categoryId`);--> statement-breakpoint
 CREATE INDEX `product_status_sort_idx` ON `product` (`status`,`sort`);--> statement-breakpoint
+CREATE TABLE `pushConfig` (
+	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`isEnabled` integer DEFAULT true NOT NULL,
+	`emailEnabled` integer DEFAULT true NOT NULL,
+	`wecomEnabled` integer DEFAULT false NOT NULL,
+	`telegramEnabled` integer DEFAULT false NOT NULL,
+	`customerOrderPaid` integer DEFAULT true NOT NULL,
+	`customerDeliverySuccess` integer DEFAULT true NOT NULL,
+	`customerDeliveryFailed` integer DEFAULT false NOT NULL,
+	`adminOrderPaid` integer DEFAULT false NOT NULL,
+	`adminDeliverySuccess` integer DEFAULT true NOT NULL,
+	`adminDeliveryFailed` integer DEFAULT true NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `pushLog` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer,
+	`channel` text NOT NULL,
+	`provider` text NOT NULL,
+	`scene` text NOT NULL,
+	`recipient` text NOT NULL,
+	`subject` text,
+	`status` text NOT NULL,
+	`messageId` text,
+	`error` text,
+	`triggeredBy` text,
+	`createdAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE INDEX `pushLog_channel_createdAt_idx` ON `pushLog` (`channel`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `pushLog_status_createdAt_idx` ON `pushLog` (`status`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `pushLog_orderId_idx` ON `pushLog` (`orderId`);--> statement-breakpoint
 CREATE TABLE `s3Config` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`configJson` text NOT NULL,

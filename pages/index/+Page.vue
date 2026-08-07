@@ -3,14 +3,14 @@
     <header class="border-b bg-background">
       <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-4 px-5">
         <a href="/" class="flex min-w-0 items-center gap-2 font-semibold">
-          <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <KeyRoundIcon class="size-4" />
-          </span>
+          <img :src="logoUrl" :alt="`${data.site.name} Logo`" class="size-8 shrink-0 rounded-md object-contain" />
           <span class="truncate">{{ data.site.name }}</span>
         </a>
-        <a v-if="data.site.supportContact" :href="supportHref" class="text-sm text-muted-foreground hover:text-foreground">
-          联系支持
-        </a>
+        <nav class="flex shrink-0 items-center gap-2" aria-label="主导航">
+          <Button size="sm" variant="ghost" as-child><a href="/">首页</a></Button>
+          <Button size="sm" variant="outline" as-child><a href="/order">我的订单</a></Button>
+          <a v-if="data.site.supportContact" :href="supportHref" class="ml-2 text-sm text-muted-foreground hover:text-foreground">联系支持</a>
+        </nav>
       </div>
     </header>
 
@@ -46,25 +46,23 @@
         </div>
       </div>
 
-      <div v-if="visibleProducts.length" class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <article v-for="product in visibleProducts" :key="product.id" class="flex min-h-64 flex-col overflow-hidden rounded-md border bg-card">
-          <div v-if="product.coverImage" class="aspect-16/8 overflow-hidden bg-muted">
-            <img :src="product.coverImage" :alt="product.name" class="size-full object-cover" />
-          </div>
-          <div class="flex flex-1 flex-col p-5">
-            <div class="flex items-start justify-between gap-3">
-              <Badge v-if="product.categoryName" variant="secondary">{{ product.categoryName }}</Badge>
-              <Badge v-else variant="outline">商品</Badge>
-              <span class="shrink-0 text-lg font-semibold tabular-nums">{{ formatAmount(product.price) }}</span>
+      <div v-if="visibleProducts.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <article v-for="product in visibleProducts" :key="product.id" class="group overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-lg">
+          <a :href="`/product/${product.slug}`" class="block">
+            <div class="relative aspect-16/10 overflow-hidden bg-muted">
+              <img :src="product.coverImage || defaultProductImage" :alt="product.name" :class="product.coverImage ? 'object-cover group-hover:scale-105' : 'object-contain p-5'" class="size-full transition-transform duration-300" />
+              <Badge variant="secondary" class="absolute left-3 top-3 bg-background/90 backdrop-blur">{{ product.categoryName || "商品" }}</Badge>
             </div>
-            <h3 class="mt-4 text-lg font-semibold tracking-normal">{{ product.name }}</h3>
-            <p v-if="product.subtitle" class="mt-2 text-sm leading-6 text-muted-foreground">{{ product.subtitle }}</p>
-            <div class="mt-auto flex items-center justify-between gap-3 pt-6 text-sm">
-              <span class="text-muted-foreground">{{ deliveryLabel(product.deliveryType) }}</span>
-              <span v-if="product.isVisibleStock" :class="stockClass(product)">{{ stockLabel(product) }}</span>
+            <div class="flex min-h-32 flex-col p-4">
+              <h3 class="line-clamp-2 text-base font-semibold tracking-normal">{{ product.name }}</h3>
+              <p v-if="product.subtitle" class="mt-1 line-clamp-1 text-sm text-muted-foreground">{{ product.subtitle }}</p>
+              <div class="mt-auto flex items-end justify-between gap-3 pt-4">
+                <span v-if="product.isVisibleStock" :class="stockClass(product)" class="text-xs">{{ stockLabel(product) }}</span>
+                <span v-else class="text-xs text-muted-foreground">{{ deliveryLabel(product.deliveryType) }}</span>
+                <span class="shrink-0 text-xl font-semibold tabular-nums">{{ formatAmount(product.price) }}</span>
+              </div>
             </div>
-            <Button class="mt-4 w-full" as-child><a :href="`/product/${product.slug}`">查看商品</a></Button>
-          </div>
+          </a>
         </article>
       </div>
 
@@ -79,7 +77,9 @@
 
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import { InfoIcon, KeyRoundIcon, PackageOpenIcon } from "@lucide/vue";
+import { InfoIcon, PackageOpenIcon } from "@lucide/vue";
+import logoUrl from "@/assets/logo.svg?url";
+import defaultProductImage from "@/assets/product_img.jpg?url";
 import { useData } from "vike-vue/useData";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

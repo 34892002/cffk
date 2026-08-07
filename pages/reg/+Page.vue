@@ -64,12 +64,12 @@ const onSubmit = async () => {
       password: password.value,
     });
     if (res.error) {
-      error.value = res.error.message ?? "注册未能完成，请检查填写的信息。";
+      error.value = "注册未能完成，请检查填写的信息。";
       return;
     }
     await navigate("/");
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "注册请求未能完成，请检查服务是否正常运行。";
+  } catch {
+    error.value = "注册请求未能完成，请稍后重试。";
   } finally {
     submitting.value = false;
   }

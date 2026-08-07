@@ -17,7 +17,7 @@
       <form @submit.prevent="saveTemplate(item.scene)">
         <CardContent class="grid max-w-3xl gap-4">
           <label class="grid gap-2 text-sm font-medium">显示名称<Input v-model="forms[item.scene].name" required /></label>
-          <label class="flex items-center gap-2 text-sm font-medium"><Checkbox v-model="forms[item.scene].isEnabled" class="size-4" /> 启用此模板</label>
+          <label class="flex items-center justify-between gap-3 text-sm font-medium"><span>启用此模板</span><Switch v-model="forms[item.scene].isEnabled" /></label>
           <label class="grid gap-2 text-sm font-medium">模板 JSON<Textarea v-model="forms[item.scene].templateJson" rows="12" spellcheck="false" class="min-h-56 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>
           <p class="text-xs leading-5 text-muted-foreground">必须包含 `subject`、`body` 和 `format`。变量使用 <code v-pre>{{variable}}</code>，并在 `variables` 数组中列出。</p>
         </CardContent>
@@ -37,8 +37,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import MailSettingsLayout from "@/components/admin/MailSettingsLayout.vue";
+import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetEmailTemplates, onSaveEmailTemplate } from "@/server/email/admin.telefunc";
 
 type Template = Awaited<ReturnType<typeof onGetEmailTemplates>>[number];
@@ -53,10 +54,10 @@ async function loadTemplates() {
   loading.value = true;
   error.value = null;
   try {
-    templates.value = await onGetEmailTemplates();
+    templates.value = await runTelefunc(() => onGetEmailTemplates(), { notifyError: false });
     for (const item of templates.value) forms[item.scene] = { name: item.name, isEnabled: item.isEnabled, templateJson: item.templateJson };
   } catch (cause) {
-    error.value = errorMessage(cause);
+    error.value = userErrorMessage(cause);
   } finally {
     loading.value = false;
   }
@@ -68,23 +69,15 @@ async function saveTemplate(scene: Template["scene"]) {
   saving.value = scene;
   error.value = null;
   try {
-    await onSaveEmailTemplate({ scene, ...form });
+    await runTelefunc(() => onSaveEmailTemplate({ scene, ...form }), { notifyError: false });
     await loadTemplates();
   } catch (cause) {
-    error.value = errorMessage(cause);
+    error.value = userErrorMessage(cause);
   } finally {
     saving.value = null;
   }
 }
 
-function errorMessage(cause: unknown) {
-  const code = cause instanceof Error ? cause.message : "";
-  return {
-    ADMIN_ACCESS_REQUIRED: "管理员身份已失效，请重新登录。",
-    EMAIL_TEMPLATE_NAME_REQUIRED: "请填写模板名称。",
-    EMAIL_TEMPLATE_NOT_FOUND: "邮件模板不存在。",
-  }[code] ?? "模板 JSON 无效，请检查 subject、body、format 和 variables 字段。";
-}
 
 onMounted(loadTemplates);
 </script>

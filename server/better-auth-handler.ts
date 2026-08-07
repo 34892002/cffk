@@ -7,7 +7,7 @@ import {
 import { betterAuth } from "better-auth";
 import { getAuthConfig } from "./better-auth";
 import { getPublicAuthOrigin, rewriteRequestOrigin, withAuthNoStore } from "./auth-origin";
-import { bootstrapFirstAdmin, isActiveAdmin } from "./admin";
+import { bootstrapFirstRoot, isRoot } from "./admin";
 
 // On Cloudflare the D1 binding is request-scoped (fresh instance per request); elsewhere it's memoized.
 function getAuth(runtime: RuntimeAdapter, publicOrigin?: string) {
@@ -30,7 +30,7 @@ export const betterAuthSessionMiddleware: UniversalMiddleware = enhance(
         ...context,
         // Sets pageContext.user and keeps authorization separate from identity.
         user: data?.user ?? null,
-        isAdmin: await isActiveAdmin(runtime, data?.user?.id),
+        isAdmin: await isRoot(runtime, data?.user?.id),
       };
     } catch (error) {
       console.debug("betterAuthSessionMiddleware:", error);
@@ -63,7 +63,7 @@ export const betterAuthHandler = enhance(
     if (authRequest.method === "POST" && new URL(authRequest.url).pathname.endsWith("/sign-up/email") && response.ok) {
       try {
         const payload = await response.clone().json() as { user?: { id?: string } };
-        if (payload.user?.id) await bootstrapFirstAdmin(runtime, payload.user.id);
+        if (payload.user?.id) await bootstrapFirstRoot(runtime, payload.user.id);
       } catch (error) {
         console.error("first-admin bootstrap failed", error);
       }

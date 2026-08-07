@@ -30,6 +30,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import MailSettingsLayout from "@/components/admin/MailSettingsLayout.vue";
+import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetEmailOverview } from "@/server/email/admin.telefunc";
 
 const overview = reactive({ total: 0, success: 0, failed: 0, test: 0 });
@@ -46,11 +47,9 @@ async function loadOverview() {
   loading.value = true;
   error.value = null;
   try {
-    Object.assign(overview, await onGetEmailOverview());
+    Object.assign(overview, await runTelefunc(() => onGetEmailOverview(), { notifyError: false }));
   } catch (cause) {
-    error.value = cause instanceof Error && cause.message === "ADMIN_ACCESS_REQUIRED"
-      ? "管理员身份已失效，请重新登录。"
-      : "读取邮件统计失败，请稍后重试。";
+    error.value = userErrorMessage(cause);
   } finally {
     loading.value = false;
   }

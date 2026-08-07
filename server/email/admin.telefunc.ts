@@ -1,22 +1,16 @@
 import { asc, count, eq } from "drizzle-orm";
-import { getContext } from "telefunc";
-import { createDrizzleDb } from "@/database/drizzle";
-import { adminOperationLog, emailLog, emailProvider, emailTemplate } from "@/database/drizzle/schema";
+
+import { requireAdmin } from "@/server/telefunc-context";
+import { emailLog, emailProvider, emailTemplate } from "@/database/drizzle/schema";
 import { parseEmailProviderConfig, parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { sendEmail, type EmailScene } from "./service";
 
 type EmailProviderKind = "API" | "SMTP" | "CLOUDFLARE";
 
-type TelefuncContext = {
-  env?: Record<string, unknown> & { DB?: D1Database };
-  user?: { id: string } | null;
-  isAdmin?: boolean;
-};
 
 function getAdminContext() {
-  const context = getContext<TelefuncContext>();
-  if (!context.user || !context.isAdmin || !context.env?.DB) throw new Error("ADMIN_ACCESS_REQUIRED");
-  return { database: context.env.DB, runtime: context.env, db: createDrizzleDb(context.env.DB), adminUserId: context.user.id };
+  const { database, runtime, db, adminUserId } = requireAdmin();
+  return { database, runtime, db, adminUserId };
 }
 
 function requiredText(value: string, field: string) {
@@ -25,9 +19,6 @@ function requiredText(value: string, field: string) {
   return normalized;
 }
 
-async function writeAuditLog(db: ReturnType<typeof createDrizzleDb>, adminUserId: string, action: string, targetType: string, targetId: string, detail: string) {
-  await db.insert(adminOperationLog).values({ adminUserId, action, targetType, targetId, detail, createdAt: new Date() });
-}
 
 export async function onGetEmailProviders() {
   const { db } = getAdminContext();
@@ -38,7 +29,7 @@ export async function onGetEmailProviders() {
 }
 
 export async function onSaveEmailProvider(input: { provider: EmailProviderKind; name: string; isEnabled: boolean; configJson: string }) {
-  const { db, adminUserId } = getAdminContext();
+  const { db } = getAdminContext();
   const name = requiredText(input.name, "EMAIL_PROVIDER_NAME");
   const config = parseEmailProviderConfig(input.configJson);
   const expectedKind = input.provider.toLowerCase();
@@ -51,7 +42,6 @@ export async function onSaveEmailProvider(input: { provider: EmailProviderKind; 
     .where(eq(emailProvider.provider, input.provider))
     .returning({ id: emailProvider.id, provider: emailProvider.provider });
   if (!result[0]) throw new Error("EMAIL_PROVIDER_NOT_FOUND");
-  await writeAuditLog(db, adminUserId, "UPDATE_EMAIL_PROVIDER", "emailProvider", String(result[0].id), `provider=${result[0].provider}; enabled=${input.isEnabled}`);
   return result[0];
 }
 
@@ -64,7 +54,7 @@ export async function onGetEmailTemplates() {
 }
 
 export async function onSaveEmailTemplate(input: { scene: EmailScene; name: string; isEnabled: boolean; templateJson: string }) {
-  const { db, adminUserId } = getAdminContext();
+  const { db } = getAdminContext();
   const name = requiredText(input.name, "EMAIL_TEMPLATE_NAME");
   parseEmailTemplateConfig(input.templateJson);
   const now = new Date();
@@ -74,7 +64,6 @@ export async function onSaveEmailTemplate(input: { scene: EmailScene; name: stri
     .where(eq(emailTemplate.scene, input.scene))
     .returning({ id: emailTemplate.id, scene: emailTemplate.scene });
   if (!result[0]) throw new Error("EMAIL_TEMPLATE_NOT_FOUND");
-  await writeAuditLog(db, adminUserId, "UPDATE_EMAIL_TEMPLATE", "emailTemplate", String(result[0].id), `scene=${result[0].scene}; enabled=${input.isEnabled}`);
   return result[0];
 }
 

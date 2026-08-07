@@ -1,11 +1,14 @@
 import { env } from "cloudflare:workers";
 import { getOrderForQuery } from "@/server/order/service";
+import { withServerDataErrorHandling } from "@/server/error-handling";
 
 export type Data = Awaited<ReturnType<typeof data>>;
 
 export async function data(pageContext: { urlParsed: { search: Record<string, string | string[] | undefined> } }) {
-  const orderNo = typeof pageContext.urlParsed.search.orderNo === "string" ? pageContext.urlParsed.search.orderNo : "";
-  const queryToken = typeof pageContext.urlParsed.search.queryToken === "string" ? pageContext.urlParsed.search.queryToken : "";
-  const order = orderNo && queryToken ? await getOrderForQuery(env.DB, orderNo, queryToken) : null;
-  return { order, orderNoProvided: Boolean(orderNo), tokenProvided: Boolean(queryToken) };
+  return withServerDataErrorHandling("page data: payment result", pageContext, async () => {
+    const orderNo = typeof pageContext.urlParsed.search.orderNo === "string" ? pageContext.urlParsed.search.orderNo : "";
+    const queryToken = typeof pageContext.urlParsed.search.queryToken === "string" ? pageContext.urlParsed.search.queryToken : "";
+    const order = orderNo && queryToken ? await getOrderForQuery(env.DB, orderNo, queryToken) : null;
+    return { order, orderNoProvided: Boolean(orderNo), tokenProvided: Boolean(queryToken) };
+  });
 }

@@ -3,6 +3,7 @@ import { createDrizzleDb } from "@/database/drizzle";
 import { emailLog, emailProvider, emailRetry, emailTemplate, pushConfig, pushLog } from "@/database/drizzle/schema";
 import { parseEmailProviderConfig, parseEmailTemplateConfig, type EmailProviderConfig } from "@/lib/config-schemas";
 import { emailRetryDelayMs, renderEmailTemplate } from "@/lib/email-utils";
+import { sanitizeDatabaseLogText } from "@/server/database-log-sanitizer";
 
 export type EmailScene = "TEST" | "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED";
 export type PushChannel = "EMAIL" | "WECOM" | "TELEGRAM";
@@ -73,7 +74,7 @@ async function writeLog(database: D1Database, input: {
     toEmail: input.toEmail,
     subject: input.subject,
     messageId: input.messageId ?? null,
-    error: input.error ?? null,
+    error: input.error ? sanitizeDatabaseLogText(input.error) : null,
     triggeredBy: input.triggeredBy ?? null,
     createdAt,
   }).returning({ id: emailLog.id });
@@ -86,7 +87,7 @@ async function writeLog(database: D1Database, input: {
     subject: input.subject || null,
     status: input.status,
     messageId: input.messageId ?? null,
-    error: input.error ?? null,
+    error: input.error ? sanitizeDatabaseLogText(input.error) : null,
     triggeredBy: input.triggeredBy ?? null,
     createdAt,
   });
@@ -228,7 +229,7 @@ export async function retryDueEmails(database: D1Database, runtime: EmailRuntime
     } catch (cause) {
       const error = cause instanceof Error ? cause.message : "EMAIL_SEND_FAILED";
       const status = nextAttemptCount >= item.maxAttempts ? "EXHAUSTED" as const : "PENDING" as const;
-      await db.update(emailRetry).set({ status, lastError: error, updatedAt: new Date() }).where(eq(emailRetry.id, item.id));
+      await db.update(emailRetry).set({ status, lastError: sanitizeDatabaseLogText(error), updatedAt: new Date() }).where(eq(emailRetry.id, item.id));
       await writeLog(database, { orderId: originalLog?.orderId ?? undefined, provider: item.provider, scene: toEmailScene(item.scene), status: "FAILED", toEmail: item.toEmail, subject: item.subject, error, triggeredBy: "cron" });
     }
   }

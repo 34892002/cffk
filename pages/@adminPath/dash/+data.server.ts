@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
 import { getDashboardData } from "@/server/dashboard/metrics";
+import { withServerDataErrorHandling } from "@/server/error-handling";
 
 export type Data = Awaited<ReturnType<typeof data>>;
 
 export async function data() {
-  return getDashboardData(env.DB);
+  return withServerDataErrorHandling("page data: admin dashboard", {}, () => getDashboardData(env.DB));
 }

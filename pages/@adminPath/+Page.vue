@@ -53,14 +53,14 @@ async function onSubmit() {
   try {
     const res = await authClient.signIn.username({ username: username.value, password: password.value });
     if (res.error) {
-      error.value = res.error.message ?? "用户名或密码不正确。";
+      error.value = "用户名或密码不正确。";
       return;
     }
 
-    // The server guard verifies adminProfile before rendering the dashboard.
+    // The server guard verifies the singleton root before rendering the dashboard.
     await navigate(`/${pageContext.routeParams.adminPath}/dash`);
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "登录请求未能完成，请检查服务是否正常运行。";
+  } catch {
+    error.value = "登录请求未能完成，请稍后重试。";
   } finally {
     submitting.value = false;
   }

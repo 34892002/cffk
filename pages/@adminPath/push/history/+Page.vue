@@ -14,7 +14,7 @@
       <template #cell-recipient="{ value }"><span class="block max-w-52 truncate">{{ value }}</span></template>
       <template #cell-subject="{ value }"><span class="block max-w-52 truncate">{{ value || "-" }}</span></template>
       <template #cell-status="{ row }"><Badge :variant="row.status === 'SUCCESS' ? 'secondary' : 'destructive'">{{ row.status === "SUCCESS" ? "成功" : "失败" }}</Badge></template>
-      <template #cell-result="{ row }"><span class="block max-w-64 break-all text-xs text-muted-foreground">{{ row.status === "SUCCESS" ? row.messageId || "-" : row.error || "-" }}</span></template>
+      <template #cell-result="{ row }"><span class="block max-w-64 break-all text-xs text-muted-foreground">{{ row.status === "SUCCESS" ? row.messageId || "-" : "发送失败，详见 Workers Observability。" }}</span></template>
       <template #pagination><Pagination :total="total" :page="page" :page-size="pageSize" :page-size-options="[20, 50, 100]" @update:page="changePage" @update:page-size="changePageSize" /></template>
     </AdminDataTable>
   </section>

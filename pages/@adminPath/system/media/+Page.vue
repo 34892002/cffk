@@ -30,21 +30,30 @@
 
     <Card>
       <CardHeader><div class="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>媒体文件</CardTitle><CardDescription>已上传的媒体对象。</CardDescription></div><Button variant="outline" :disabled="loadingMedia" @click="loadMedia">刷新列表</Button></div></CardHeader>
-      <CardContent><div class="overflow-x-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>预览</TableHead><TableHead>文件名</TableHead><TableHead>文件 Key</TableHead><TableHead>类型</TableHead><TableHead>大小</TableHead><TableHead>上传时间</TableHead><TableHead><span class="sr-only">操作</span></TableHead></TableRow></TableHeader><TableBody><TableRow v-for="item in media" :key="item.id"><TableCell><a :href="item.url" target="_blank" rel="noreferrer"><img :src="item.thumbnailUrl || item.url" :alt="item.originalName" class="size-12 rounded-md border object-cover" /></a></TableCell><TableCell class="max-w-64 truncate font-medium">{{ item.originalName }}</TableCell><TableCell class="max-w-64 truncate font-mono text-xs text-muted-foreground">{{ item.fileKey }}</TableCell><TableCell>{{ item.mimeType }}</TableCell><TableCell>{{ formatSize(item.fileSize) }}</TableCell><TableCell class="whitespace-nowrap text-sm">{{ formatDate(item.uploadedAt) }}</TableCell><TableCell class="text-right"><Button variant="ghost" size="sm" :disabled="deleting === item.id" @click="deleteItem(item.id)">{{ deleting === item.id ? "删除中..." : "删除" }}</Button></TableCell></TableRow><TableRow v-if="!loadingMedia && !media.length"><TableCell colspan="7" class="h-28 text-center text-muted-foreground">暂无媒体文件。</TableCell></TableRow></TableBody></Table></div></CardContent>
+      <CardContent>
+        <AdminDataTable :columns="mediaColumns" :rows="media" row-key="id" empty-text="暂无媒体文件。">
+          <template #cell-preview="{ row }"><a :href="row.url" target="_blank" rel="noreferrer"><img :src="row.thumbnailUrl || row.url" :alt="row.originalName" class="size-12 rounded-md border object-cover" /></a></template>
+          <template #cell-originalName="{ row }"><span class="block max-w-64 truncate font-medium">{{ row.originalName }}</span></template>
+          <template #cell-fileKey="{ row }"><span class="block max-w-64 truncate font-mono text-xs text-muted-foreground">{{ row.fileKey }}</span></template>
+          <template #cell-fileSize="{ row }">{{ formatSize(row.fileSize) }}</template>
+          <template #cell-uploadedAt="{ row }"><span class="whitespace-nowrap text-sm">{{ formatDate(row.uploadedAt) }}</span></template>
+          <template #actions="{ row }"><Button variant="ghost" size="sm" :disabled="deleting === row.id" @click="deleteItem(row.id)">{{ deleting === row.id ? "删除中..." : "删除" }}</Button></template>
+        </AdminDataTable>
+      </CardContent>
     </Card>
   </section>
 </template>
 
 <script lang="ts" setup>
 import { onMounted, ref } from "vue";
+import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { errorCode } from "@/lib/app-error";
-import { runTelefunc } from "@/lib/telefunc-client";
+
+import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onDeleteMedia, onGetMedia, onGetS3Config, onSaveS3Config, onUploadMedia } from "@/server/media/admin.telefunc";
 
 const configJson = ref(JSON.stringify({ endpoint: "https://s3.example.com", region: "auto", bucket: "cffk-media", accessKeyId: { secret: "S3_ACCESS_KEY_ID" }, secretAccessKey: { secret: "S3_SECRET_ACCESS_KEY" }, publicBaseUrl: "https://cdn.example.com", forcePathStyle: false }, null, 2));
@@ -52,7 +61,18 @@ const updatedAt = ref<Date | string | number | null>(null);
 const loading = ref(false);
 const saving = ref(false);
 const error = ref<string | null>(null);
-const media = ref<Awaited<ReturnType<typeof onGetMedia>>["items"]>([]);
+type MediaItem = Awaited<ReturnType<typeof onGetMedia>>["items"][number];
+
+const mediaColumns: AdminTableColumn<MediaItem>[] = [
+  { key: "preview", label: "预览", class: "w-20" },
+  { key: "originalName", label: "文件名" },
+  { key: "fileKey", label: "文件 Key" },
+  { key: "mimeType", label: "类型" },
+  { key: "fileSize", label: "大小", class: "whitespace-nowrap" },
+  { key: "uploadedAt", label: "上传时间", class: "whitespace-nowrap" },
+];
+
+const media = ref<MediaItem[]>([]);
 const loadingMedia = ref(false);
 const uploading = ref(false);
 const deleting = ref<number | null>(null);
@@ -63,14 +83,14 @@ async function loadConfig() {
   loading.value = true;
   error.value = null;
   try {
-    const result = await onGetS3Config();
+    const result = await runTelefunc(() => onGetS3Config(), { notifyError: false });
     if (result) { configJson.value = result.configJson; updatedAt.value = result.updatedAt; }
-  } catch (cause) { error.value = messageFor(cause); } finally { loading.value = false; }
+  } catch (cause) { error.value = userErrorMessage(cause); } finally { loading.value = false; }
 }
 
 async function loadMedia() {
   loadingMedia.value = true;
-  try { media.value = (await onGetMedia()).items; } catch (cause) { error.value = messageFor(cause); } finally { loadingMedia.value = false; }
+  try { media.value = (await runTelefunc(() => onGetMedia(), { notifyError: false })).items; } catch (cause) { error.value = userErrorMessage(cause); } finally { loadingMedia.value = false; }
 }
 
 function onFileChange(event: Event) { selectedFile.value = (event.target as HTMLInputElement).files?.[0] ?? null; }
@@ -86,13 +106,13 @@ async function uploadSelectedFile() {
     selectedFile.value = null;
     if (fileInput.value) fileInput.value.value = "";
     await loadMedia();
-  } catch (cause) { error.value = messageFor(cause); } finally { uploading.value = false; }
+  } catch (cause) { error.value = userErrorMessage(cause); } finally { uploading.value = false; }
 }
 
 async function deleteItem(id: number) {
   deleting.value = id;
   error.value = null;
-  try { await runTelefunc(() => onDeleteMedia({ id }), { successMessage: "媒体文件已删除。", notifyError: false }); await loadMedia(); } catch (cause) { error.value = messageFor(cause); } finally { deleting.value = null; }
+  try { await runTelefunc(() => onDeleteMedia({ id }), { successMessage: "媒体文件已删除。", notifyError: false }); await loadMedia(); } catch (cause) { error.value = userErrorMessage(cause); } finally { deleting.value = null; }
 }
 
 async function saveConfig() {
@@ -101,13 +121,13 @@ async function saveConfig() {
   try {
     const result = await runTelefunc(() => onSaveS3Config({ configJson: configJson.value }), { successMessage: "媒体存储配置已保存。", notifyError: false });
     updatedAt.value = result.updatedAt;
-  } catch (cause) { error.value = messageFor(cause); } finally { saving.value = false; }
+  } catch (cause) { error.value = userErrorMessage(cause); } finally { saving.value = false; }
 }
 
 function readAsDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("MEDIA_FILE_READ_FAILED")); reader.onerror = () => reject(new Error("MEDIA_FILE_READ_FAILED")); reader.readAsDataURL(file); }); }
 function formatDate(value: Date | string | number) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(value)); }
 function formatSize(value: number) { return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / (1024 * 1024)).toFixed(2)} MB`; }
-function messageFor(cause: unknown) { return ({ ADMIN_ACCESS_REQUIRED: "管理员身份已失效，请重新登录。", S3_CONFIG_REQUIRED: "请填写 S3 配置 JSON。", S3_CONFIG_INVALID: "S3 配置无效，请检查 endpoint、bucket、region 与 Secret 引用。", S3_CONFIG_NOT_FOUND: "请先保存 S3 存储配置。", S3_SECRET_UNAVAILABLE: "未找到 S3 Worker Secret，请检查 Secret 引用。", S3_UPLOAD_FAILED: "对象存储上传失败。", S3_DELETE_FAILED: "对象存储删除失败。", MEDIA_NAME_REQUIRED: "文件名不能为空。", MEDIA_TYPE_NOT_ALLOWED: "仅支持 JPEG、PNG、WebP 或 GIF 图片。", MEDIA_FILE_SIZE_INVALID: "图片必须小于 10MB。", MEDIA_FILE_READ_FAILED: "无法读取图片文件。", MEDIA_NOT_FOUND: "媒体文件不存在。" } as Record<string, string>)[errorCode(cause)] ?? "操作失败，请稍后重试。"; }
+
 
 onMounted(() => { void loadConfig(); void loadMedia(); });
 </script>

@@ -15,6 +15,25 @@ INSERT INTO `siteSetting` (
   unixepoch('now') * 1000
 ) ON CONFLICT(`id`) DO NOTHING;
 
+-- Every product belongs to an active category. This is the fallback category
+-- used until the operator creates more specific categories.
+INSERT INTO `category` (
+  `name`, `slug`, `description`, `sort`, `status`, `createdAt`, `updatedAt`
+) VALUES (
+  '默认分类',
+  'default',
+  '未指定分类的商品会归入这里。',
+  0,
+  'ACTIVE',
+  unixepoch('now') * 1000,
+  unixepoch('now') * 1000
+) ON CONFLICT(`slug`) DO NOTHING;
+
+-- Repair products created before the fallback category was initialized.
+UPDATE `product`
+SET `categoryId` = (SELECT `id` FROM `category` WHERE `slug` = 'default')
+WHERE `categoryId` IS NULL;
+
 -- One Alipay provider supports browser/H5 and face-to-face payment through
 -- configJson.mode. Add credentials through Worker Secrets before enabling it.
 INSERT INTO `paymentProvider` (

@@ -1,13 +1,8 @@
 import { and, asc, count, desc, eq, gte, like, lt } from "drizzle-orm";
-import { getContext } from "telefunc";
-import { createDrizzleDb } from "@/database/drizzle";
-import { adminOperationLog, card, product } from "@/database/drizzle/schema";
+import type { createDrizzleDb } from "@/database/drizzle";
+import { requireAdmin } from "@/server/telefunc-context";
+import { card, product } from "@/database/drizzle/schema";
 
-type TelefuncContext = {
-  env?: { DB?: D1Database };
-  user?: { id: string } | null;
-  isAdmin?: boolean;
-};
 
 type CardStatus = "UNUSED" | "LOCKED" | "SOLD" | "DISABLED";
 
@@ -22,9 +17,8 @@ type CardAdminQuery = {
 };
 
 function getAdminDb() {
-  const context = getContext<TelefuncContext>();
-  if (!context.user || !context.isAdmin || !context.env?.DB) throw new Error("ADMIN_ACCESS_REQUIRED");
-  return { db: createDrizzleDb(context.env.DB), adminUserId: context.user.id };
+  const { db } = requireAdmin();
+  return { db };
 }
 
 function positiveInteger(value: number, field: string) {
@@ -54,22 +48,6 @@ async function assertCardProduct(db: ReturnType<typeof createDrizzleDb>, product
   if (target.deliveryType !== "CARD_AUTO") throw new Error("PRODUCT_NOT_CARD_AUTO");
 }
 
-async function logOperation(
-  db: ReturnType<typeof createDrizzleDb>,
-  adminUserId: string,
-  action: string,
-  targetId: string,
-  detail: string,
-) {
-  await db.insert(adminOperationLog).values({
-    adminUserId,
-    action,
-    targetType: "card",
-    targetId,
-    detail,
-    createdAt: new Date(),
-  });
-}
 
 export async function onGetCardAdminData(input: CardAdminQuery = {}) {
   const { db } = getAdminDb();
@@ -130,7 +108,7 @@ export async function onGetCardAdminData(input: CardAdminQuery = {}) {
 }
 
 export async function onCreateCard(input: { productId: number; content: string; batchNo?: string }) {
-  const { db, adminUserId } = getAdminDb();
+  const { db } = getAdminDb();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   await assertCardProduct(db, productId);
   const content = input.content.trim();
@@ -145,12 +123,11 @@ export async function onCreateCard(input: { productId: number; content: string; 
     createdAt: now,
     updatedAt: now,
   }).returning({ id: card.id });
-  await logOperation(db, adminUserId, "CREATE_CARD", String(created.id), `product=${productId}${batchNo ? ` batch=${batchNo}` : ""}`);
   return created;
 }
 
 export async function onImportCards(input: { productId: number; content: string; batchNo?: string }) {
-  const { db, adminUserId } = getAdminDb();
+  const { db } = getAdminDb();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   await assertCardProduct(db, productId);
   const contents = [...new Set(input.content.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))];
@@ -167,28 +144,25 @@ export async function onImportCards(input: { productId: number; content: string;
     createdAt: now,
     updatedAt: now,
   })));
-  await logOperation(db, adminUserId, "IMPORT_CARDS", String(productId), `count=${contents.length}${batchNo ? ` batch=${batchNo}` : ""}`);
   return { imported: contents.length };
 }
 
 export async function onDeleteCard(input: { id: number }) {
-  const { db, adminUserId } = getAdminDb();
+  const { db } = getAdminDb();
   const id = positiveInteger(input.id, "CARD_ID");
   const [deleted] = await db.delete(card)
     .where(and(eq(card.id, id), eq(card.status, "UNUSED")))
     .returning({ id: card.id });
   if (!deleted) throw new Error("CARD_DELETE_REJECTED");
-  await logOperation(db, adminUserId, "DELETE_CARD", String(id), "status=UNUSED");
   return deleted;
 }
 
 export async function onDeleteUnusedCards(input: { productId: number }) {
-  const { db, adminUserId } = getAdminDb();
+  const { db } = getAdminDb();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   await assertCardProduct(db, productId);
   const deleted = await db.delete(card)
     .where(and(eq(card.productId, productId), eq(card.status, "UNUSED")))
     .returning({ id: card.id });
-  await logOperation(db, adminUserId, "DELETE_UNUSED_CARDS", String(productId), `count=${deleted.length}`);
   return { deleted: deleted.length };
 }

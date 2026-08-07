@@ -1,19 +1,13 @@
 <template>
   <Sidebar variant="inset" collapsible="icon">
     <SidebarHeader>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton size="lg">
-            <div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-              <KeyRoundIcon />
-            </div>
-            <div class="grid flex-1 text-left text-sm leading-tight">
-              <span class="truncate font-semibold">CFFK</span>
-              <span class="truncate text-xs">管理后台</span>
-            </div>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
+      <div class="flex h-14 items-center gap-2.5 rounded-md px-2">
+        <img :src="logoUrl" alt="CFFK Logo" class="aspect-square size-10 rounded-lg object-contain" />
+        <div class="grid flex-1 text-left leading-tight">
+          <span class="truncate text-sm font-semibold">CFFK发卡</span>
+          <span class="truncate text-xs">系统管理后台</span>
+        </div>
+      </div>
     </SidebarHeader>
 
     <SidebarContent>
@@ -95,27 +89,6 @@
                 </CollapsibleContent>
               </Collapsible>
             </SidebarMenuItem>
-
-            <SidebarMenuItem>
-              <Collapsible default-open class="group/collapsible">
-                <CollapsibleTrigger as-child>
-                  <SidebarMenuButton :is-active="isGroupActive(adminNavigation.user)">
-                    <UsersIcon />
-                    <span>{{ adminNavigation.user.title }}</span>
-                    <ChevronRightIcon class="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                  </SidebarMenuButton>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <SidebarMenuSub>
-                    <SidebarMenuSubItem v-for="item in adminNavigation.user.items" :key="item.title">
-                      <SidebarMenuSubButton as-child :is-active="isItemActive(item)">
-                        <a :href="basePath + item.path"><span>{{ item.title }}</span></a>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-                  </SidebarMenuSub>
-                </CollapsibleContent>
-              </Collapsible>
-            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
@@ -162,7 +135,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { authClient } from "@/lib/auth-client";
 import { adminNavigation, isAdminNavigationItemActive, type AdminNavigationGroup, type AdminNavigationItem } from "@/lib/admin-navigation";
-import { BellIcon, ChevronRightIcon, ChevronUpIcon, ClipboardListIcon, KeyRoundIcon, LayoutDashboardIcon, LogOutIcon, PackageIcon, SettingsIcon, UsersIcon } from "@lucide/vue";
+import { BellIcon, ChevronRightIcon, ChevronUpIcon, ClipboardListIcon, LayoutDashboardIcon, LogOutIcon, PackageIcon, SettingsIcon } from "@lucide/vue";
+import logoUrl from "@/assets/logo.svg?url";
 import { navigate } from "vike/client/router";
 import { computed } from "vue";
 import { usePageContext } from "vike-vue/usePageContext";

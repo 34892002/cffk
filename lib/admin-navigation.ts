@@ -125,12 +125,7 @@ export const adminPages = {
     pageTitle: "安全配置",
     description: "管理站点安全配置。",
   },
-  admins: {
-    title: "管理员账户",
-    path: "/users/admins",
-    pageTitle: "管理员管理",
-    description: "查看管理员账号并控制后台访问状态。",
-  },
+
   tasks: {
     title: "任务",
     path: "/system/tasks",
@@ -160,17 +155,13 @@ export const adminNavigation = {
     title: "系统配置",
     items: [adminPages.payments, adminPages.media, adminPages.settings, adminPages.security, adminPages.tasks],
   },
-  user: {
-    title: "用户管理",
-    items: [adminPages.admins],
-  },
+
 } as const satisfies Record<string, AdminPageMeta | AdminNavigationGroup>;
 
 const navigationGroups: readonly AdminNavigationGroup[] = [
   adminNavigation.product,
   adminNavigation.push,
   adminNavigation.system,
-  adminNavigation.user,
 ];
 
 const allAdminPages = Object.values(adminPages) as readonly AdminPageMeta[];

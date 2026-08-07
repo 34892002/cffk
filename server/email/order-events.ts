@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { adminProfile, emailLog, order, siteSetting, user } from "@/database/drizzle/schema";
+import { adminBootstrap, emailLog, order, siteSetting, user } from "@/database/drizzle/schema";
 import { sendEmail, type EmailScene } from "./service";
 
 type EmailRuntime = Record<string, unknown>;
@@ -58,23 +58,23 @@ async function sendOnce(
   });
 }
 
-async function getActiveAdminEmails(database: D1Database) {
+async function getRootEmails(database: D1Database) {
   const rows = await createDrizzleDb(database)
     .select({ email: user.email })
-    .from(adminProfile)
-    .innerJoin(user, eq(adminProfile.userId, user.id))
-    .where(eq(adminProfile.status, "ACTIVE"));
+    .from(adminBootstrap)
+    .innerJoin(user, eq(adminBootstrap.userId, user.id))
+    .where(eq(adminBootstrap.id, 1));
   return rows.map((row) => row.email.trim()).filter(isEmailAddress);
 }
 
-async function sendToActiveAdmins(
+async function sendToRoot(
   database: D1Database,
   runtime: EmailRuntime,
   record: OrderEmailRecord,
   scene: EmailScene,
   variables: Record<string, string | number>,
 ) {
-  const emails = await getActiveAdminEmails(database);
+  const emails = await getRootEmails(database);
   await Promise.all(emails.map((email) => sendOnce(database, runtime, record, scene, email, "ADMIN", variables).catch(() => undefined)));
 }
 
@@ -110,7 +110,7 @@ async function notifyScene(
   scene: EmailScene,
   variables: Record<string, string | number>,
 ) {
-  const sends: Promise<void>[] = [sendToActiveAdmins(database, runtime, record, scene, variables)];
+  const sends: Promise<void>[] = [sendToRoot(database, runtime, record, scene, variables)];
   const customerEmail = record.contactValue?.trim();
   if (record.contactType === "EMAIL" && customerEmail && isEmailAddress(customerEmail)) {
     sends.push(sendOnce(database, runtime, record, scene, customerEmail, "CUSTOMER", variables));

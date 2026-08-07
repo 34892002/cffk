@@ -6,6 +6,8 @@ import { notifyOrderEmailEvents } from "@/server/email/order-events";
 import { markOrderPaid } from "@/server/order/service";
 import { verifyAlipayCallback } from "./alipay";
 import { getPaymentProvider } from "./config";
+import { reportUnexpectedServerError } from "@/server/error-handling";
+import { sanitizeDatabaseLogJson, sanitizeDatabaseLogText } from "@/server/database-log-sanitizer";
 
 function firstString(value: string | File | (string | File)[] | undefined) {
   if (typeof value === "string") return value;
@@ -41,7 +43,7 @@ export async function handleAlipayCallback(database: D1Database, runtime: Record
   const parameters = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, firstString(value)]));
   const orderNo = parameters.out_trade_no ?? "";
   const paymentOrderNo = parameters.trade_no ?? "";
-  const rawPayload = JSON.stringify(parameters);
+  const rawPayload = sanitizeDatabaseLogJson(parameters);
   const provider = await getPaymentProvider(database, "ALIPAY");
   if (!provider) {
     await logCallback(database, { orderNo, paymentOrderNo, rawPayload, verifyStatus: "FAILED", message: "PROVIDER_CONFIGURATION_INVALID" });
@@ -83,7 +85,13 @@ export async function handleAlipayCallback(database: D1Database, runtime: Record
     await logCallback(database, { orderId: record.id, orderNo, paymentOrderNo, rawPayload, verifyStatus: "VERIFIED", message: outcome === "ALREADY_PAID" ? "DUPLICATE_CALLBACK" : "PAYMENT_CONFIRMED" });
     return { ok: true, body: "success" };
   } catch (error) {
-    await logCallback(database, { orderId: record.id, orderNo, paymentOrderNo, rawPayload, verifyStatus: "FAILED", message: `DELIVERY_RETRY_REQUIRED:${error instanceof Error ? error.message : "UNKNOWN"}` });
+    reportUnexpectedServerError("alipay callback delivery", error, {
+      parameters,
+      orderId: record.id,
+      orderNo,
+      paymentOrderNo,
+    });
+    await logCallback(database, { orderId: record.id, orderNo, paymentOrderNo, rawPayload, verifyStatus: "FAILED", message: sanitizeDatabaseLogText(`DELIVERY_RETRY_REQUIRED:${error instanceof Error ? error.message : "UNKNOWN"}`) });
     return { ok: false, body: "failure" };
   }
 }

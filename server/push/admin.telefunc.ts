@@ -1,5 +1,5 @@
 import { and, count, desc, eq } from "drizzle-orm";
-import { adminOperationLog, pushConfig, pushLog } from "@/database/drizzle/schema";
+import { pushConfig, pushLog } from "@/database/drizzle/schema";
 import { requireAdmin } from "@/server/telefunc-context";
 
 export type PushScene = "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED";
@@ -48,20 +48,13 @@ export async function onGetPushConfig() {
 }
 
 export async function onSavePushConfig(input: PushConfigInput) {
-  const { db, adminUserId } = requireAdmin();
+  const { db } = requireAdmin();
   const now = new Date();
   await db.insert(pushConfig).values({ id: 1, ...input, createdAt: now, updatedAt: now }).onConflictDoUpdate({
     target: pushConfig.id,
     set: { ...input, updatedAt: now },
   });
-  await db.insert(adminOperationLog).values({
-    adminUserId,
-    action: "UPDATE_PUSH_CONFIG",
-    targetType: "pushConfig",
-    targetId: "1",
-    detail: JSON.stringify(input),
-    createdAt: now,
-  });
+
   return getOrCreateConfig();
 }
 

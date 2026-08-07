@@ -1,24 +1,33 @@
 <template>
   <main class="min-h-screen bg-muted/30">
     <header class="border-b bg-background">
-      <div class="mx-auto flex min-h-16 max-w-2xl items-center px-5">
-        <a href="/" class="text-sm font-medium hover:text-muted-foreground">返回商品列表</a>
+      <div class="mx-auto flex min-h-16 max-w-md items-center px-5">
+        <Button variant="ghost" size="sm" as-child><a href="/"><ArrowLeftIcon />返回商品列表</a></Button>
       </div>
     </header>
 
-    <section class="mx-auto max-w-2xl px-5 py-10">
+    <section class="mx-auto max-w-md px-5 py-12 sm:py-16">
       <Card>
         <CardHeader>
-          <CardTitle>订单查询</CardTitle>
-          <CardDescription>输入订单号和查询令牌查看支付与交付状态。</CardDescription>
+          <CardTitle>查询订单</CardTitle>
+          <CardDescription>请输入下单后保存的订单号和查询令牌。</CardDescription>
         </CardHeader>
-        <form @submit.prevent="onSubmit">
+        <form class="grid gap-6" @submit.prevent="onSubmit">
           <CardContent class="grid gap-4">
-            <label class="grid gap-2 text-sm font-medium">订单号<Input v-model="orderNo" required autocomplete="off" /></label>
-            <label class="grid gap-2 text-sm font-medium">查询令牌<Input v-model="queryToken" required autocomplete="off" /></label>
+            <label class="grid gap-2 text-sm font-medium">
+              订单号
+              <Input v-model="orderNo" required autocomplete="off" placeholder="例如：ORD-20260807-XXXX" />
+            </label>
+            <label class="grid gap-2 text-sm font-medium">
+              查询令牌
+              <Input v-model="queryToken" required autocomplete="off" placeholder="下单后获得的查询令牌" />
+            </label>
             <Alert v-if="error" variant="destructive"><AlertTitle>查询失败</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
           </CardContent>
-          <CardFooter><Button type="submit" :disabled="loading">{{ loading ? "查询中..." : "查询订单" }}</Button></CardFooter>
+          <CardFooter class="flex-col items-stretch gap-3">
+            <Button type="submit" :disabled="loading">{{ loading ? "查询中..." : "查询订单" }}</Button>
+            <p class="text-xs leading-5 text-muted-foreground">订单号和查询令牌仅用于查询该笔订单。</p>
+          </CardFooter>
         </form>
       </Card>
 
@@ -41,11 +50,13 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
+import { ArrowLeftIcon } from "@lucide/vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onQueryOrder, type PublicOrder } from "@/server/order/public.telefunc";
 
 const orderNo = ref("");
@@ -59,11 +70,11 @@ async function onSubmit() {
   result.value = null;
   loading.value = true;
   try {
-    const record = await onQueryOrder({ orderNo: orderNo.value, queryToken: queryToken.value });
+    const record = await runTelefunc(() => onQueryOrder({ orderNo: orderNo.value, queryToken: queryToken.value }), { notifyError: false });
     if (!record) error.value = "订单不存在，或查询令牌不正确。";
     else result.value = record;
-  } catch {
-    error.value = "请求未能完成，请稍后重试。";
+  } catch (cause) {
+    error.value = userErrorMessage(cause);
   } finally {
     loading.value = false;
   }

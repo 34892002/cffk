@@ -1,6 +1,13 @@
+# 项目背景
+本项目cffk是一个基于vike全栈开发的发卡站项目， 计划从 edgeKey 发卡站项目(文档 edgeKey\docs，源码 edgeKey\)移植改造， 因为目前还是开发中未上线的全新项目，所以不要写什么兼容，迁移的冗余代码。开发前请`阅读 vike-cf\docs 了解项目背景和编码规则`
+
 # Vike-CF 开发规范
 
 本规范适用于 `vike-cf` 的业务页面、Telefunc 接口和后台管理功能。目标是让页面交互、数据列表和错误反馈保持一致，避免在业务页面重复造 UI 或把临时反馈渲染成常驻内容。
+
+错误信息按 [框架设计规划.md](./框架设计规划.md) 的三层规则处理：前端必须脱敏；数据库业务日志仅移除 `sign` 与密钥；未预期异常的完整接口信息和原始错误输出到 Cloudflare Workers Observability，供 root 在 Cloudflare 控制台排查。
+
+权限模型以 [框架设计规划.md](./框架设计规划.md) 为准：仅有 `guest`、`user`、`root` 三种身份，且项目只保留一个 `root`。不新增多角色、权限点、审批或审计系统。
 
 ## 1. UI 组件原则
 
@@ -74,8 +81,8 @@ async function deleteRow() {
     deleteDialogOpen.value = false;
     toast.success("记录已删除。");
     await loadData();
-  } catch (cause) {
-    toast.error(messageFor(cause));
+  } catch {
+    // runTelefunc 已显示脱敏错误提示。
   } finally {
     saving.value = false;
   }
@@ -105,7 +112,7 @@ async function deleteRow() {
 | 订单管理 | `/orders` | `pages/@adminPath/orders` | 订单管理 | 无 |
 | 推送管理 | `/push/*` | `pages/@adminPath/push` | 推送配置、发送日志、电子邮件、企业微信、Telegram | 电子邮件：邮件统计、通道配置、邮件模板 |
 | 系统配置 | `/system/*` | `pages/@adminPath/system` | 支付渠道、媒体存储、站点配置、安全配置、任务 | 无 |
-| 用户管理 | `/users/*` | `pages/@adminPath/users` | 管理员账户 | 无 |
+| 用户管理 | — | — | 当前不提供用户或管理员管理页面；唯一 root 仅由 `adminBootstrap(id=1)` 指定 | 无 |
 
 电子邮件模块的唯一首页为 `/push/email`；其三级页面只能为 `/push/email/post-office`、`/push/email/templates` 等同前缀路径。不得再创建 `/mail/*`、`/notifications/*`、`/push/email/overview` 或任何兼容入口。
 
@@ -143,7 +150,7 @@ async function deleteRow() {
 
 ### 2.1 必须使用 `AdminDataTable`
 
-所有后台管理中的实体列表（商品、订单、卡密、优惠码、管理员等）必须使用：
+所有后台管理中的实体列表（商品、订单、卡密、优惠码、媒体文件、推送记录等）必须使用：
 
 ```vue
 <AdminDataTable :columns="columns" :rows="data.items" row-key="id">
@@ -154,7 +161,7 @@ async function deleteRow() {
 </AdminDataTable>
 ```
 
-详细 API 见 [`components/AdminDataTable.md`](./components/AdminDataTable.md)。
+详细 API 见 [components.md](./components.md)。实体列表没有行操作时必须传 `:show-actions="false"`；仪表盘摘要表不是实体管理列表，可使用基础 `Table`。
 
 ### 2.2 一项业务字段对应一列
 
@@ -208,7 +215,7 @@ return {
 
 ## 4. 列表 Telefunc 接口契约
 
-### 3.1 查询参数
+### 4.1 查询参数
 
 列表查询函数使用一个对象参数，所有筛选条件可选，分页参数统一命名：
 
@@ -237,7 +244,7 @@ const pageSize = Math.min(100, Math.max(10, Math.floor(input.pageSize ?? 20)));
 
 日期、枚举、数字 ID 和字符串长度必须在服务端验证。日期推荐在接口边界转换为精确的起始时间和结束日的**排他**边界，避免当天晚些时候的数据被遗漏。
 
-### 3.2 返回结构
+### 4.2 返回结构
 
 管理列表应返回能直接驱动 `AdminDataTable` 和 `Pagination` 的对象：
 
@@ -276,21 +283,24 @@ const pageSize = ref(20);
 
 async function loadData() {
   try {
-    const result = await onGetEntityAdminData({
-      ...filters,
-      page: page.value,
-      pageSize: pageSize.value,
-    });
+    const result = await runTelefunc(
+      () => onGetEntityAdminData({
+        ...filters,
+        page: page.value,
+        pageSize: pageSize.value,
+      }),
+      { notifyError: false },
+    );
     Object.assign(data, result);
   } catch (cause) {
-    toast.error(messageFor(cause));
+    loadError.value = userErrorMessage(cause);
   }
 }
 ```
 
 ## 5. Telefunc 错误设计与统一处理
 
-### 4.1 调用边界：Telefunc 与 HTTP API 分开规范
+### 5.1 调用边界：Telefunc 与 HTTP API 分开规范
 
 项目同时使用 Telefunc RPC 和少量 Hono HTTP 接口；两者不能混用响应约定。
 
@@ -298,22 +308,22 @@ async function loadData() {
 - **公开或第三方 HTTP API：使用 HTTP 状态码与 JSON 信封** `{ code, message, data }`。`code: 0` 代表成功；`400/401/403/404/409` 携带稳定业务码；未预期异常返回 `500` 和 `INTERNAL_ERROR`。
 - **协议回调例外：** 支付回调等由第三方协议规定响应格式的路由，保留协议要求的纯文本/签名响应，不能强制套 JSON 信封。
 
-### 4.2 Telefunc 服务端：稳定错误码，不泄露内部信息
+### 5.2 Telefunc 服务端：稳定错误码，不泄露内部信息
 
 Telefunc 应在权限、输入校验、状态机校验失败时抛出稳定、全大写的业务错误码：
 
 ```ts
 if (!context.user || !context.isAdmin) {
-  throw new Error("ADMIN_ACCESS_REQUIRED");
+  appError("ADMIN_ACCESS_REQUIRED");
 }
 if (!Number.isInteger(input.id) || input.id < 1) {
-  throw new Error("ENTITY_ID_INVALID");
+  appError("ENTITY_ID_INVALID");
 }
 if (!record) {
-  throw new Error("ENTITY_NOT_FOUND");
+  appError("ENTITY_NOT_FOUND");
 }
 if (record.status !== "DRAFT") {
-  throw new Error("ENTITY_DELETE_REJECTED");
+  appError("ENTITY_DELETE_REJECTED");
 }
 ```
 
@@ -322,9 +332,10 @@ if (record.status !== "DRAFT") {
 - 错误码使用 `UPPER_SNAKE_CASE`，按资源和语义命名，例如 `CARD_CONTENT_REQUIRED`、`PRODUCT_NOT_CARD_AUTO`、`CARD_DELETE_REJECTED`。
 - 不将数据库异常、SQL、堆栈、第三方支付原始响应或敏感值直接传给客户端。
 - 对“删除/状态切换”等并发敏感操作，将可操作状态写进 `where` 条件；根据 `returning()` 是否返回记录判断结果。
-- 未预期异常保留服务端日志，客户端统一显示通用错误文案。
+- 未预期异常必须交给全局错误处理：完整接口信息、原始异常和堆栈输出到 Cloudflare Workers Observability；客户端仍只显示通用错误文案。
+- 数据库业务日志只脱敏 `sign`、密码、token、API key、Secret、私钥和 access key；不要将这些值写回支付、邮件或推送日志。
 
-### 4.3 前端：必须通过 `runTelefunc()` 统一处理
+### 5.3 前端：必须通过 `runTelefunc()` 统一处理
 
 所有会向用户反馈结果的 Telefunc 调用必须经由 `@/lib/telefunc-client` 的 `runTelefunc()`，不得在页面中直接调用后自行 `toast.error()` 或复制 `messageFor()`：
 
@@ -361,7 +372,17 @@ try {
 
 只有确实需要表单附近持续错误信息的场景（例如结算表单字段校验）可以使用 `runTelefunc(..., { notifyError: false })`，再将 `userErrorMessage(cause)` 写入本地表单状态；不能同时显示 Alert 和 Toast。
 
-### 4.4 HTTP API 客户端与 500 错误
+### 5.4 全局服务端错误处理与 Workers Observability
+
+Hono、Telefunc 与 Vike SSR / `+data.server.ts` 的未预期异常必须进入同一个全局错误处理模块。该模块的职责是：
+
+1. 将原始 `Error`、堆栈、完整接口路径、查询参数、请求体或表单参数输出到 Cloudflare Workers Observability；此记录不脱敏，仅供 root 通过 Cloudflare 控制台排查。
+2. 按协议返回脱敏结果：HTTP API 返回 `INTERNAL_ERROR` JSON，Telefunc 继续抛出异常供 `runTelefunc()` 映射，支付回调返回 `failure`。
+3. 不把 Observability 的原始内容复制到前端或数据库业务日志。
+
+预期业务错误码不是未预期异常：它们仍按 `lib/error-messages.ts` 映射并显示给用户，无需伪装为内部错误。
+
+### 5.5 HTTP API 客户端与 500 错误
 
 Hono HTTP 接口在 `server/hono.ts` 统一处理未捕获异常：
 
@@ -400,7 +421,7 @@ return body.data;
 - `/push/wecom`：企业微信
 - `/push/telegram`：Telegram
 
-电子邮件只作为“推送管理”下的一个二级模块显示一次；邮件统计、通道配置和邮件模板只能作为该模块的三级页面出现，不能在推送管理下另列为并列二级项。不得在推送模块新增或保留 `/mail/*`、`/notifications/*` 等平行路径。推送规则统一由 `server/push` 管理，页面通过推送配置决定订单事件是否向客户或启用状态的管理员投递。渠道实现实际投递时，必须同步写入 `pushLog`；不要为邮件、企业微信或 Telegram 分别创建重复的发送日志页面。
+电子邮件只作为“推送管理”下的一个二级模块显示一次；邮件统计、通道配置和邮件模板只能作为该模块的三级页面出现，不能在推送管理下另列为并列二级项。不得在推送模块新增或保留 `/mail/*`、`/notifications/*` 等平行路径。推送规则统一由 `server/push` 管理，页面通过推送配置决定订单事件是否向客户或唯一 root 投递。渠道实现实际投递时，必须同步写入 `pushLog`；不要为邮件、企业微信或 Telegram 分别创建重复的发送日志页面。
 
 `pushLog` 是后台“发送日志”的唯一数据源。渠道尚未具备发送能力时，只保存配置，不得生成伪造的成功或失败记录。
 
@@ -413,4 +434,5 @@ return body.data;
 3. 运行 `npm run build`。
 4. 新增或调整后台页时，确认 `adminPages` 的 `title`、`path`、`pageTitle`、`description` 完整，且页面通过 `AdminPageHeader` 或模块布局读取它们。
 5. 手动验证至少一个成功路径、一个输入错误路径和一个破坏性操作确认路径。
-6. 检查列表响应未泄露敏感字段，并确认筛选、分页、空状态和 Toast 行为符合本规范。
+6. 运行相关 `tests/**/*.test.ts`：管理授权必须覆盖 guest / user / root，前端错误必须验证未知原始错误不透出，数据库日志必须验证 `sign` 与密钥不入库；未预期异常的测试应验证完整请求与堆栈会交给 Observability 输出。
+7. 检查列表响应和前端错误未泄露敏感字段、原始异常或密钥；数据库日志已移除 `sign` 与密钥；部署后在 Workers Observability 查询完整接口信息，并确认筛选、分页、空状态和 Toast 行为符合本规范。

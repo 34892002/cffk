@@ -1,5 +1,6 @@
 import { betterAuthHandler, betterAuthSessionMiddleware } from "./better-auth-handler";
 import { handleAlipayCallback } from "./payment/callback";
+import { reportUnexpectedRequestError } from "./error-handling";
 import { telefuncHandler } from "./telefunc-handler";
 import vike from "@vikejs/hono";
 import { Hono } from "hono";
@@ -7,8 +8,8 @@ import { Hono } from "hono";
 function getApp() {
   const app = new Hono<{ Bindings: Record<string, unknown> & { DB: D1Database } }>();
 
-  app.onError((error, context) => {
-    console.error("Unhandled HTTP API error", error);
+  app.onError(async (error, context) => {
+    await reportUnexpectedRequestError("hono", error, context.req.raw);
     // Alipay requires a plain-text response; do not apply the JSON API envelope.
     if (context.req.path === "/api/payments/alipay/notify") return context.text("failure", 500);
     if (context.req.path.startsWith("/api/")) {

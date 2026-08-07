@@ -20,8 +20,14 @@ export function requireUser() {
   return { ...result, user: result.context.user };
 }
 
+export function assertAdminAccess(user: { id: string } | null | undefined, isAdmin: boolean | undefined) {
+  if (!user) appError("AUTH_REQUIRED");
+  if (!isAdmin) appError("ADMIN_ACCESS_REQUIRED");
+  return user;
+}
+
 export function requireAdmin() {
   const result = requireUser();
-  if (!result.context.isAdmin) appError("ADMIN_ACCESS_REQUIRED");
-  return { ...result, adminUserId: result.user.id };
+  const user = assertAdminAccess(result.user, result.context.isAdmin);
+  return { ...result, user, adminUserId: user.id };
 }

@@ -1,24 +1,14 @@
 import { and, asc, count, eq } from "drizzle-orm";
-import { getContext } from "telefunc";
-import { createDrizzleDb } from "@/database/drizzle";
-import { adminOperationLog, category, product } from "@/database/drizzle/schema";
+import { requireAdmin } from "@/server/telefunc-context";
+import { category, product } from "@/database/drizzle/schema";
 
-type TelefuncContext = {
-  env?: { DB?: D1Database };
-  user?: { id: string } | null;
-  isAdmin?: boolean;
-};
 
 type DeliveryType = "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS";
 type ProductStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
 
 function getAdminDb() {
-  const context = getContext<TelefuncContext>();
-  if (!context.user || !context.isAdmin || !context.env?.DB) {
-    throw new Error("ADMIN_ACCESS_REQUIRED");
-  }
-
-  return { db: createDrizzleDb(context.env.DB), adminUserId: context.user.id };
+  const { db } = requireAdmin();
+  return { db };
 }
 
 function requiredText(value: string, field: string) {
@@ -42,22 +32,23 @@ function nonNegativeInteger(value: number, field: string) {
   return Math.floor(value);
 }
 
-async function logOperation(
-  db: ReturnType<typeof createDrizzleDb>,
-  adminUserId: string,
-  action: string,
-  targetType: string,
-  targetId: string,
-  detail: string,
+async function resolveProductCategoryId(
+  db: ReturnType<typeof getAdminDb>["db"],
+  requestedCategoryId: number | null,
 ) {
-  await db.insert(adminOperationLog).values({
-    adminUserId,
-    action,
-    targetType,
-    targetId,
-    detail,
-    createdAt: new Date(),
-  });
+  const [target] = requestedCategoryId === null
+    ? await db
+        .select({ id: category.id })
+        .from(category)
+        .where(and(eq(category.slug, "default"), eq(category.status, "ACTIVE")))
+        .limit(1)
+    : await db
+        .select({ id: category.id })
+        .from(category)
+        .where(and(eq(category.id, requestedCategoryId), eq(category.status, "ACTIVE")))
+        .limit(1);
+  if (!target) throw new Error("PRODUCT_CATEGORY_REQUIRED");
+  return target.id;
 }
 
 export async function onGetCatalogAdminData() {
@@ -96,7 +87,7 @@ export async function onGetCatalogAdminData() {
 }
 
 export async function onSaveCategory(input: { id?: number; name: string; slug: string; description?: string; sort: number }) {
-  const { db, adminUserId } = getAdminDb();
+  const { db } = getAdminDb();
   const now = new Date();
   const values = {
     name: requiredText(input.name, "CATEGORY_NAME"),
@@ -111,13 +102,13 @@ export async function onSaveCategory(input: { id?: number; name: string; slug: s
       const result = await db.update(category).set(values).where(eq(category.id, input.id)).returning();
       const record = result[0];
       if (!record) throw new Error("CATEGORY_NOT_FOUND");
-      await logOperation(db, adminUserId, "UPDATE_CATEGORY", "category", String(record.id), `name=${record.name}`);
+
       return record;
     }
 
     const result = await db.insert(category).values({ ...values, createdAt: now }).returning();
     const record = result[0];
-    await logOperation(db, adminUserId, "CREATE_CATEGORY", "category", String(record.id), `name=${record.name}`);
+
     return record;
   } catch (error) {
     if (String(error).includes("UNIQUE constraint failed")) throw new Error("CATEGORY_SLUG_CONFLICT");
@@ -126,7 +117,7 @@ export async function onSaveCategory(input: { id?: number; name: string; slug: s
 }
 
 export async function onSetCategoryStatus(input: { id: number; status: "ACTIVE" | "DISABLED" }) {
-  const { db, adminUserId } = getAdminDb();
+  const { db } = getAdminDb();
   if (input.status === "DISABLED") {
     const [activeProductCount] = await db
       .select({ value: count() })
@@ -141,7 +132,7 @@ export async function onSetCategoryStatus(input: { id: number; status: "ACTIVE" 
     .returning();
   const record = result[0];
   if (!record) throw new Error("CATEGORY_NOT_FOUND");
-  await logOperation(db, adminUserId, "SET_CATEGORY_STATUS", "category", String(record.id), `status=${record.status}`);
+
   return record;
 }
 
@@ -165,7 +156,7 @@ export async function onSaveProduct(input: {
   maxBuy: number;
   sort: number;
 }) {
-  const { db, adminUserId } = getAdminDb();
+  const { db } = getAdminDb();
   const now = new Date();
   const minBuy = Math.max(1, nonNegativeInteger(input.minBuy, "MIN_BUY"));
   const maxBuy = Math.max(minBuy, nonNegativeInteger(input.maxBuy, "MAX_BUY"));
@@ -174,8 +165,9 @@ export async function onSaveProduct(input: {
     : null;
   const fixedDeliveryContent = input.fixedDeliveryContent?.trim() || null;
   if (input.deliveryType === "FIXED_CARD" && input.status === "ACTIVE" && !fixedDeliveryContent) throw new Error("FIXED_DELIVERY_CONTENT_REQUIRED");
+  const categoryId = await resolveProductCategoryId(db, input.categoryId);
   const values = {
-    categoryId: input.categoryId,
+    categoryId,
     name: requiredText(input.name, "PRODUCT_NAME"),
     slug: normalizeSlug(input.slug),
     subtitle: input.subtitle?.trim() || null,
@@ -201,13 +193,13 @@ export async function onSaveProduct(input: {
       const result = await db.update(product).set(values).where(eq(product.id, input.id)).returning();
       const record = result[0];
       if (!record) throw new Error("PRODUCT_NOT_FOUND");
-      await logOperation(db, adminUserId, "UPDATE_PRODUCT", "product", String(record.id), `name=${record.name}`);
+
       return record;
     }
 
     const result = await db.insert(product).values({ ...values, createdAt: now }).returning();
     const record = result[0];
-    await logOperation(db, adminUserId, "CREATE_PRODUCT", "product", String(record.id), `name=${record.name}`);
+
     return record;
   } catch (error) {
     if (String(error).includes("UNIQUE constraint failed")) throw new Error("PRODUCT_SLUG_CONFLICT");
@@ -216,7 +208,7 @@ export async function onSaveProduct(input: {
 }
 
 export async function onSetProductStatus(input: { id: number; status: ProductStatus }) {
-  const { db, adminUserId } = getAdminDb();
+  const { db } = getAdminDb();
   const result = await db
     .update(product)
     .set({ status: input.status, updatedAt: new Date() })
@@ -224,6 +216,6 @@ export async function onSetProductStatus(input: { id: number; status: ProductSta
     .returning();
   const record = result[0];
   if (!record) throw new Error("PRODUCT_NOT_FOUND");
-  await logOperation(db, adminUserId, "SET_PRODUCT_STATUS", "product", String(record.id), `status=${record.status}`);
+
   return record;
 }

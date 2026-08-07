@@ -50,8 +50,8 @@
                 <label class="grid gap-2 text-sm font-medium">副标题<Input v-model="productForm.subtitle" /></label>
                 <label class="grid gap-2 text-sm font-medium">详细描述<Textarea v-model="productForm.description" rows="3" class="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
                 <label class="grid gap-2 text-sm font-medium">分类
-                  <Select :model-value="productForm.categoryId === null ? 'none' : String(productForm.categoryId)" @update:model-value="productForm.categoryId = $event === 'none' ? null : Number($event)">
-                    <SelectTrigger class="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">未分类</SelectItem><SelectItem v-for="item in catalog.categories" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent>
+                  <Select :model-value="productForm.categoryId === null ? undefined : String(productForm.categoryId)" @update:model-value="productForm.categoryId = Number($event)">
+                    <SelectTrigger class="h-9"><SelectValue placeholder="选择分类" /></SelectTrigger><SelectContent><SelectItem v-for="item in catalog.categories.filter((item) => item.status === 'ACTIVE')" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent>
                   </Select>
                 </label>
                 <div class="grid grid-cols-2 gap-3"><label class="grid gap-2 text-sm font-medium">价格（分）<Input v-model.number="productForm.price" type="number" min="0" required /></label><label class="grid gap-2 text-sm font-medium">排序<Input v-model.number="productForm.sort" type="number" min="0" required /></label></div>
@@ -66,7 +66,7 @@
                 <label class="grid gap-2 text-sm font-medium">上架状态
                   <Select v-model="productForm.status"><SelectTrigger class="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DRAFT">草稿</SelectItem><SelectItem value="ACTIVE">上架</SelectItem><SelectItem value="INACTIVE">下架</SelectItem></SelectContent></Select>
                 </label>
-                <label class="flex items-center gap-2 text-sm font-medium"><Checkbox v-model="productForm.isContactRequired" class="size-4" />下单时必须填写联系方式</label><label class="flex items-center gap-2 text-sm font-medium"><Checkbox v-model="productForm.isVisibleStock" class="size-4" />前台展示库存</label>
+                <label class="flex items-center justify-between gap-3 text-sm font-medium"><span>下单时必须填写联系方式</span><Switch v-model="productForm.isContactRequired" /></label><label class="flex items-center justify-between gap-3 text-sm font-medium"><span>前台展示库存</span><Switch v-model="productForm.isVisibleStock" /></label>
               </div>
             </div>
             <div class="flex justify-end gap-2 border-t bg-background px-6 py-4"><DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose><Button type="submit" :disabled="saving">{{ saving ? "保存中..." : productForm.id ? "保存商品" : "创建商品" }}</Button></div>
@@ -88,11 +88,12 @@ import { Button } from "@/components/ui/button";
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { PlusIcon, RefreshCwIcon } from "@lucide/vue";
 
+import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetCatalogAdminData, onSaveProduct, onSetProductStatus } from "@/server/catalog/admin.telefunc";
 
 type Catalog = Awaited<ReturnType<typeof onGetCatalogAdminData>>;
@@ -136,11 +137,12 @@ async function loadCatalog() {
   loading.value = true;
   error.value = null;
   try {
-    const result = await onGetCatalogAdminData();
+    const result = await runTelefunc(() => onGetCatalogAdminData(), { notifyError: false });
     catalog.categories = result.categories;
     catalog.products = result.products;
+    if (!productForm.id && productForm.categoryId === null) productForm.categoryId = defaultCategoryId();
   } catch (cause) {
-    error.value = messageFor(cause);
+    error.value = userErrorMessage(cause);
   } finally {
     loading.value = false;
   }
@@ -149,21 +151,19 @@ async function loadCatalog() {
 async function saveProduct() {
   saving.value = true;
   error.value = null;
-  try { await onSaveProduct({ ...productForm, physicalStock: requiresPhysicalStock.value ? productForm.physicalStock : null }); resetProductForm(); await loadCatalog(); } catch (cause) { error.value = messageFor(cause); } finally { saving.value = false; }
+  try { await runTelefunc(() => onSaveProduct({ ...productForm, physicalStock: requiresPhysicalStock.value ? productForm.physicalStock : null }), { notifyError: false }); resetProductForm(); await loadCatalog(); } catch (cause) { error.value = userErrorMessage(cause); } finally { saving.value = false; }
 }
 async function setProductStatus(id: number, status: Product["status"]) {
   error.value = null;
-  try { await onSetProductStatus({ id, status }); await loadCatalog(); } catch (cause) { error.value = messageFor(cause); }
+  try { await runTelefunc(() => onSetProductStatus({ id, status }), { notifyError: false }); await loadCatalog(); } catch (cause) { error.value = userErrorMessage(cause); }
 }
+function defaultCategoryId() { return catalog.categories.find((item) => item.slug === "default" && item.status === "ACTIVE")?.id ?? null; }
 function openCreate() { resetProductForm(); dialogOpen.value = true; }
 function editProduct(item: Product) { Object.assign(productForm, { id: item.id, categoryId: item.categoryId, name: item.name, slug: item.slug, subtitle: item.subtitle ?? "", description: item.description ?? "", fixedDeliveryContent: item.fixedDeliveryContent ?? "", manualDeliveryHint: item.manualDeliveryHint ?? "", purchaseNote: item.purchaseNote ?? "", isVisibleStock: item.isVisibleStock, isContactRequired: item.isContactRequired, price: item.price, status: item.status, deliveryType: item.deliveryType, physicalStock: item.physicalStock, minBuy: item.minBuy, maxBuy: item.maxBuy, sort: item.sort }); dialogOpen.value = true; }
-function resetProductForm() { Object.assign(productForm, { id: undefined, categoryId: null, name: "", slug: "", subtitle: "", description: "", fixedDeliveryContent: "", manualDeliveryHint: "", purchaseNote: "", isVisibleStock: true, isContactRequired: true, price: 0, status: "DRAFT", deliveryType: "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1, sort: 0 }); }
+function resetProductForm() { Object.assign(productForm, { id: undefined, categoryId: defaultCategoryId(), name: "", slug: "", subtitle: "", description: "", fixedDeliveryContent: "", manualDeliveryHint: "", purchaseNote: "", isVisibleStock: true, isContactRequired: true, price: 0, status: "DRAFT", deliveryType: "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1, sort: 0 }); }
 function setPhysicalStock(value: string | number) { productForm.physicalStock = value === "" ? null : Number(value); }
 function formatAmount(amount: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100); }
 function deliveryLabel(value: Product["deliveryType"]) { return { CARD_AUTO: "自动卡密", FIXED_CARD: "固定内容", MANUAL: "人工发货", EXPRESS: "物流发货" }[value]; }
 function productStatusLabel(value: Product["status"]) { return { DRAFT: "草稿", ACTIVE: "上架", INACTIVE: "下架" }[value]; }
-function messageFor(cause: unknown) {
-  const value = cause instanceof Error ? cause.message : String(cause);
-  return ({ ADMIN_ACCESS_REQUIRED: "管理员会话无效，请重新登录。", PRODUCT_NAME_REQUIRED: "商品名称不能为空。", PRODUCT_SLUG_CONFLICT: "商品 Slug 已存在。", FIXED_DELIVERY_CONTENT_REQUIRED: "固定内容商品上架前必须填写交付内容。", SLUG_REQUIRED: "Slug 只能包含英文、数字和连字符。" } as Record<string, string>)[value] ?? "请求未能完成，请检查输入后重试。";
-}
+
 </script>
