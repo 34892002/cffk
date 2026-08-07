@@ -12,8 +12,10 @@
     }
   ],
   "vars": {
-    "ADMIN_PATH": "change-me",
-    "BETTER_AUTH_SECRET": "dev-secret-please-change-me-in-production"
+    "ADMIN_PATH": "change-me"
+  },
+  "secrets": {
+    "required": ["BETTER_AUTH_SECRET"]
   },
   "compatibility_flags": [
     "nodejs_compat",

@@ -9,10 +9,10 @@
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
-    "db:migrate:local": "wrangler d1 migrations apply cffk_db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply cffk_db --remote",
-    "db:seed:local": "wrangler d1 execute cffk_db --local --file=./scripts/seed.sql --yes",
-    "db:seed:remote": "wrangler d1 execute cffk_db --remote --file=./scripts/seed.sql --yes",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "db:seed:local": "wrangler d1 execute DB --local --file=./scripts/seed.sql --yes",
+    "db:seed:remote": "wrangler d1 execute DB --remote --file=./scripts/seed.sql --yes",
     "deploy": "vike build && wrangler deploy",
     "generate-types": "wrangler types"
   },
@@ -61,5 +61,15 @@
     "vue-eslint-parser": "^10.4.1",
     "wrangler": "^4.114.0"
   },
-  "type": "module"
+  "type": "module",
+  "cloudflare": {
+    "bindings": {
+      "ADMIN_PATH": {
+        "description": "后台管理路径段。生产环境请使用不可预测的值，例如 admin-<random>。"
+      },
+      "BETTER_AUTH_SECRET": {
+        "description": "用于签名会话。使用 openssl rand -base64 32 生成。"
+      }
+    }
+  }
 }

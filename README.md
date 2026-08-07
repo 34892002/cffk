@@ -6,6 +6,11 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/34892002/cffk)
 
+部署页面会收集两项配置：
+
+- `ADMIN_PATH`：普通变量，会显示为一个可编辑的明文输入框，用于设置后台路径段。
+- `BETTER_AUTH_SECRET`：Secret，会显示为掩码输入框，用于签名登录会话。可使用 `openssl rand -base64 32` 生成。
+
 ## 技术栈
 
 - **Web**：Vike、Vue 3、Vite、Tailwind CSS、shadcn-vue
@@ -64,7 +69,7 @@ npm run db:migrate:local
 可用下面的命令确认 migration 状态：
 
 ```bash
-npx wrangler d1 migrations list MY_VIKE_DEMO_DATABASE --local
+npx wrangler d1 migrations list DB --local
 ```
 
 该脚手架初始化后会创建 Better Auth 所需的四张表：`user`、`session`、`account` 和 `verification`。
@@ -106,13 +111,11 @@ npm run db:seed:local
 
 ## Better Auth 配置
 
-开发环境默认值位于 `wrangler.jsonc` 的 `vars`：
+`ADMIN_PATH` 是 `wrangler.jsonc` 中的普通变量；`BETTER_AUTH_SECRET` 是 Secret。为本地开发创建未提交的 `.dev.vars`，填入：
 
-```jsonc
-{
-  "ADMIN_PATH": "admin",
-  "BETTER_AUTH_SECRET": "dev-secret-please-change-me-in-production"
-}
+```ini
+ADMIN_PATH=admin
+BETTER_AUTH_SECRET=local-development-secret
 ```
 
 提供的页面：
@@ -133,7 +136,7 @@ npx wrangler login
 ### 2. 创建远程 D1 数据库
 
 ```bash
-npx wrangler d1 create MY_VIKE_DEMO_DATABASE
+npx wrangler d1 create cffk_db
 ```
 
 命令会返回数据库 UUID。将 `wrangler.jsonc` 中的 D1 配置更新为真实值：
@@ -143,7 +146,7 @@ npx wrangler d1 create MY_VIKE_DEMO_DATABASE
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "MY_VIKE_DEMO_DATABASE",
+      "database_name": "cffk_db",
       "database_id": "<创建命令返回的 UUID>",
       "migrations_dir": "database/migrations"
     }
@@ -151,7 +154,7 @@ npx wrangler d1 create MY_VIKE_DEMO_DATABASE
 }
 ```
 
-如需更换数据库名称，同时更新 `wrangler.jsonc` 与 `package.json` 中 `db:migrate:local`、`db:migrate:remote` 脚本的数据库名称。
+迁移与导入脚本使用 D1 绑定名 `DB`，因此一键部署时可以修改数据库名称而无需修改 `package.json`。
 
 修改 `wrangler.jsonc` 后重新生成 Workers 类型：
 
@@ -161,13 +164,13 @@ npm run generate-types
 
 ### 3. 配置生产认证变量
 
-部署后，`ADMIN_PATH` 使用 `wrangler.jsonc` 的值；本地 `.dev.vars` 可覆盖它。生产环境请改为不可预测的路径段。后台“网站地址”是认证、支付回调和 SEO 的统一公开地址；未设置时会使用当前请求地址。不要在生产环境保留默认开发密钥；使用 Wrangler Secret 设置强随机密钥：
+一键部署时，部署按钮会将 `ADMIN_PATH` 作为普通变量、`BETTER_AUTH_SECRET` 作为 Secret 收集。生产环境请为后台路径使用不可预测的值。后台“网站地址”是认证、支付回调和 SEO 的统一公开地址；未设置时会使用当前请求地址。
+
+手动部署时，使用 Wrangler 设置强随机密钥：
 
 ```bash
 npx wrangler secret put BETTER_AUTH_SECRET
 ```
-
-然后从 `wrangler.jsonc` 的 `vars` 中移除 `BETTER_AUTH_SECRET`，避免普通配置覆盖该 secret。
 
 ### 4. 应用远程数据库迁移
 
