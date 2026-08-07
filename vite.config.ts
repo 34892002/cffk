@@ -7,6 +7,7 @@ import { telefunc } from "telefunc/vite";
 import vue from "@vitejs/plugin-vue";
 import { cloudflare } from "@cloudflare/vite-plugin";
 
+
 export default defineConfig({
   plugins: [cloudflare({ viteEnvironment: { name: "ssr" } }), vike(), tailwindcss(), telefunc(), vue()],
   environments: {

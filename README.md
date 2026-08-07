@@ -93,6 +93,9 @@ npm run db:generate
 # 2. 本地验证 migration
 npm run db:migrate:local
 npm run db:check
+
+# 3. 导入seed
+npm run db:seed:local
 ```
 
 生成后请先阅读 `database/migrations/*.sql`，确认 SQL 符合预期。不要编辑已应用到共享数据库的 migration；应新建一份 migration 来演进 schema。
