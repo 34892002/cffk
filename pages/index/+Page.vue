@@ -126,10 +126,9 @@ function stockLabel(product: Product) {
   if (product.availableStock === null) return "库存有限";
   return product.availableStock > 0 ? `库存 ${product.availableStock}` : "暂时缺货";
 }
-
 function stockClass(product: Product) {
   return product.deliveryType === "CARD_AUTO" || product.stockMode === "FINITE"
-    ? product.availableStock === 0 ? "text-destructive" : "text-muted-foreground"
+    ? product.availableStock === 0 ? "text-orange-500" : "text-muted-foreground"
     : "text-muted-foreground";
 }
 </script>
