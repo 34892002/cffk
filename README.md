@@ -2,6 +2,10 @@
 
 一个使用 Vike、Vue 3、Hono、Cloudflare Workers、D1、Drizzle ORM、Better Auth 和 shadcn-vue 的全栈脚手架。
 
+## 一键部署到 Cloudflare Workers
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/34892002/cffk)
+
 ## 技术栈
 
 - **Web**：Vike、Vue 3、Vite、Tailwind CSS、shadcn-vue
