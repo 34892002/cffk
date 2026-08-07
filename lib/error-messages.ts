@@ -1,0 +1,85 @@
+import { errorCode } from "./app-error";
+
+export const errorMessages: Record<string, string> = {
+  AUTH_REQUIRED: "请先登录后再继续操作。",
+  ADMIN_ACCESS_REQUIRED: "管理员身份已失效，请重新登录。",
+  DATABASE_UNAVAILABLE: "服务暂时不可用，请稍后重试。",
+
+  ADMIN_NOT_FOUND: "管理员账号不存在。",
+  ADMIN_SELF_STATUS_CHANGE_FORBIDDEN: "不能停用自己的管理员权限。",
+  ADMIN_STATUS_CHANGED_RETRY: "管理员状态已被其他操作更新，请刷新后重试。",
+  LAST_ACTIVE_ADMIN_REQUIRED: "系统必须保留至少一名活动管理员。",
+
+  CATEGORY_NAME_REQUIRED: "分类名称不能为空。",
+  CATEGORY_NOT_FOUND: "分类不存在。",
+  CATEGORY_SLUG_CONFLICT: "分类 Slug 已存在。",
+  CATEGORY_HAS_ACTIVE_PRODUCTS: "请先下架该分类下的全部商品，再停用分类。",
+  SLUG_REQUIRED: "Slug 只能包含英文、数字和连字符。",
+
+  PRODUCT_NOT_FOUND: "商品不存在。",
+  PRODUCT_NOT_CARD_AUTO: "只有自动卡密商品可管理卡密库存。",
+  PRODUCT_SLUG_CONFLICT: "商品 Slug 已存在。",
+  PRODUCT_ID_INVALID: "请选择有效的商品。",
+  PRODUCT_NAME_REQUIRED: "商品名称不能为空。",
+  PRICE_INVALID: "商品价格必须为有效金额。",
+  MIN_BUY_INVALID: "最小购买数量无效。",
+  MAX_BUY_INVALID: "最大购买数量无效。",
+  PHYSICAL_STOCK_INVALID: "库存数量无效。",
+  FIXED_DELIVERY_CONTENT_REQUIRED: "固定卡密商品必须填写发货内容。",
+
+  CARD_CONTENT_REQUIRED: "请至少填写一条卡密。",
+  CARD_DATE_INVALID: "日期格式无效，请重新选择日期。",
+  CARD_DELETE_REJECTED: "仅可删除未售出的卡密。",
+  CARD_IMPORT_LIMIT_EXCEEDED: "单次最多导入 1,000 条卡密。",
+
+  DISCOUNT_CODE_INVALID: "优惠码只能包含 2 至 64 位大写字母、数字、下划线或连字符。",
+  DISCOUNT_CODE_CONFLICT: "该优惠码已存在。",
+  DISCOUNT_PERCENT_INVALID: "百分比优惠必须在 1 至 100 之间。",
+  DISCOUNT_VALUE_INVALID: "优惠数值必须为正整数。",
+  DISCOUNT_MIN_AMOUNT_INVALID: "最低订单金额必须为正整数。",
+  DISCOUNT_MAX_USES_INVALID: "使用次数必须为正整数。",
+  DISCOUNT_EXPIRES_AT_INVALID: "过期时间无效。",
+  DISCOUNT_NOT_FOUND: "优惠码不存在。",
+
+  EMAIL_PROVIDER_NAME_REQUIRED: "请填写邮件 Provider 名称。",
+  EMAIL_PROVIDER_KIND_MISMATCH: "JSON 的 kind 必须与当前 Provider 一致。",
+  EMAIL_PROVIDER_NOT_FOUND: "邮件 Provider 不存在。",
+  EMAIL_PROVIDER_NOT_AVAILABLE: "请先启用一个邮件 Provider。",
+  EMAIL_PROVIDER_NOT_IMPLEMENTED: "当前 Provider 尚未实现发送能力。",
+  EMAIL_RECIPIENT_INVALID: "请输入有效的收件人邮箱。",
+  EMAIL_TEMPLATE_NAME_REQUIRED: "请填写邮件模板名称。",
+  EMAIL_TEMPLATE_NOT_FOUND: "邮件模板不存在。",
+  EMAIL_TEMPLATE_NOT_AVAILABLE: "请先启用 TEST 邮件模板。",
+  EMAIL_CLOUDFLARE_BINDING_UNAVAILABLE: "未找到 Cloudflare Email Sending binding，请检查 Worker 配置。",
+
+  S3_CONFIG_REQUIRED: "请填写 S3 配置 JSON。",
+  S3_CONFIG_INVALID: "S3 配置无效，请检查 endpoint、bucket、region 与 Secret 引用。",
+  S3_CONFIG_NOT_FOUND: "请先保存 S3 存储配置。",
+  S3_SECRET_UNAVAILABLE: "未找到 S3 Worker Secret，请检查 Secret 引用。",
+  S3_UPLOAD_FAILED: "对象存储上传失败。",
+  S3_DELETE_FAILED: "对象存储删除失败。",
+  MEDIA_NAME_REQUIRED: "文件名不能为空。",
+  MEDIA_TYPE_NOT_ALLOWED: "仅支持 JPEG、PNG、WebP 或 GIF 图片。",
+  MEDIA_FILE_SIZE_INVALID: "图片必须小于 10MB。",
+  MEDIA_FILE_READ_FAILED: "无法读取图片文件。",
+  MEDIA_NOT_FOUND: "媒体文件不存在。",
+
+  PAYMENT_PROVIDER_NAME_REQUIRED: "请填写支付 Provider 名称。",
+  PAYMENT_PROVIDER_NOT_FOUND: "支付 Provider 不存在。",
+  PAYMENT_PROVIDER_NOT_AVAILABLE: "当前没有可用的支付方式。",
+  PAYMENT_PROVIDER_NOT_IMPLEMENTED: "当前支付方式尚未实现。",
+
+  ORDER_NOT_FOUND: "订单不存在或查询凭证无效。",
+  ORDER_NOT_PAID: "订单尚未支付，暂时不能发货。",
+  ORDER_ALREADY_DELIVERED: "订单已发货，无需重复操作。",
+  ORDER_CANNOT_CLOSE: "当前订单状态不能关闭。",
+  ORDER_DELIVERY_NOT_COMPLETED: "订单尚未完成发货。",
+  ORDER_DELIVERY_TYPE_INVALID: "该订单不支持此发货操作。",
+
+  REQUEST_FAILED: "接口异常，请稍后重试。",
+  INTERNAL_ERROR: "接口异常，请稍后重试。",
+};
+
+export function userErrorMessage(cause: unknown, fallback = errorMessages.REQUEST_FAILED) {
+  return errorMessages[errorCode(cause)] ?? fallback;
+}

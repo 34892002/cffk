@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "my-app",
+  "compatibility_date": "2026-03-12",
+  "main": "vike:server-entry",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "MY_VIKE_DEMO_DATABASE",
+      "database_id": "my-vike-demo-database",
+      "migrations_dir": "database/migrations"
+    }
+  ],
+  "vars": {
+    "BETTER_AUTH_SECRET": "dev-secret-please-change-me-in-production",
+    "BETTER_AUTH_URL": "http://localhost:3000",
+    "GITHUB_CLIENT_ID": "",
+    "GITHUB_CLIENT_SECRET": ""
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  }
+}
