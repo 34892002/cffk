@@ -3,7 +3,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vike dev",
-    "build": "vike build",
+    "build": "bun run db:generate && vike build",
     "test": "bun test tests",
     "preview": "vike build && vike preview",
     "lint": "eslint .",
@@ -13,8 +13,9 @@
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "db:seed:local": "wrangler d1 execute DB --local --file=./scripts/seed.sql --yes",
     "db:seed:remote": "wrangler d1 execute DB --remote --file=./scripts/seed.sql --yes",
-    "deploy": "vike build && wrangler deploy",
-    "generate-types": "wrangler types"
+    "generate-types": "wrangler types",
+    "deploy": "bun run db:migrate:remote && bun run db:seed:remote && wrangler deploy",
+    "up": "bun run db:migrate:remote && vike build && wrangler deploy"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.25",
