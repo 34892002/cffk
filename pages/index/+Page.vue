@@ -3,23 +3,23 @@
     <header class="fixed inset-x-0 top-0 z-50 border-b bg-background/95 backdrop-blur">
       <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-4 px-5">
         <a href="/" class="flex min-w-0 items-center gap-2 font-semibold">
-          <img :src="logoUrl" :alt="`${data.site.name} Logo`" class="size-8 shrink-0 rounded-md object-contain" />
-          <span class="truncate">{{ data.site.name }}</span>
+          <img :src="brandLogoUrl" :alt="`${site.name} Logo`" class="size-8 shrink-0 rounded-md object-contain" />
+          <span class="truncate">{{ site.name }}</span>
         </a>
         <nav class="flex shrink-0 items-center gap-2" aria-label="主导航">
           <Button size="sm" variant="outline" as-child><a href="/order">我的订单</a></Button>
-          <a v-if="data.site.supportContact" :href="supportHref" class="ml-2 text-sm text-muted-foreground hover:text-foreground">联系支持</a>
+          <a v-if="site.supportContact" :href="supportHref" class="ml-2 text-sm text-muted-foreground hover:text-foreground">联系支持</a>
         </nav>
       </div>
     </header>
 
     <section class="border-b bg-background pt-16">
       <div class="mx-auto grid max-w-6xl gap-5 px-5 py-8 sm:grid-cols-[minmax(0,1fr)_22rem] sm:items-center">
-        <div v-if="data.site.notice" class="flex items-start gap-3 text-sm leading-6 text-muted-foreground">
+        <div v-if="site.notice" class="flex items-start gap-3 text-sm leading-6 text-muted-foreground">
           <InfoIcon class="mt-1 size-4 shrink-0 text-foreground" />
-          <p class="m-0">{{ data.site.notice }}</p>
+          <p class="m-0">{{ site.notice }}</p>
         </div>
-        <p v-else class="text-sm text-muted-foreground">{{ data.site.subtitle || "选择商品后进入结算流程" }}</p>
+        <p v-else class="text-sm text-muted-foreground">{{ site.subtitle || "选择商品后进入结算流程" }}</p>
         <div class="relative">
           <SearchIcon class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input v-model="query" class="pl-9" placeholder="搜索商品名称或关键词" aria-label="搜索商品" />
@@ -82,16 +82,27 @@ import { InfoIcon, PackageOpenIcon, SearchIcon } from "@lucide/vue";
 import logoUrl from "@/assets/logo.svg?url";
 import defaultProductImage from "@/assets/product_img.jpg?url";
 import { useData } from "vike-vue/useData";
+import { usePageContext } from "vike-vue/usePageContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Data } from "./+data.server";
 
 type Product = Data["products"][number];
+type Site = {
+  name: string;
+  subtitle: string | null;
+  logo: string | null;
+  notice: string | null;
+  supportContact: string | null;
+};
 
 const data = useData<Data>();
+const pageContext = usePageContext() as unknown as { site: Site };
+const site = pageContext.site;
 const selectedCategory = ref<number | null>(null);
 const query = ref("");
+const brandLogoUrl = computed(() => site.logo || logoUrl);
 const visibleProducts = computed(() => {
   const keyword = query.value.trim().toLowerCase();
   return data.products.filter((product) =>
@@ -100,7 +111,7 @@ const visibleProducts = computed(() => {
   );
 });
 const supportHref = computed(() => {
-  const contact = data.site.supportContact ?? "";
+  const contact = site.supportContact ?? "";
   return contact.includes(":") ? contact : `mailto:${contact}`;
 });
 

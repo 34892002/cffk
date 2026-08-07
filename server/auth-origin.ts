@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
 import type { RuntimeAdapter } from "@universal-middleware/core";
-import { getDrizzleDb } from "@/database/drizzle";
-import { siteSetting } from "@/database/drizzle/schema";
+import { getSiteSettings } from "@/server/site/public-settings";
 
 function normalizeOrigin(value: string): string | null {
   try {
@@ -13,17 +11,16 @@ function normalizeOrigin(value: string): string | null {
   }
 }
 
-// The public site URL is authoritative when a third-party CDN changes the
-// request Host while proxying to a Cloudflare Worker custom-domain origin.
+// The configured public site URL is authoritative when a third-party CDN
+// changes the request Host while proxying to a Cloudflare Worker custom domain.
+// The shared site-settings cache prevents an extra D1 read on every auth request.
 export async function getPublicAuthOrigin(runtime: RuntimeAdapter): Promise<string | undefined> {
-  try {
-    const [setting] = await getDrizzleDb(runtime)
-      .select({ siteUrl: siteSetting.siteUrl })
-      .from(siteSetting)
-      .where(eq(siteSetting.id, 1))
-      .limit(1);
+  if (runtime.runtime !== "workerd" || !runtime.env?.DB) return undefined;
+  const database = runtime.env.DB as D1Database;
 
-    return setting?.siteUrl ? normalizeOrigin(setting.siteUrl) ?? undefined : undefined;
+  try {
+    const setting = await getSiteSettings(database);
+    return setting.siteUrl ? normalizeOrigin(setting.siteUrl) ?? undefined : undefined;
   } catch {
     return undefined;
   }

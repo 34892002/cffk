@@ -5,10 +5,10 @@ import vikeVue from "vike-vue/config";
 // https://vike.dev/config
 
 const config: Config = {
-  title: "欢迎光临",
+  title: "CFFK发卡",
   description: "",
 
-  passToClient: ["user", "isAdmin"],
+  passToClient: ["user", "isAdmin", "site"],
   extends: [vikeVue],
 };
 

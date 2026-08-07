@@ -224,9 +224,9 @@ function formatDate(value: Date) {
 
 
     <div class="grid gap-4 md:grid-cols-3">
-      <Card><CardHeader class="pb-2"><CardDescription>总卡密</CardDescription><CardTitle class="text-3xl">{{ data.overview.total }}</CardTitle></CardHeader><CardContent class="text-sm text-muted-foreground">全部库存记录</CardContent></Card>
-      <Card><CardHeader class="pb-2"><CardDescription>可用库存</CardDescription><CardTitle class="text-3xl">{{ data.overview.available }}</CardTitle></CardHeader><CardContent class="text-sm text-muted-foreground">未售出的卡密</CardContent></Card>
-      <Card><CardHeader class="pb-2"><CardDescription>已售出</CardDescription><CardTitle class="text-3xl">{{ data.overview.sold }}</CardTitle></CardHeader><CardContent class="text-sm text-muted-foreground">已成功发货的卡密</CardContent></Card>
+      <Card class="gap-0"><CardHeader class="pb-0"><CardDescription>总卡密</CardDescription><CardTitle class="text-3xl">{{ data.overview.total }}</CardTitle></CardHeader><CardContent class="pt-1.5 text-sm text-muted-foreground">全部库存记录</CardContent></Card>
+      <Card class="gap-0"><CardHeader class="pb-0"><CardDescription>可用库存</CardDescription><CardTitle class="text-3xl">{{ data.overview.available }}</CardTitle></CardHeader><CardContent class="pt-1.5 text-sm text-muted-foreground">未售出的卡密</CardContent></Card>
+      <Card class="gap-0"><CardHeader class="pb-0"><CardDescription>已售出</CardDescription><CardTitle class="text-3xl">{{ data.overview.sold }}</CardTitle></CardHeader><CardContent class="pt-1.5 text-sm text-muted-foreground">已成功发货的卡密</CardContent></Card>
     </div>
 
     <Card>

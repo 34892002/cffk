@@ -74,6 +74,7 @@ export const siteSetting = sqliteTable("siteSetting", {
   siteUrl: text("siteUrl"),
   siteSubtitle: text("siteSubtitle"),
   logo: text("logo"),
+  logoIcon: text("logoIcon"),
   notice: text("notice"),
   supportContact: text("supportContact"),
   footerText: text("footerText"),

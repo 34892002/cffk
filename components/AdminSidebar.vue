@@ -112,6 +112,9 @@
               <DropdownMenuLabel>{{ currentUserName }}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
+                <DropdownMenuItem as-child>
+                  <a :href="basePath + adminPages.account.path"><UserRoundCogIcon data-icon="inline-start" />账户设置</a>
+                </DropdownMenuItem>
                 <DropdownMenuItem @select="onSignOut"><LogOutIcon data-icon="inline-start" />退出登录</DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>
@@ -134,8 +137,8 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { authClient } from "@/lib/auth-client";
-import { adminNavigation, isAdminNavigationItemActive, type AdminNavigationGroup, type AdminNavigationItem } from "@/lib/admin-navigation";
-import { BellIcon, ChevronRightIcon, ChevronUpIcon, ClipboardListIcon, LayoutDashboardIcon, LogOutIcon, PackageIcon, SettingsIcon } from "@lucide/vue";
+import { adminNavigation, adminPages, isAdminNavigationItemActive, type AdminNavigationGroup, type AdminNavigationItem } from "@/lib/admin-navigation";
+import { BellIcon, ChevronRightIcon, ChevronUpIcon, ClipboardListIcon, LayoutDashboardIcon, LogOutIcon, PackageIcon, SettingsIcon, UserRoundCogIcon } from "@lucide/vue";
 import logoUrl from "@/assets/logo.svg?url";
 import { navigate } from "vike/client/router";
 import { computed } from "vue";

@@ -18,11 +18,12 @@
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.25",
-    "@lucide/vue": "^1.28.0",
+    "@lucide/vue": "^1.30.0",
     "@tanstack/vue-table": "^8.21.3",
     "@types/qrcode": "^1.5.6",
     "@universal-middleware/core": "^0.4.18",
     "@unovis/vue": "^1.6.7",
+    "@vee-validate/zod": "^4.15.1",
     "@vikejs/hono": "^0.2.1",
     "@vueuse/core": "^14.4.0",
     "aws4fetch": "^1.0.20",
@@ -35,10 +36,12 @@
     "reka-ui": "^2.10.1",
     "tailwind-merge": "^3.6.0",
     "telefunc": "^0.2.22",
+    "vee-validate": "^4.15.1",
     "vike": "0.4.260",
     "vike-vue": "^0.9.13",
     "vue": "^3.5.40",
-    "vue-sonner": "^2.0.9"
+    "vue-sonner": "^2.0.9",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.51.1",

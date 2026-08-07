@@ -1,0 +1,1 @@
+ALTER TABLE `siteSetting` ADD `logoIcon` text;

@@ -3,7 +3,7 @@
   <SidebarProvider v-else class="min-h-svh bg-muted/40">
     <AdminSidebar />
     <SidebarInset>
-      <header class="sticky top-0 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/60 md:top-2 md:rounded-t-xl">
+      <header class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4 md:rounded-t-xl">
         <SidebarTrigger class="-ml-1 cursor-pointer" />
         <Separator orientation="vertical" class="h-4" />
         <nav class="flex items-center gap-2 text-sm" aria-label="当前位置">

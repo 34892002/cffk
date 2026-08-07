@@ -23,6 +23,12 @@ export function isNavigationModule(item: AdminNavigationItem): item is AdminNavi
 const emailDescription = "管理邮件 Provider、发送统计和模板。";
 
 export const adminPages = {
+  account: {
+    title: "账户设置",
+    path: "/account",
+    pageTitle: "账户设置",
+    description: "修改当前管理员的昵称、邮箱和登录密码。",
+  },
   dashboard: {
     title: "面板",
     path: "/dash",
@@ -117,7 +123,7 @@ export const adminPages = {
     title: "站点配置",
     path: "/system/settings",
     pageTitle: "站点配置",
-    description: "管理站点基础配置。",
+    description: "管理公开商城、站点资源和默认 SEO 配置。"
   },
   security: {
     title: "安全配置",
@@ -188,7 +194,7 @@ export function getAdminBreadcrumb(pathname: string, basePath: string) {
     }
   }
 
-  const standaloneItems = [adminNavigation.dashboard, adminNavigation.orders];
+  const standaloneItems = [adminNavigation.dashboard, adminNavigation.orders, adminPages.account];
   const standalone = standaloneItems.find((item) => isAdminNavigationItemActive(pathname, basePath, item));
   if (standalone) return { titles: [standalone.title] };
 

@@ -1,14 +1,8 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { card, category, product, siteSetting } from "@/database/drizzle/schema";
+import { card, category, product } from "@/database/drizzle/schema";
 
 export type PublicCatalog = {
-  site: {
-    name: string;
-    subtitle: string | null;
-    notice: string | null;
-    supportContact: string | null;
-  };
   categories: Array<{
     id: number;
     name: string;
@@ -89,17 +83,7 @@ async function countAvailableCardStock(db: ReturnType<typeof createDrizzleDb>, p
 
 export async function getPublicCatalog(database: D1Database): Promise<PublicCatalog> {
   const db = createDrizzleDb(database);
-  const [settingRows, categories, products] = await Promise.all([
-    db
-      .select({
-        name: siteSetting.siteName,
-        subtitle: siteSetting.siteSubtitle,
-        notice: siteSetting.notice,
-        supportContact: siteSetting.supportContact,
-      })
-      .from(siteSetting)
-      .where(eq(siteSetting.id, 1))
-      .limit(1),
+  const [categories, products] = await Promise.all([
     db
       .select({
         id: category.id,
@@ -132,7 +116,6 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
       .orderBy(asc(product.sort), asc(product.id)),
   ]);
 
-  const setting = settingRows[0];
   const categoryIds = [...new Set(products.flatMap((item) => (item.categoryId === null ? [] : [item.categoryId])))];
   const categoryNames = categoryIds.length
     ? await db
@@ -152,12 +135,6 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
   const cardStockByProductId = new Map(cardStockRows.map((item) => [item.productId, item.availableStock]));
 
   return {
-    site: {
-      name: setting?.name ?? "CFFK",
-      subtitle: setting?.subtitle ?? null,
-      notice: setting?.notice ?? null,
-      supportContact: setting?.supportContact ?? null,
-    },
     categories: categories.filter((item) => categoryNameById.has(item.id)),
     products: products.map((item) => ({
       ...item,

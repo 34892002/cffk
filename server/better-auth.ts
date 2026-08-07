@@ -10,7 +10,7 @@ import { schema } from "../database/drizzle/schema";
 export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string): BetterAuthOptions {
   return {
     secret: env.BETTER_AUTH_SECRET,
-    baseURL: publicOrigin ?? env.BETTER_AUTH_URL,
+    ...(publicOrigin ? { baseURL: publicOrigin } : {}),
     database: drizzleAdapter(getDrizzleDb(runtime), {
       provider: "sqlite",
       schema: {
@@ -21,19 +21,16 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string): 
     emailAndPassword: {
       enabled: true,
     },
+    user: {
+      changeEmail: {
+        enabled: true,
+        // 本地项目暂无邮件验证投递能力；邮箱修改由当前登录会话直接提交。
+        updateEmailWithoutVerification: true,
+      },
+    },
     // `user.username` is the unique administrator sign-in identifier, matching
     // EdgeKey's Admin.username behavior while Better Auth owns credentials.
     plugins: [username()],
     disabledPaths: ["/is-username-available"],
-    // GitHub is only enabled once its credentials are set, so the app runs out of the box without them.
-    socialProviders:
-      env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
-        ? {
-            github: {
-              clientId: env.GITHUB_CLIENT_ID,
-              clientSecret: env.GITHUB_CLIENT_SECRET,
-            },
-          }
-        : {},
   };
 }

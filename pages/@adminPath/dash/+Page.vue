@@ -3,12 +3,12 @@
     <AdminPageHeader />
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <Card v-for="metric in metrics" :key="metric.label">
-        <CardHeader class="pb-2">
+      <Card v-for="metric in metrics" :key="metric.label" class="gap-0">
+        <CardHeader class="pb-0">
           <CardDescription>{{ metric.label }}</CardDescription>
           <CardTitle class="text-2xl font-semibold tabular-nums">{{ metric.value }}</CardTitle>
         </CardHeader>
-        <CardFooter class="pt-0 text-sm text-muted-foreground">{{ metric.description }}</CardFooter>
+        <CardFooter class="pt-1.5 text-sm text-muted-foreground">{{ metric.description }}</CardFooter>
       </Card>
     </div>
 

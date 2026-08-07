@@ -7,7 +7,7 @@
 - **Web**：Vike、Vue 3、Vite、Tailwind CSS、shadcn-vue
 - **服务端**：Hono，运行于 Cloudflare Workers
 - **数据库**：Cloudflare D1 + Drizzle ORM
-- **认证**：Better Auth（邮箱密码登录；可选 GitHub OAuth）
+- **认证**：Better Auth（邮箱密码登录）
 
 ## 环境要求
 
@@ -106,8 +106,8 @@ npm run db:seed:local
 
 ```jsonc
 {
-  "BETTER_AUTH_SECRET": "dev-secret-please-change-me-in-production",
-  "BETTER_AUTH_URL": "http://localhost:3000"
+  "ADMIN_PATH": "admin",
+  "BETTER_AUTH_SECRET": "dev-secret-please-change-me-in-production"
 }
 ```
 
@@ -117,11 +117,6 @@ npm run db:seed:local
 - `/${ADMIN_PATH}`：管理员登录
 - `/${ADMIN_PATH}/dash`：受登录保护的后台主页
 
-如需启用 GitHub 登录，在 `wrangler.jsonc` 中填写 `GITHUB_CLIENT_ID` 与 `GITHUB_CLIENT_SECRET`，并将 GitHub OAuth App 回调地址设置为：
-
-```text
-<应用地址>/api/auth/callback/github
-```
 
 ## 部署到 Cloudflare Workers
 
@@ -162,7 +157,7 @@ npm run generate-types
 
 ### 3. 配置生产认证变量
 
-部署前，将 `BETTER_AUTH_URL` 改为应用的实际 HTTPS 地址。不要在生产环境保留默认开发密钥；使用 Wrangler Secret 设置强随机密钥：
+部署后，`ADMIN_PATH` 使用 `wrangler.jsonc` 的值；本地 `.dev.vars` 可覆盖它。生产环境请改为不可预测的路径段。后台“网站地址”是认证、支付回调和 SEO 的统一公开地址；未设置时会使用当前请求地址。不要在生产环境保留默认开发密钥；使用 Wrangler Secret 设置强随机密钥：
 
 ```bash
 npx wrangler secret put BETTER_AUTH_SECRET

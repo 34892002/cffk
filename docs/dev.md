@@ -57,7 +57,32 @@ import "vue-sonner/style.css";
 
 `Alert` 仅用于需要持续展示、且用户必须阅读的页面级状态，例如服务维护公告、无法继续工作的初始化失败状态，或不可忽略的配置告警。
 
-### 1.3 公开商城首页
+### 1.3 后台表单
+
+后台新增或重构的非平凡表单（包含多个字段、保存请求或业务校验）必须采用 `VeeValidate + Zod + shadcn-vue Field`：
+
+- 通过 `vee-validate` 的 `useForm()` 管理表单状态，使用 `Field as VeeField` 为每个字段建立绑定；`Input`、`Textarea`、`Select` 等组件使用 `v-bind="componentField"`。
+- 使用 `zod` 定义客户端 schema，并通过 `@vee-validate/zod` 的 `toTypedSchema()` 接入。客户端校验用于即时反馈，不可替代 Telefunc 服务端校验。
+- 字段外层使用 `Field`、`FieldLabel`、`FieldDescription` 和 `FieldError`；字段组使用 `FieldGroup`，语义分组使用 `FieldSet`、`FieldLegend` 和 `FieldSeparator`。不得在业务页面用手写 `<label>` 加 class 替代该结构。
+- 发生校验错误时，`Field` 必须设置 `:data-invalid="errors.length > 0"`，对应控件必须设置 `:aria-invalid="errors.length > 0"`，并通过 `FieldError` 紧邻展示错误。
+- 表单使用 `novalidate`，由 Zod/VeeValidate 统一呈现客户端错误；仍可保留合适的输入属性，例如 `type="url"`、`autocomplete` 和 `inputmode`，以改善输入体验。
+- 表单初始加载或重新加载数据时使用 `resetForm({ values })`，避免直接修改组件局部状态导致 VeeValidate 值不同步。
+- 保存成功和服务端拒绝等短暂反馈使用 `runTelefunc()` 与 Sonner Toast；仅无法继续操作的加载失败可使用页面级 `Alert`。提交期间必须禁用提交按钮。
+- `Select`、`Checkbox`、`Switch` 等非文本控件须按 shadcn-vue 文档绑定。特别是 `Select` 要将 `componentField` 绑定到 `Select` 根组件，而不是 `SelectTrigger`。
+
+服务端仍必须对所有输入进行完整权限、格式、长度和业务状态校验；客户端 schema 仅是提升体验的第一道校验。
+
+```vue
+<VeeField v-slot="{ componentField, errors }" name="siteName" :validate-on-input="true">
+  <Field :data-invalid="errors.length > 0">
+    <FieldLabel for="site-name">站点名称</FieldLabel>
+    <Input id="site-name" v-bind="componentField" :aria-invalid="errors.length > 0" />
+    <FieldError v-if="errors.length" :errors="errors" />
+  </Field>
+</VeeField>
+```
+
+### 1.4 公开商城首页
 
 首页（`pages/index/+Page.vue`）遵循以下固定结构与视觉规则：
 
@@ -67,7 +92,7 @@ import "vue-sonner/style.css";
 - 商品卡片仅展示分类、名称/副标题、库存或交付说明与价格；点击整张卡片进入商品详情，不额外堆叠重复的“查看商品”按钮。
 - 色彩：公开商城只使用组件默认的黑、白、灰色阶，以及 Logo 的蓝色与橙色；不得使用红色、绿色、黄色、紫色等额外状态色。缺货状态使用 Logo 橙色（`text-orange-500`），普通库存说明使用 `text-muted-foreground`；不得使用 `text-destructive`。
 
-### 1.4 破坏性操作
+### 1.5 破坏性操作
 
 删除、清空、关闭等不可恢复的操作必须：
 
