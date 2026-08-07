@@ -1,10 +1,11 @@
 import { and, eq, lte } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { emailLog, emailProvider, emailRetry, emailTemplate } from "@/database/drizzle/schema";
+import { emailLog, emailProvider, emailRetry, emailTemplate, pushConfig, pushLog } from "@/database/drizzle/schema";
 import { parseEmailProviderConfig, parseEmailTemplateConfig, type EmailProviderConfig } from "@/lib/config-schemas";
 import { emailRetryDelayMs, renderEmailTemplate } from "@/lib/email-utils";
 
 export type EmailScene = "TEST" | "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED";
+export type PushChannel = "EMAIL" | "WECOM" | "TELEGRAM";
 
 type EmailRuntime = Record<string, unknown>;
 
@@ -18,6 +19,7 @@ export type EmailSendInput = {
   variables: Record<string, string | number>;
   orderId?: number;
   triggeredBy?: string;
+  recipientType?: "CUSTOMER" | "ADMIN";
 };
 
 export class EmailDeliveryError extends Error {}
@@ -61,7 +63,9 @@ async function writeLog(database: D1Database, input: {
   error?: string;
   triggeredBy?: string;
 }) {
-  const [record] = await createDrizzleDb(database).insert(emailLog).values({
+  const db = createDrizzleDb(database);
+  const createdAt = new Date();
+  const [record] = await db.insert(emailLog).values({
     orderId: input.orderId ?? null,
     provider: input.provider,
     scene: input.scene,
@@ -71,9 +75,45 @@ async function writeLog(database: D1Database, input: {
     messageId: input.messageId ?? null,
     error: input.error ?? null,
     triggeredBy: input.triggeredBy ?? null,
-    createdAt: new Date(),
+    createdAt,
   }).returning({ id: emailLog.id });
+  await db.insert(pushLog).values({
+    orderId: input.orderId ?? null,
+    channel: "EMAIL" satisfies PushChannel,
+    provider: input.provider,
+    scene: input.scene satisfies EmailScene,
+    recipient: input.toEmail,
+    subject: input.subject || null,
+    status: input.status,
+    messageId: input.messageId ?? null,
+    error: input.error ?? null,
+    triggeredBy: input.triggeredBy ?? null,
+    createdAt,
+  });
   return record?.id ?? null;
+}
+
+async function isEmailPushEnabled(database: D1Database, scene: EmailScene, recipientType: "CUSTOMER" | "ADMIN" = "CUSTOMER") {
+  if (scene === "TEST") return true;
+  const [config] = await createDrizzleDb(database)
+    .select()
+    .from(pushConfig)
+    .where(eq(pushConfig.id, 1))
+    .limit(1);
+  if (!config) return true;
+  if (!config.isEnabled || !config.emailEnabled) return false;
+  if (recipientType === "ADMIN") {
+    return scene === "ORDER_PAID"
+      ? config.adminOrderPaid
+      : scene === "DELIVERY_SUCCESS"
+        ? config.adminDeliverySuccess
+        : config.adminDeliveryFailed;
+  }
+  return scene === "ORDER_PAID"
+    ? config.customerOrderPaid
+    : scene === "DELIVERY_SUCCESS"
+      ? config.customerDeliverySuccess
+      : config.customerDeliveryFailed;
 }
 
 async function sendSnapshot(runtime: EmailRuntime, config: EmailProviderConfig, to: string, subject: string, body: string, format: "text" | "html") {
@@ -106,6 +146,7 @@ async function enqueueRetry(database: D1Database, emailLogId: number, input: { p
 }
 
 export async function sendEmail(database: D1Database, runtime: EmailRuntime, input: EmailSendInput) {
+  if (!(await isEmailPushEnabled(database, input.scene, input.recipientType))) return { messageId: "PUSH_DISABLED" };
   const to = input.to.trim();
   let providerName = "UNAVAILABLE";
   let providerConfigJson: string | null = null;
@@ -152,6 +193,11 @@ export async function sendEmail(database: D1Database, runtime: EmailRuntime, inp
   }
 }
 
+export function toEmailScene(scene: string): EmailScene {
+  if (scene === "TEST" || scene === "ORDER_PAID" || scene === "DELIVERY_SUCCESS" || scene === "DELIVERY_FAILED") return scene;
+  throw new EmailDeliveryError("EMAIL_SCENE_INVALID");
+}
+
 export async function retryDueEmails(database: D1Database, runtime: EmailRuntime, now = new Date(), limit = 50) {
   const db = createDrizzleDb(database);
   const pending = await db
@@ -177,13 +223,13 @@ export async function retryDueEmails(database: D1Database, runtime: EmailRuntime
       const config = parseEmailProviderConfig(item.providerConfigJson);
       const message = await sendSnapshot(runtime, config, item.toEmail, item.subject, item.body, item.format);
       await db.update(emailRetry).set({ status: "SENT", lastError: null, updatedAt: new Date() }).where(eq(emailRetry.id, item.id));
-      await writeLog(database, { orderId: originalLog?.orderId ?? undefined, provider: item.provider, scene: item.scene as EmailScene, status: "SUCCESS", toEmail: item.toEmail, subject: item.subject, messageId: message.messageId, triggeredBy: "cron" });
+      await writeLog(database, { orderId: originalLog?.orderId ?? undefined, provider: item.provider, scene: toEmailScene(item.scene), status: "SUCCESS", toEmail: item.toEmail, subject: item.subject, messageId: message.messageId, triggeredBy: "cron" });
       sent += 1;
     } catch (cause) {
       const error = cause instanceof Error ? cause.message : "EMAIL_SEND_FAILED";
       const status = nextAttemptCount >= item.maxAttempts ? "EXHAUSTED" as const : "PENDING" as const;
       await db.update(emailRetry).set({ status, lastError: error, updatedAt: new Date() }).where(eq(emailRetry.id, item.id));
-      await writeLog(database, { orderId: originalLog?.orderId ?? undefined, provider: item.provider, scene: item.scene as EmailScene, status: "FAILED", toEmail: item.toEmail, subject: item.subject, error, triggeredBy: "cron" });
+      await writeLog(database, { orderId: originalLog?.orderId ?? undefined, provider: item.provider, scene: toEmailScene(item.scene), status: "FAILED", toEmail: item.toEmail, subject: item.subject, error, triggeredBy: "cron" });
     }
   }
 

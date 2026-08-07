@@ -317,6 +317,41 @@ export const emailLog = sqliteTable(
   (table) => [index("emailLog_orderId_idx").on(table.orderId), index("emailLog_status_createdAt_idx").on(table.status, table.createdAt)],
 );
 
+export const pushConfig = sqliteTable("pushConfig", {
+  id: integer("id").primaryKey().default(1),
+  isEnabled: integer("isEnabled", { mode: "boolean" }).notNull().default(true),
+  emailEnabled: integer("emailEnabled", { mode: "boolean" }).notNull().default(true),
+  wecomEnabled: integer("wecomEnabled", { mode: "boolean" }).notNull().default(false),
+  telegramEnabled: integer("telegramEnabled", { mode: "boolean" }).notNull().default(false),
+  customerOrderPaid: integer("customerOrderPaid", { mode: "boolean" }).notNull().default(true),
+  customerDeliverySuccess: integer("customerDeliverySuccess", { mode: "boolean" }).notNull().default(true),
+  customerDeliveryFailed: integer("customerDeliveryFailed", { mode: "boolean" }).notNull().default(false),
+  adminOrderPaid: integer("adminOrderPaid", { mode: "boolean" }).notNull().default(false),
+  adminDeliverySuccess: integer("adminDeliverySuccess", { mode: "boolean" }).notNull().default(true),
+  adminDeliveryFailed: integer("adminDeliveryFailed", { mode: "boolean" }).notNull().default(true),
+  createdAt,
+  updatedAt,
+});
+
+export const pushLog = sqliteTable(
+  "pushLog",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orderId: integer("orderId").references(() => order.id, { onDelete: "set null" }),
+    channel: text("channel", { enum: ["EMAIL", "WECOM", "TELEGRAM"] }).notNull(),
+    provider: text("provider").notNull(),
+    scene: text("scene", { enum: ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"] }).notNull(),
+    recipient: text("recipient").notNull(),
+    subject: text("subject"),
+    status: text("status", { enum: ["SUCCESS", "FAILED"] }).notNull(),
+    messageId: text("messageId"),
+    error: text("error"),
+    triggeredBy: text("triggeredBy"),
+    createdAt,
+  },
+  (table) => [index("pushLog_channel_createdAt_idx").on(table.channel, table.createdAt), index("pushLog_status_createdAt_idx").on(table.status, table.createdAt), index("pushLog_orderId_idx").on(table.orderId)],
+);
+
 export const emailRetry = sqliteTable(
   "emailRetry",
   {
@@ -400,6 +435,8 @@ export const schema = {
   emailProvider,
   emailTemplate,
   emailLog,
+  pushConfig,
+  pushLog,
   emailRetry,
   adminOperationLog,
   s3Config,

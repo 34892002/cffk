@@ -51,6 +51,7 @@ export const errorMessages: Record<string, string> = {
   EMAIL_TEMPLATE_NOT_FOUND: "邮件模板不存在。",
   EMAIL_TEMPLATE_NOT_AVAILABLE: "请先启用 TEST 邮件模板。",
   EMAIL_CLOUDFLARE_BINDING_UNAVAILABLE: "未找到 Cloudflare Email Sending binding，请检查 Worker 配置。",
+  PUSH_CONFIG_UNAVAILABLE: "推送配置暂时不可用，请稍后重试。",
 
   S3_CONFIG_REQUIRED: "请填写 S3 配置 JSON。",
   S3_CONFIG_INVALID: "S3 配置无效，请检查 endpoint、bucket、region 与 Secret 引用。",

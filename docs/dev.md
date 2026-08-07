@@ -82,7 +82,64 @@ async function deleteRow() {
 }
 ```
 
-## 2. 后台列表规范
+## 2. 后台信息架构、目录与导航元数据
+
+后台导航、路由、页面目录和面包屑必须使用同一棵层级树，唯一来源为 `lib/admin-navigation.ts`。禁止侧栏、模块内部导航、面包屑和文件目录各自维护一套层级或路径。
+
+### 2.1 层级、目录与路由
+
+后台最多三级：**一级菜单分组 -> 二级模块或页面 -> 三级模块页**。
+
+- **一级菜单**是业务分组，只负责归类，不生成同名页面或 URL。它对应稳定路由前缀和 `pages/@adminPath/<prefix>/` 目录。
+- **二级菜单**是侧栏在一级分组下显示的可访问项。二级模块的首页为 `/<prefix>/<module>`。
+- **三级菜单**是二级模块的内部页面，路径为 `/<prefix>/<module>/<page>`。三级项只在该模块内部导航显示，绝不与二级项并列显示在侧栏，也不能有第二个入口。
+- 仅不属于业务分组的独立页面可使用根级路径，例如 `/dash`、`/orders`。
+- URL 必须与 `pages/@adminPath` 的相对目录一一对应；一个页面只能有一个正式 URL。修改路径时移动真实目录、更新集中元数据和调用方、删除旧目录。不得保留兼容跳转、别名 URL、平行路径或重复菜单入口。
+
+当前正式结构：
+
+| 一级菜单 | 正式路由前缀 | 页面目录 | 二级项 | 三级项 |
+| --- | --- | --- | --- | --- |
+| 面板 | `/dash` | `pages/@adminPath/dash` | 面板 | 无 |
+| 商品管理 | `/catalog/*` | `pages/@adminPath/catalog` | 分类、商品、卡密、折扣码 | 无 |
+| 订单管理 | `/orders` | `pages/@adminPath/orders` | 订单管理 | 无 |
+| 推送管理 | `/push/*` | `pages/@adminPath/push` | 推送配置、发送日志、电子邮件、企业微信、Telegram | 电子邮件：邮件统计、通道配置、邮件模板 |
+| 系统配置 | `/system/*` | `pages/@adminPath/system` | 支付渠道、媒体存储、站点配置、安全配置、任务 | 无 |
+| 用户管理 | `/users/*` | `pages/@adminPath/users` | 管理员账户 | 无 |
+
+电子邮件模块的唯一首页为 `/push/email`；其三级页面只能为 `/push/email/post-office`、`/push/email/templates` 等同前缀路径。不得再创建 `/mail/*`、`/notifications/*`、`/push/email/overview` 或任何兼容入口。
+
+### 2.2 集中元数据
+
+所有后台业务页面都必须在 `lib/admin-navigation.ts` 的 `adminPages` 注册，且页面元数据必须完整包含：
+
+```ts
+{
+  title: "侧栏与面包屑名称",
+  path: "/route-path",
+  pageTitle: "页面 H1",
+  description: "页面副标题",
+}
+```
+
+`adminPages` 与 `adminNavigation` 是后台信息架构的唯一来源：
+
+- `title` 用于侧栏、模块导航和面包屑。
+- `pageTitle` 和 `description` 用于 `AdminPageHeader` 或模块布局的页头。
+- `AdminSidebar`、后台 Layout 与模块内部导航只能引用这些集中定义，不得复制标题或维护页面私有路由映射。
+- 二级模块以 `AdminNavigationModule` 定义其三级页面；模块首页元数据和三级页元数据都在 `adminPages` 注册。
+
+新增或调整后台页面时：
+
+1. 在 `adminPages` 注册页面元数据。
+2. 将页面或二级模块加入既有 `adminNavigation` 一级分组，不复制 `title`、`path`。
+3. 在 `pages/@adminPath` 创建与 `path` 一致的 `+Page.vue`；普通页面顶层使用 `<AdminPageHeader />`。
+4. 新增三级页时，把它加入所属二级模块的 `items`；不得加入一级菜单的二级项列表。
+5. 不能实现的菜单功能必须提供真实空状态页，不能保留无效链接或伪造可保存配置。
+
+登录页和其他认证入口不属于后台业务页面，无需注册为 `adminPages`。
+
+## 3. 后台列表规范
 
 ### 2.1 必须使用 `AdminDataTable`
 
@@ -149,7 +206,7 @@ return {
 
 不要把原始 `content` 发给前端后再隐藏；浏览器网络响应和开发工具仍可读取它。
 
-## 3. 列表 Telefunc 接口契约
+## 4. 列表 Telefunc 接口契约
 
 ### 3.1 查询参数
 
@@ -231,7 +288,7 @@ async function loadData() {
 }
 ```
 
-## 4. Telefunc 错误设计与统一处理
+## 5. Telefunc 错误设计与统一处理
 
 ### 4.1 调用边界：Telefunc 与 HTTP API 分开规范
 
@@ -332,12 +389,28 @@ return body.data;
 - 同时显示 Alert 与 Toast。
 - 只在前端做“禁用按钮”等权限或状态校验。
 
-## 5. 新功能完成前检查
+## 6. 推送模块路由
+
+推送模块的正式路由统一为 `/push/*`，页面与导航元数据必须使用同一条路径：
+
+- `/push/config`：推送配置
+- `/push/history`：发送日志
+- `/push/email`：电子邮件二级模块首页（邮件统计）
+- `/push/email/post-office`、`/push/email/templates`：电子邮件三级页面
+- `/push/wecom`：企业微信
+- `/push/telegram`：Telegram
+
+电子邮件只作为“推送管理”下的一个二级模块显示一次；邮件统计、通道配置和邮件模板只能作为该模块的三级页面出现，不能在推送管理下另列为并列二级项。不得在推送模块新增或保留 `/mail/*`、`/notifications/*` 等平行路径。推送规则统一由 `server/push` 管理，页面通过推送配置决定订单事件是否向客户或启用状态的管理员投递。渠道实现实际投递时，必须同步写入 `pushLog`；不要为邮件、企业微信或 Telegram 分别创建重复的发送日志页面。
+
+`pushLog` 是后台“发送日志”的唯一数据源。渠道尚未具备发送能力时，只保存配置，不得生成伪造的成功或失败记录。
+
+## 7. 新功能完成前检查
 
 提交前至少完成：
 
 1. 对修改的 `.vue` / `.ts` 文件运行 diagnostics。
 2. 运行 `npm run lint`；不能新增 warning 或 error。
 3. 运行 `npm run build`。
-4. 手动验证至少一个成功路径、一个输入错误路径和一个破坏性操作确认路径。
-5. 检查列表响应未泄露敏感字段，并确认筛选、分页、空状态和 Toast 行为符合本规范。
+4. 新增或调整后台页时，确认 `adminPages` 的 `title`、`path`、`pageTitle`、`description` 完整，且页面通过 `AdminPageHeader` 或模块布局读取它们。
+5. 手动验证至少一个成功路径、一个输入错误路径和一个破坏性操作确认路径。
+6. 检查列表响应未泄露敏感字段，并确认筛选、分页、空状态和 Toast 行为符合本规范。

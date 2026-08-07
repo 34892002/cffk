@@ -1,17 +1,14 @@
 <template>
   <section class="flex w-full flex-col gap-6">
-    <div>
-      <h1 class="text-2xl font-semibold tracking-normal">订单管理</h1>
-      <p class="mt-1 text-sm text-muted-foreground">查看订单、关闭未支付订单，并处理人工、物流及自动交付恢复。</p>
-    </div>
+    <AdminPageHeader />
     <Alert v-if="error" variant="destructive"><AlertTitle>操作未完成</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
 
     <AdminDataTable :columns="columns" :rows="orders" row-key="id" empty-text="没有符合条件的订单。">
       <template #toolbar>
         <div class="flex flex-wrap items-center gap-2">
           <Input v-model="filters.query" class="h-8 w-56" placeholder="按订单号搜索" @keyup.enter="resetAndLoad" />
-          <Select :model-value="filters.status || 'ALL'" @update:model-value="filters.status = $event === 'ALL' ? '' : $event as Order['status']; resetAndLoad()"><SelectTrigger class="h-8"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部订单状态</SelectItem><SelectItem value="PENDING">待支付</SelectItem><SelectItem value="PAID">已支付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="CLOSED">已关闭</SelectItem><SelectItem value="FAILED">失败</SelectItem></SelectContent></Select>
-          <Select :model-value="filters.deliveryStatus || 'ALL'" @update:model-value="filters.deliveryStatus = $event === 'ALL' ? '' : $event as Order['deliveryStatus']; resetAndLoad()"><SelectTrigger class="h-8"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部交付状态</SelectItem><SelectItem value="NOT_DELIVERED">未交付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="FAILED">交付失败</SelectItem></SelectContent></Select>
+          <Select :model-value="filters.status || 'ALL'" @update:model-value="filters.status = $event === 'ALL' ? '' : $event as Order['status']; resetAndLoad()"><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部订单状态</SelectItem><SelectItem value="PENDING">待支付</SelectItem><SelectItem value="PAID">已支付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="CLOSED">已关闭</SelectItem><SelectItem value="FAILED">失败</SelectItem></SelectContent></Select>
+          <Select :model-value="filters.deliveryStatus || 'ALL'" @update:model-value="filters.deliveryStatus = $event === 'ALL' ? '' : $event as Order['deliveryStatus']; resetAndLoad()"><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部交付状态</SelectItem><SelectItem value="NOT_DELIVERED">未交付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="FAILED">交付失败</SelectItem></SelectContent></Select>
           <Button variant="outline" size="sm" @click="resetAndLoad">查询</Button>
         </div>
         <Button variant="outline" size="icon-sm" :disabled="loading" aria-label="刷新数据" title="刷新数据" @click="loadOrders"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" /></Button>
@@ -37,6 +34,7 @@
 <script lang="ts" setup>
 import { onMounted, reactive, ref } from "vue";
 import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
+import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

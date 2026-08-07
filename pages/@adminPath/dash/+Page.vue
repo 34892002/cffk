@@ -1,9 +1,6 @@
 <template>
   <section class="flex w-full flex-col gap-6">
-    <div>
-      <h1 class="text-2xl font-semibold tracking-normal">面板</h1>
-      <p class="mt-1 text-sm text-muted-foreground">当前店铺的真实运营汇总。</p>
-    </div>
+    <AdminPageHeader />
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
       <Card v-for="metric in metrics" :key="metric.label">
@@ -57,6 +54,7 @@
 import { computed } from "vue";
 import { useData } from "vike-vue/useData";
 import { Badge } from "@/components/ui/badge";
+import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Data } from "./+data.server";

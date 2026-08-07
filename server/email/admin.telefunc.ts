@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { asc, count, eq } from "drizzle-orm";
 import { getContext } from "telefunc";
 import { createDrizzleDb } from "@/database/drizzle";
 import { adminOperationLog, emailLog, emailProvider, emailTemplate } from "@/database/drizzle/schema";
@@ -109,32 +109,3 @@ export async function onGetEmailOverview() {
   };
 }
 
-export async function onGetEmailLogs(input?: { page?: number; pageSize?: number; status?: "SUCCESS" | "FAILED" }) {
-  const { db } = getAdminContext();
-  const pageSize = Math.min(100, Math.max(10, Math.floor(input?.pageSize ?? 20)));
-  const page = Math.max(1, Math.floor(input?.page ?? 1));
-  const conditions = input?.status ? [eq(emailLog.status, input.status)] : [];
-  const where = conditions.length ? and(...conditions) : undefined;
-  const [logs, total] = await Promise.all([
-    db
-      .select({
-        id: emailLog.id,
-        provider: emailLog.provider,
-        scene: emailLog.scene,
-        status: emailLog.status,
-        toEmail: emailLog.toEmail,
-        subject: emailLog.subject,
-        messageId: emailLog.messageId,
-        error: emailLog.error,
-        triggeredBy: emailLog.triggeredBy,
-        createdAt: emailLog.createdAt,
-      })
-      .from(emailLog)
-      .where(where)
-      .orderBy(desc(emailLog.createdAt), desc(emailLog.id))
-      .limit(pageSize)
-      .offset((page - 1) * pageSize),
-    db.select({ value: count() }).from(emailLog).where(where),
-  ]);
-  return { logs, total: total[0]?.value ?? 0, page, pageSize };
-}
