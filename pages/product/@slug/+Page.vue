@@ -1,13 +1,18 @@
 <template>
   <main class="min-h-screen bg-muted/30">
-    <header class="border-b bg-background">
+    <header class="fixed inset-x-0 top-0 z-50 border-b bg-background/95 backdrop-blur">
       <div class="mx-auto flex min-h-16 max-w-5xl items-center justify-between px-5">
-        <Button variant="ghost" size="sm" as-child><a href="/"><ArrowLeftIcon />返回商品列表</a></Button>
-        <Button variant="ghost" size="sm" as-child><a href="/order">我的订单</a></Button>
+        <div class="flex items-center gap-2">
+          <Button variant="ghost" size="sm" as-child><a href="/"><ArrowLeftIcon />返回商品列表</a></Button>
+        </div>
+        <nav class="flex items-center gap-2" aria-label="主导航">
+          <Button variant="ghost" size="sm" as-child><a href="/">首页</a></Button>
+          <Button variant="outline" size="sm" as-child><a href="/order">我的订单</a></Button>
+        </nav>
       </div>
     </header>
 
-    <section class="mx-auto grid max-w-5xl gap-8 px-5 py-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    <section class="mx-auto grid max-w-5xl gap-8 px-5 pb-10 pt-26 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <article class="min-w-0">
         <div class="aspect-square overflow-hidden rounded-xl border bg-muted">
           <img :src="data.coverImage || defaultProductImage" :alt="data.name" class="size-full object-cover" />

@@ -1,12 +1,13 @@
 <template>
   <main class="min-h-screen bg-muted/30">
-    <header class="border-b bg-background">
-      <div class="mx-auto flex min-h-16 max-w-md items-center px-5">
+    <header class="fixed inset-x-0 top-0 z-50 border-b bg-background/95 backdrop-blur">
+      <div class="mx-auto flex min-h-16 max-w-md items-center justify-between px-5">
         <Button variant="ghost" size="sm" as-child><a href="/"><ArrowLeftIcon />返回商品列表</a></Button>
+        <Button variant="ghost" size="sm" as-child><a href="/">首页</a></Button>
       </div>
     </header>
 
-    <section class="mx-auto max-w-md px-5 py-12 sm:py-16">
+    <section class="mx-auto max-w-md px-5 pb-12 pt-28 sm:pb-16 sm:pt-32">
       <Card>
         <CardHeader>
           <CardTitle>查询订单</CardTitle>

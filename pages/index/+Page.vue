@@ -1,27 +1,28 @@
 <template>
   <main class="min-h-screen bg-muted/30">
-    <header class="border-b bg-background">
+    <header class="fixed inset-x-0 top-0 z-50 border-b bg-background/95 backdrop-blur">
       <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-4 px-5">
         <a href="/" class="flex min-w-0 items-center gap-2 font-semibold">
           <img :src="logoUrl" :alt="`${data.site.name} Logo`" class="size-8 shrink-0 rounded-md object-contain" />
           <span class="truncate">{{ data.site.name }}</span>
         </a>
         <nav class="flex shrink-0 items-center gap-2" aria-label="主导航">
-          <Button size="sm" variant="ghost" as-child><a href="/">首页</a></Button>
           <Button size="sm" variant="outline" as-child><a href="/order">我的订单</a></Button>
           <a v-if="data.site.supportContact" :href="supportHref" class="ml-2 text-sm text-muted-foreground hover:text-foreground">联系支持</a>
         </nav>
       </div>
     </header>
 
-    <section class="border-b bg-background">
-      <div class="mx-auto max-w-6xl px-5 py-12 sm:py-16">
-        <p class="text-sm font-medium text-muted-foreground">自助购买与自动交付</p>
-        <h1 class="mt-3 text-3xl font-semibold tracking-normal sm:text-4xl">{{ data.site.name }}</h1>
-        <p v-if="data.site.subtitle" class="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">{{ data.site.subtitle }}</p>
-        <div v-if="data.site.notice" class="mt-6 flex max-w-3xl items-start gap-3 border-l-2 border-primary px-4 py-1 text-sm leading-6 text-muted-foreground">
+    <section class="border-b bg-background pt-16">
+      <div class="mx-auto grid max-w-6xl gap-5 px-5 py-8 sm:grid-cols-[minmax(0,1fr)_22rem] sm:items-center">
+        <div v-if="data.site.notice" class="flex items-start gap-3 text-sm leading-6 text-muted-foreground">
           <InfoIcon class="mt-1 size-4 shrink-0 text-foreground" />
           <p class="m-0">{{ data.site.notice }}</p>
+        </div>
+        <p v-else class="text-sm text-muted-foreground">{{ data.site.subtitle || "选择商品后进入结算流程" }}</p>
+        <div class="relative">
+          <SearchIcon class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input v-model="query" class="pl-9" placeholder="搜索商品名称或关键词" aria-label="搜索商品" />
         </div>
       </div>
     </section>
@@ -30,7 +31,7 @@
       <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 class="text-xl font-semibold tracking-normal">商品</h2>
-          <p class="mt-1 text-sm text-muted-foreground">选择商品后进入结算流程</p>
+          <p class="mt-1 text-sm text-muted-foreground">{{ query ? `找到 ${visibleProducts.length} 件相关商品` : "选择商品后进入结算流程" }}</p>
         </div>
         <div v-if="data.categories.length" class="flex max-w-full gap-2 overflow-x-auto pb-1" aria-label="商品分类">
           <Button size="sm" :variant="selectedCategory === null ? 'default' : 'outline'" @click="selectedCategory = null">全部</Button>
@@ -50,7 +51,7 @@
         <article v-for="product in visibleProducts" :key="product.id" class="group overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-lg">
           <a :href="`/product/${product.slug}`" class="block">
             <div class="relative aspect-16/10 overflow-hidden bg-muted">
-              <img :src="product.coverImage || defaultProductImage" :alt="product.name" :class="product.coverImage ? 'object-cover group-hover:scale-105' : 'object-contain p-5'" class="size-full transition-transform duration-300" />
+              <img :src="product.coverImage || defaultProductImage" :alt="product.name" class="size-full object-cover transition-transform duration-300 group-hover:scale-105" />
               <Badge variant="secondary" class="absolute left-3 top-3 bg-background/90 backdrop-blur">{{ product.categoryName || "商品" }}</Badge>
             </div>
             <div class="flex min-h-32 flex-col p-4">
@@ -77,21 +78,27 @@
 
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import { InfoIcon, PackageOpenIcon } from "@lucide/vue";
+import { InfoIcon, PackageOpenIcon, SearchIcon } from "@lucide/vue";
 import logoUrl from "@/assets/logo.svg?url";
 import defaultProductImage from "@/assets/product_img.jpg?url";
 import { useData } from "vike-vue/useData";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { Data } from "./+data.server";
 
 type Product = Data["products"][number];
 
 const data = useData<Data>();
 const selectedCategory = ref<number | null>(null);
-const visibleProducts = computed(() =>
-  selectedCategory.value === null ? data.products : data.products.filter((product) => product.categoryId === selectedCategory.value),
-);
+const query = ref("");
+const visibleProducts = computed(() => {
+  const keyword = query.value.trim().toLowerCase();
+  return data.products.filter((product) =>
+    (selectedCategory.value === null || product.categoryId === selectedCategory.value)
+    && (!keyword || product.name.toLowerCase().includes(keyword) || product.subtitle?.toLowerCase().includes(keyword)),
+  );
+});
 const supportHref = computed(() => {
   const contact = data.site.supportContact ?? "";
   return contact.includes(":") ? contact : `mailto:${contact}`;

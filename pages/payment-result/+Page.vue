@@ -1,7 +1,7 @@
 <template>
   <main class="min-h-screen bg-muted/30">
-    <header class="border-b bg-background"><div class="mx-auto flex min-h-16 max-w-2xl items-center px-5"><a href="/" class="text-sm font-medium hover:text-muted-foreground">返回商品列表</a></div></header>
-    <section class="mx-auto max-w-2xl px-5 py-10">
+    <header class="fixed inset-x-0 top-0 z-50 border-b bg-background/95 backdrop-blur"><div class="mx-auto flex min-h-16 max-w-2xl items-center justify-between px-5"><a href="/" class="text-sm font-medium hover:text-muted-foreground">返回商品列表</a><a href="/" class="text-sm font-medium hover:text-muted-foreground">首页</a></div></header>
+    <section class="mx-auto max-w-2xl px-5 pb-10 pt-26">
       <Card>
         <CardHeader>
           <CardTitle>{{ data.order ? '支付结果' : '无法确认支付结果' }}</CardTitle>
