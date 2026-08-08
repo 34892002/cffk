@@ -1,5 +1,5 @@
 import { getContext } from "telefunc";
-import { getOrderForQuery } from "./service";
+import { PaymentFlowService } from "@/server/payment/flow-service";
 
 type TelefuncContext = {
   env?: {
@@ -7,7 +7,7 @@ type TelefuncContext = {
   };
 };
 
-export type PublicOrder = NonNullable<Awaited<ReturnType<typeof getOrderForQuery>>>;
+export type PublicOrder = NonNullable<Awaited<ReturnType<PaymentFlowService["query"]>>>;
 
 export async function onQueryOrder(input: {
   orderNo: string;
@@ -16,5 +16,5 @@ export async function onQueryOrder(input: {
   const context = getContext<TelefuncContext>();
   if (!context.env?.DB) throw new Error("DATABASE_UNAVAILABLE");
 
-  return getOrderForQuery(context.env.DB, input.orderNo, input.queryToken);
+  return new PaymentFlowService(context.env.DB, context.env).query(input.orderNo, input.queryToken);
 }

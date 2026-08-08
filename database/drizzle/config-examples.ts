@@ -1,19 +1,16 @@
 import type { AlipayConfig, EmailProviderConfig, EmailTemplateConfig } from "@/lib/config-schemas";
 
-// Persist these values with JSON.stringify(). Secret values are resolved from
-// Worker bindings at runtime; never persist the actual private keys here.
-export const alipayWebConfig = {
-  mode: "web",
+// Persist these values with JSON.stringify() in D1. Payment credentials are
+// entered by the administrator and are never returned to the browser.
+export const alipayConfig = {
+  schemaVersion: 1,
+  modes: ["web", "face_to_face"],
+  baseUrl: "https://openapi.alipay.com",
   appId: "2026xxxxxxxxxxxx",
-  privateKey: { secret: "ALIPAY_PRIVATE_KEY" },
-  alipayPublicKey: { secret: "ALIPAY_PUBLIC_KEY" },
+  privateKey: "-----BEGIN PRIVATE KEY-----\n...",
+  alipayPublicKey: "-----BEGIN PUBLIC KEY-----\n...",
   notifyUrl: "https://shop.example.com/api/payments/alipay/notify",
-  returnUrl: "https://shop.example.com/order",
-} satisfies AlipayConfig;
-
-export const alipayFaceToFaceConfig = {
-  ...alipayWebConfig,
-  mode: "face_to_face",
+  returnUrl: "https://shop.example.com/payment-result",
 } satisfies AlipayConfig;
 
 export const smtpEmailConfig = {

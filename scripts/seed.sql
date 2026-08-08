@@ -1,7 +1,7 @@
 -- Initial business data for a fresh CFFK installation.
 -- Every statement is idempotent: it never replaces administrator or operator configuration.
--- Secrets are not stored here. Set them with `wrangler secret put <NAME>` and
--- reference their binding names in the JSON configuration records.
+-- Payment configuration, including credential values, is stored directly in D1 configJson.
+-- Seed values are placeholders and providers remain disabled until configured.
 
 INSERT INTO `siteSetting` (
   `id`, `siteName`, `siteSubtitle`, `notice`, `timezone`, `createdAt`, `updatedAt`
@@ -34,18 +34,15 @@ UPDATE `product`
 SET `categoryId` = (SELECT `id` FROM `category` WHERE `slug` = 'default')
 WHERE `categoryId` IS NULL;
 
--- One Alipay provider supports browser/H5 and face-to-face payment through
--- configJson.mode. Add credentials through Worker Secrets before enabling it.
 INSERT INTO `paymentProvider` (
-  `provider`, `name`, `isEnabled`, `configJson`, `createdAt`, `updatedAt`
-) VALUES (
-  'ALIPAY',
-  'Alipay',
-  false,
-  '{"mode":"web","appId":"","privateKey":{"secret":"ALIPAY_PRIVATE_KEY"},"alipayPublicKey":{"secret":"ALIPAY_PUBLIC_KEY"}}',
-  unixepoch('now') * 1000,
-  unixepoch('now') * 1000
-) ON CONFLICT(`provider`) DO NOTHING;
+  `provider`, `name`, `isEnabled`, `sort`, `configJson`, `createdAt`, `updatedAt`
+) VALUES
+  ('ALIPAY', '支付宝', false, 10, '{"schemaVersion":1,"modes":["web","face_to_face"],"baseUrl":"https://openapi.alipay.com","appId":"","privateKey":"","alipayPublicKey":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
+  ('EPAY', '易支付', false, 20, '{"schemaVersion":1,"baseUrl":"","pid":"","key":"","epayChannels":["alipay","wxpay"],"notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
+  ('BEPUSDT', 'BEpusdt', false, 30, '{"schemaVersion":1,"baseUrl":"","appSecret":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
+  ('STRIPE', 'Stripe', false, 40, '{"schemaVersion":1,"secretKey":"","webhookSecret":"","currency":"cny","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
+  ('HASHPAY', 'HashPay', false, 50, '{"schemaVersion":1,"baseUrl":"","merchantId":"","privateKey":"","currency":"CNY","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000)
+ON CONFLICT(`provider`) DO NOTHING;
 
 INSERT INTO `pushChannelConfig` (
   `channel`, `provider`, `name`, `isEnabled`, `configJson`, `createdAt`, `updatedAt`

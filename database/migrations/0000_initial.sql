@@ -165,17 +165,20 @@ CREATE TABLE `paymentLog` (
 --> statement-breakpoint
 CREATE INDEX `paymentLog_provider_createdAt_idx` ON `paymentLog` (`provider`,`createdAt`);--> statement-breakpoint
 CREATE INDEX `paymentLog_orderNo_idx` ON `paymentLog` (`orderNo`);--> statement-breakpoint
+CREATE INDEX `paymentLog_orderId_idx` ON `paymentLog` (`orderId`);--> statement-breakpoint
 CREATE TABLE `paymentProvider` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`provider` text NOT NULL,
 	`name` text NOT NULL,
 	`isEnabled` integer DEFAULT false NOT NULL,
+	`sort` integer DEFAULT 0 NOT NULL,
 	`configJson` text NOT NULL,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `paymentProvider_provider_unique` ON `paymentProvider` (`provider`);--> statement-breakpoint
+CREATE INDEX `paymentProvider_enabled_sort_idx` ON `paymentProvider` (`isEnabled`,`sort`);--> statement-breakpoint
 CREATE TABLE `product` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`categoryId` integer,

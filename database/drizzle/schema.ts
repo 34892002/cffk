@@ -226,19 +226,23 @@ export const orderDelivery = sqliteTable(
   ],
 );
 
-// Provider-specific fields remain JSON. Credentials are references to Worker Secrets, never secret values.
+// Provider-specific payment fields are stored in D1 as validated JSON.
 export const paymentProvider = sqliteTable(
   "paymentProvider",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    provider: text("provider", { enum: ["ALIPAY", "EPAY", "BEPUSDT", "STRIPE", "HASHPAY"] }).notNull(),
+    provider: text("provider").notNull(),
     name: text("name").notNull(),
     isEnabled: integer("isEnabled", { mode: "boolean" }).notNull().default(false),
+    sort: integer("sort").notNull().default(0),
     configJson: text("configJson").notNull(),
     createdAt,
     updatedAt,
   },
-  (table) => [uniqueIndex("paymentProvider_provider_unique").on(table.provider)],
+  (table) => [
+    uniqueIndex("paymentProvider_provider_unique").on(table.provider),
+    index("paymentProvider_enabled_sort_idx").on(table.isEnabled, table.sort),
+  ],
 );
 
 export const paymentLog = sqliteTable(
@@ -255,7 +259,11 @@ export const paymentLog = sqliteTable(
     message: text("message"),
     createdAt,
   },
-  (table) => [index("paymentLog_provider_createdAt_idx").on(table.provider, table.createdAt), index("paymentLog_orderNo_idx").on(table.orderNo)],
+  (table) => [
+    index("paymentLog_provider_createdAt_idx").on(table.provider, table.createdAt),
+    index("paymentLog_orderNo_idx").on(table.orderNo),
+    index("paymentLog_orderId_idx").on(table.orderId),
+  ],
 );
 
 export const pushChannelConfig = sqliteTable(

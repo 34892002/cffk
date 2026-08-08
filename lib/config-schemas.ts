@@ -1,20 +1,54 @@
 export type SecretReference = { secret: string };
 
+export type AlipayMode = "web" | "face_to_face";
+
 export type AlipayConfig = {
-  mode: "web" | "face_to_face";
+  schemaVersion: 1;
+  modes: AlipayMode[];
+  baseUrl: string;
   appId: string;
-  privateKey: SecretReference;
-  alipayPublicKey: SecretReference;
-  notifyUrl?: string;
-  returnUrl?: string;
+  privateKey: string;
+  alipayPublicKey: string;
+  notifyUrl: string;
+  returnUrl: string;
 };
 
-export type PaymentProviderConfig =
-  | AlipayConfig
-  | { gatewayUrl: string; merchantId: string; key: SecretReference; notifyUrl?: string }
-  | { apiBaseUrl: string; token: SecretReference; notifyUrl?: string }
-  | { publishableKey: string; secretKey: SecretReference; webhookSecret: SecretReference }
-  | { endpoint: string; merchantId: string; apiKey: SecretReference; notifyUrl?: string };
+export type EpayConfig = {
+  schemaVersion: 1;
+  baseUrl: string;
+  pid: string;
+  key: string;
+  epayChannels: Array<"alipay" | "wxpay">;
+  notifyUrl: string;
+  returnUrl: string;
+};
+
+export type BepusdtConfig = {
+  schemaVersion: 1;
+  baseUrl: string;
+  appSecret: string;
+  notifyUrl: string;
+  returnUrl: string;
+};
+
+export type StripeConfig = {
+  schemaVersion: 1;
+  secretKey: string;
+  webhookSecret: string;
+  currency: string;
+  returnUrl: string;
+};
+
+export type HashpayConfig = {
+  schemaVersion: 1;
+  baseUrl: string;
+  merchantId: string;
+  privateKey: string;
+  currency: string;
+  returnUrl: string;
+};
+
+export type PaymentProviderConfig = AlipayConfig | EpayConfig | BepusdtConfig | StripeConfig | HashpayConfig;
 
 export type EmailProviderConfig =
   | { kind: "smtp"; host: string; port: number; secure: boolean; username: string; password: SecretReference; authType?: "plain" | "login" | "cram-md5"; from: string; fromName?: string; replyTo?: string }
@@ -58,18 +92,101 @@ function requireSecretReference(value: unknown, field: string): SecretReference 
   return { secret: requireString(value.secret, `${field}.secret`) };
 }
 
-export function parseAlipayConfig(json: string): AlipayConfig {
-  const value: unknown = JSON.parse(json);
-  if (!isRecord(value)) throw new Error("Invalid Alipay configuration");
-  if (value.mode !== "web" && value.mode !== "face_to_face") throw new Error("Invalid configuration: mode must be web or face_to_face");
+function requireSchemaVersion(value: JsonObject, field: string) {
+  if (value.schemaVersion !== 1) throw new Error(`Invalid configuration: ${field} must be 1`);
+}
 
+function requireUrl(value: unknown, field: string, allowEmpty = false) {
+  const text = allowEmpty && value === "" ? "" : requireString(value, field);
+  if (text) {
+    try {
+      const url = new URL(text);
+      if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
+    } catch {
+      throw new Error(`Invalid configuration: ${field} must be an HTTP or HTTPS URL`);
+    }
+  }
+  return text;
+}
+
+function requireStringArray(value: unknown, field: string, allowed: readonly string[], min = 0) {
+  if (!Array.isArray(value) || value.length < min || value.some((item) => typeof item !== "string" || !allowed.includes(item))) {
+    throw new Error(`Invalid configuration: ${field} contains an unsupported value`);
+  }
+  return [...new Set(value)] as string[];
+}
+
+function parseJsonObject(json: string, name: string) {
+  let value: unknown;
+  try { value = JSON.parse(json); } catch { throw new Error(`Invalid ${name} configuration`); }
+  if (!isRecord(value)) throw new Error(`Invalid ${name} configuration`);
+  return value;
+}
+
+export function parseAlipayConfig(json: string): AlipayConfig {
+  const value = parseJsonObject(json, "Alipay");
+  requireSchemaVersion(value, "schemaVersion");
+  const modes = requireStringArray(value.modes, "modes", ["web", "face_to_face"], 1) as AlipayMode[];
   return {
-    mode: value.mode,
+    schemaVersion: 1,
+    modes,
+    baseUrl: requireUrl(value.baseUrl, "baseUrl"),
     appId: requireString(value.appId, "appId"),
-    privateKey: requireSecretReference(value.privateKey, "privateKey"),
-    alipayPublicKey: requireSecretReference(value.alipayPublicKey, "alipayPublicKey"),
-    ...(typeof value.notifyUrl === "string" ? { notifyUrl: value.notifyUrl } : {}),
-    ...(typeof value.returnUrl === "string" ? { returnUrl: value.returnUrl } : {}),
+    privateKey: requireString(value.privateKey, "privateKey"),
+    alipayPublicKey: requireString(value.alipayPublicKey, "alipayPublicKey"),
+    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+  };
+}
+
+export function parseEpayConfig(json: string): EpayConfig {
+  const value = parseJsonObject(json, "Epay");
+  requireSchemaVersion(value, "schemaVersion");
+  return {
+    schemaVersion: 1,
+    baseUrl: requireUrl(value.baseUrl, "baseUrl"),
+    pid: requireString(value.pid, "pid"),
+    key: requireString(value.key, "key"),
+    epayChannels: requireStringArray(value.epayChannels, "epayChannels", ["alipay", "wxpay"], 1) as EpayConfig["epayChannels"],
+    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+  };
+}
+
+export function parseBepusdtConfig(json: string): BepusdtConfig {
+  const value = parseJsonObject(json, "BEpusdt");
+  requireSchemaVersion(value, "schemaVersion");
+  return {
+    schemaVersion: 1,
+    baseUrl: requireUrl(value.baseUrl, "baseUrl"),
+    appSecret: requireString(value.appSecret, "appSecret"),
+    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+  };
+}
+
+export function parseStripeConfig(json: string): StripeConfig {
+  const value = parseJsonObject(json, "Stripe");
+  requireSchemaVersion(value, "schemaVersion");
+  return {
+    schemaVersion: 1,
+    secretKey: requireString(value.secretKey, "secretKey"),
+    webhookSecret: requireString(value.webhookSecret, "webhookSecret"),
+    currency: requireString(value.currency, "currency").toLowerCase(),
+    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+  };
+}
+
+export function parseHashpayConfig(json: string): HashpayConfig {
+  const value = parseJsonObject(json, "HashPay");
+  requireSchemaVersion(value, "schemaVersion");
+  return {
+    schemaVersion: 1,
+    baseUrl: requireUrl(value.baseUrl, "baseUrl"),
+    merchantId: requireString(value.merchantId, "merchantId"),
+    privateKey: requireString(value.privateKey, "privateKey"),
+    currency: requireString(value.currency, "currency").toUpperCase(),
+    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
   };
 }
 

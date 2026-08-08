@@ -183,9 +183,6 @@ export async function createOrder(database: D1Database, input: CreateOrderInput)
       await reserveCardsForOrder(database, created.id, item.id, quantity);
     }
 
-    if (amount === 0) {
-      await markOrderPaid(database, created.id);
-    }
 
     return {
       id: created.id,
@@ -195,7 +192,7 @@ export async function createOrder(database: D1Database, input: CreateOrderInput)
       originalAmount: discountId === null ? null : originalAmount,
       discountAmount: discountId === null ? null : discountAmount,
       discountCode: discountCodeValue,
-      paymentStatus: amount === 0 ? "PAID" : "UNPAID",
+      paymentStatus: "UNPAID",
     };
   } catch (error) {
     if (createdOrderId !== null) {
@@ -208,7 +205,7 @@ export async function createOrder(database: D1Database, input: CreateOrderInput)
   }
 }
 
-export async function markOrderPaid(database: D1Database, orderId: number) {
+export async function confirmOrderPayment(database: D1Database, orderId: number) {
   const db = createDrizzleDb(database);
   const [record] = await db.select({ id: order.id, status: order.status, paymentStatus: order.paymentStatus, discountCodeId: order.discountCodeId }).from(order).where(eq(order.id, orderId)).limit(1);
   if (!record) fail("ORDER_NOT_FOUND");

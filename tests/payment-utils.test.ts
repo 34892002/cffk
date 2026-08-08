@@ -4,6 +4,7 @@ import { canonicalizeAlipayParameters, parseAmountToCents } from "../lib/payment
 import { pushRetryDelayMs, renderPushTemplate } from "../lib/push-utils.ts";
 import { canConfirmPayment, paymentConfirmationOutcome } from "../lib/order-state.ts";
 import { sanitizeDatabaseLogJson, sanitizeDatabaseLogText } from "../server/database-log-sanitizer.ts";
+import { sanitizePaymentLogPayload } from "../server/payment/log-service.ts";
 
 test("parseAmountToCents accepts exact yuan values with up to two decimals", () => {
   assert.equal(parseAmountToCents("0"), 0);
@@ -60,6 +61,23 @@ test("database log sanitizer removes signatures and credentials but preserves bu
     items: [{ trade_no: "TRADE-1" }],
   });
   assert.equal(sanitizeDatabaseLogText("provider failed: token=secret-value; status=500"), "provider failed: token=[REDACTED]; status=500");
+});
+
+test("payment logs redact credentials and raw callback bodies", () => {
+  const payload = sanitizePaymentLogPayload({
+    orderNo: "ORD-1",
+    sign: "signature-value",
+    privateKey: "private-key",
+    nested: { authorization: "bearer token", status: "PAID" },
+    __raw_body: "secret callback body",
+  });
+  assert.deepEqual(payload, {
+    orderNo: "ORD-1",
+    sign: "[redacted]",
+    privateKey: "[redacted]",
+    nested: { authorization: "[redacted]", status: "PAID" },
+    __raw_body: "[redacted]",
+  });
 });
 
 test("canonicalizeAlipayParameters sorts fields and excludes signature fields", () => {
