@@ -92,7 +92,7 @@ INSERT INTO `emailTemplate` (
   (
     'DELIVERY_SUCCESS',
     '发货成功通知',
-    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 已发货","body":"您的订单已完成发货。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n数量：{{quantity}}\n备注：{{buyerNote}}\n\n查询地址：{{queryUrl}}\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","quantity","buyerNote","queryUrl","supportContact"]}',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 已发货","body":"您的订单已完成发货。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n数量：{{quantity}}\n备注：{{buyerNote}}\n发货内容：\n{{deliveryItems}}\n\n查询地址：{{queryUrl}}\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","quantity","buyerNote","deliveryItems","queryUrl","supportContact"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),

@@ -5,6 +5,15 @@ import { pushRetryDelayMs, renderPushTemplate } from "../lib/push-utils.ts";
 import { canConfirmPayment, paymentConfirmationOutcome } from "../lib/order-state.ts";
 import { sanitizeDatabaseLogJson, sanitizeDatabaseLogText } from "../server/database-log-sanitizer.ts";
 import { sanitizePaymentLogPayload } from "../server/payment/log-service.ts";
+import { cloudflareEmailError, deliveryItemsFromSnapshots, orderQueryUrl } from "../server/push/service.ts";
+import { getEmailTemplateDefinition } from "../server/email/template-definitions.ts";
+
+test("Cloudflare Email Sending errors map to retryable and fixed internal codes", () => {
+  assert.equal(cloudflareEmailError({ code: "E_RATE_LIMIT_EXCEEDED", message: "rate limited" }), "EMAIL_CLOUDFLARE_RATE_LIMITED");
+  assert.equal(cloudflareEmailError(new Error("E_DELIVERY_FAILED")), "EMAIL_CLOUDFLARE_FAILED");
+  assert.equal(cloudflareEmailError({ code: "E_SENDER_NOT_VERIFIED", message: "private provider detail" }), "EMAIL_CLOUDFLARE_SENDER_NOT_VERIFIED");
+  assert.equal(cloudflareEmailError(new Error("unrecognized provider detail")), "EMAIL_CLOUDFLARE_FAILED");
+});
 
 test("parseAmountToCents accepts exact yuan values with up to two decimals", () => {
   assert.equal(parseAmountToCents("0"), 0);
@@ -25,6 +34,17 @@ test("parseAmountToCents rejects malformed and unsafe values", () => {
 
 test("renderPushTemplate replaces known variables and blanks missing variables", () => {
   assert.equal(renderPushTemplate("Hi {{ name }} / {{missing}} / {{amount}}", { name: "Ada", amount: 12 }), "Hi Ada /  / 12");
+});
+
+test("order email variables preserve delivery content and create a direct query URL", () => {
+  assert.equal(deliveryItemsFromSnapshots([]), "暂无发货内容");
+  assert.equal(deliveryItemsFromSnapshots(['["CARD-1","CARD-2"]']), "1. CARD-1\n2. CARD-2");
+  assert.equal(deliveryItemsFromSnapshots(["manual delivery"]), "manual delivery");
+  assert.equal(
+    orderQueryUrl("https://shop.example.com/", "ORD 1/2", "token+value="),
+    "https://shop.example.com/order?orderNo=ORD+1%2F2&token=token%2Bvalue%3D",
+  );
+  assert.ok(getEmailTemplateDefinition("DELIVERY_SUCCESS").variables.some((variable) => variable.key === "deliveryItems"));
 });
 
 test("push retry delay backs off and caps at one hour", () => {

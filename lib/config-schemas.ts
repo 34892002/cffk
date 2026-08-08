@@ -55,7 +55,7 @@ export type PaymentProviderConfig = AlipayConfig | EpayConfig | BepusdtConfig | 
 export type EmailProviderConfig =
   | { kind: "smtp"; host: string; port: number; secure: boolean; username: string; password: SecretReference; authType?: "plain" | "login" | "cram-md5"; from: string; fromName?: string; replyTo?: string }
   | { kind: "api"; endpoint: string; apiKey: SecretReference; apiProvider?: "BREVO" | "RESEND"; from: string; fromName?: string; replyTo?: string; timeoutMs?: number }
-  | { kind: "cloudflare"; binding: string; from: string; fromName?: string; replyTo?: string; destination?: string; allowedDestinations?: string[] };
+  | { kind: "cloudflare"; binding: string; from: string; fromName?: string; replyTo?: string };
 
 export type S3Config = {
   endpoint: string;
@@ -207,8 +207,6 @@ export function parseEmailProviderConfig(json: string): EmailProviderConfig {
       from,
       ...(typeof value.fromName === "string" && value.fromName.trim() ? { fromName: value.fromName.trim() } : {}),
       ...(typeof value.replyTo === "string" && value.replyTo.trim() ? { replyTo: value.replyTo.trim() } : {}),
-      ...(typeof value.destination === "string" && value.destination.trim() ? { destination: value.destination.trim() } : {}),
-      ...(Array.isArray(value.allowedDestinations) ? { allowedDestinations: value.allowedDestinations.filter((item): item is string => typeof item === "string" && item.trim().length > 0) } : {}),
     };
   }
   if (value.kind === "smtp") {

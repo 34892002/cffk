@@ -62,7 +62,8 @@ export class PaymentFlowService {
       if (!adapter.query) return order;
       const result = await adapter.query({ orderNo, paymentOrderNo: record.paymentOrderNo ?? undefined, amount: record.amount });
       if (result.verified && result.status === "PAID" && result.amount === record.amount) {
-        await this.confirm(orderNo, "QUERY", result.amount);
+        const outcome = await this.confirm(orderNo, "QUERY", result.amount);
+        if (outcome === "CONFIRMED") await notifyOrderEmailEvents(this.database, this.runtime, record.id);
         return (await import("@/server/order/service")).getOrderForQuery(this.database, orderNo, queryToken);
       }
     } catch {

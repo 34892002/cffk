@@ -7,12 +7,12 @@
       </div>
 
       <Card class="gap-4 py-4">
-        <CardHeader class="px-5"><CardTitle>邮局列表</CardTitle><CardDescription>支持 API、SMTP 和 Cloudflare Email Sending。</CardDescription></CardHeader><CardContent class="px-5">
+        <CardHeader class="px-5"><CardTitle>邮局列表</CardTitle><CardDescription>支持 API、SMTP 及 Cloudflare 模式。Cloudflare 需配置 Wrangler send_email 绑定；发送异常可前往“投递日志”排查。</CardDescription></CardHeader><CardContent class="px-5">
           <div v-if="!loading && !providers.length" class="py-6 text-center text-sm text-muted-foreground">暂无邮局配置，请点击“新增邮局”。</div>
           <div v-else class="grid gap-2">
             <div v-for="item in providers" :key="item.id" class="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2.5">
               <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="font-medium">{{ providerLabel(item.provider) }}</span><Badge :variant="item.isEnabled ? 'secondary' : 'outline'">{{ item.isEnabled ? '已启用' : '未启用' }}</Badge></div><p class="mt-0.5 text-sm text-muted-foreground">{{ item.name }}</p></div>
-              <div class="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" @click="editProvider(item)">编辑</Button><Button size="sm" variant="outline" :disabled="sendingTest" @click="selectTestProvider(item)">测试</Button><Button size="sm" variant="destructive" :disabled="item.isEnabled" @click="requestDelete(item)">删除</Button><Switch :model-value="item.isEnabled" :disabled="changingProviderId === item.id" :aria-label="`${providerLabel(item.provider)}启用状态`" @update:model-value="toggleProvider(item, $event === true)" /></div>
+              <div class="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" @click="editProvider(item)">编辑</Button><Button size="sm" variant="outline" :disabled="sendingTest" @click="selectTestProvider(item)">测试</Button><Button size="sm" variant="destructive" :disabled="item.isEnabled" @click="requestDelete(item)">删除</Button><Switch :model-value="item.isEnabled" :disabled="changingProviderId === item.id || item.provider === 'CLOUDFLARE'" :aria-label="`${providerLabel(item.provider)}启用状态`" @update:model-value="toggleProvider(item, $event === true)" /></div>
             </div>
           </div>
         </CardContent>

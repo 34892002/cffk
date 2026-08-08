@@ -53,6 +53,7 @@ export async function onGetEmailProviders() {
 export async function onSaveEmailProvider(input: SaveEmailProviderInput) {
   const { db } = getAdminContext();
   if (!input || input.channel !== "EMAIL" || (input.provider !== "API" && input.provider !== "SMTP" && input.provider !== "CLOUDFLARE") || typeof input.isEnabled !== "boolean" || !input.values) appError("EMAIL_PROVIDER_INVALID");
+
   const name = requiredText(input.name, "EMAIL_PROVIDER_NAME");
   const existing = input.id
     ? await db.select({ id: pushChannelConfig.id, channel: pushChannelConfig.channel, configJson: pushChannelConfig.configJson }).from(pushChannelConfig).where(eq(pushChannelConfig.id, input.id)).limit(1)
@@ -84,8 +85,9 @@ export async function onDeleteEmailProvider(id: number) {
 
 export async function onSetEmailProviderEnabled(id: number, isEnabled: boolean) {
   const { db } = getAdminContext();
-  const [target] = await db.select({ id: pushChannelConfig.id }).from(pushChannelConfig).where(and(eq(pushChannelConfig.id, id), eq(pushChannelConfig.channel, "EMAIL"))).limit(1);
+  const [target] = await db.select({ id: pushChannelConfig.id, provider: pushChannelConfig.provider }).from(pushChannelConfig).where(and(eq(pushChannelConfig.id, id), eq(pushChannelConfig.channel, "EMAIL"))).limit(1);
   if (!target) appError("EMAIL_PROVIDER_NOT_FOUND");
+
   const now = new Date();
   if (isEnabled) await db.update(pushChannelConfig).set({ isEnabled: false, updatedAt: now }).where(and(eq(pushChannelConfig.channel, "EMAIL"), ne(pushChannelConfig.id, id)));
   const result = await db.update(pushChannelConfig).set({ isEnabled, updatedAt: now }).where(and(eq(pushChannelConfig.id, id), eq(pushChannelConfig.channel, "EMAIL"))).returning({ id: pushChannelConfig.id, provider: pushChannelConfig.provider });
@@ -136,6 +138,7 @@ export async function onSendTestEmail(input: { to: string; customContent?: strin
   const { database, runtime, adminUserId } = getAdminContext();
   const recipient = input.to.trim();
   if (!/^\S+@\S+\.\S+$/.test(recipient)) appError("EMAIL_RECIPIENT_INVALID");
+
   const results = await dispatchPush(database, runtime, { scene: "TEST", messageType: "ADMIN", recipient: { type: "ADMIN", address: recipient }, source: `admin:test:${adminUserId}:${crypto.randomUUID()}`, providerConfigId: input.providerConfigId, variables: { siteName: "CFFK", sentAt: new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "medium", timeZone: "Asia/Shanghai" }).format(new Date()), customContent: input.customContent?.trim() || "这是一封测试邮件。" } });
   const result = results[0];
   if (!result) appError("EMAIL_SEND_FAILED");

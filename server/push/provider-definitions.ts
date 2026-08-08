@@ -67,14 +67,12 @@ export const emailProviderDefinitions: ProviderFormDefinition[] = [
   },
   {
     channel: "EMAIL", provider: "CLOUDFLARE", schemaVersion: 1, title: "Cloudflare Email Sending", capabilities,
-    defaults: { binding: "EMAIL", from: "", fromName: "", replyTo: "", destination: "", allowedDestinations: "" },
+    defaults: { binding: "EMAIL", from: "", fromName: "", replyTo: "" },
     fields: [
       { key: "binding", label: "Binding 名称", type: "text", required: true },
       { key: "from", label: "发件邮箱", type: "email", required: true },
       { key: "fromName", label: "发件人名称", type: "text" },
       { key: "replyTo", label: "回复邮箱", type: "email" },
-      { key: "destination", label: "目标邮箱", type: "email" },
-      { key: "allowedDestinations", label: "允许目标邮箱列表", type: "textarea", description: "每行一个邮箱；Cloudflare 配置目标地址时填写。" },
     ],
   },
 ];
@@ -128,8 +126,7 @@ export function serializeEmailProviderConfig(input: SaveEmailProviderInput, exis
     const authType = text(values, "authType");
     config = { kind: "smtp", host: text(values, "host"), port: number(values, "port", 587), secure: bool(values, "secure"), username: text(values, "username"), password: password ?? { secret: "" }, ...(authType === "login" || authType === "cram-md5" || authType === "plain" ? { authType } : {}), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
   } else {
-    const allowedDestinations = text(values, "allowedDestinations").split("\n").map((item) => item.trim()).filter(Boolean);
-    config = { kind: "cloudflare", binding: text(values, "binding"), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}), ...(text(values, "destination") ? { destination: text(values, "destination") } : {}), ...(allowedDestinations.length ? { allowedDestinations } : {}) };
+    config = { kind: "cloudflare", binding: text(values, "binding"), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
   }
   return JSON.stringify(normalizedConfig(parseEmailProviderConfig(JSON.stringify(config))));
 }
@@ -149,7 +146,7 @@ export function maskedEmailProviderConfig(provider: EmailProviderKind, json: str
     Object.assign(values, { host: config.host, port: config.port, secure: config.secure, username: config.username, authType: config.authType ?? "plain" });
     secrets.password = { configured: Boolean(config.password.secret), masked: config.password.secret ? "********" : undefined };
   } else if (provider === "CLOUDFLARE" && config.kind === "cloudflare") {
-    Object.assign(values, { binding: config.binding, destination: config.destination ?? "", allowedDestinations: (config.allowedDestinations ?? []).join("\n") });
+    Object.assign(values, { binding: config.binding });
   } else {
     throw new Error("EMAIL_PROVIDER_KIND_MISMATCH");
   }

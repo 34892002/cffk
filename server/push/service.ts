@@ -1,13 +1,24 @@
 import { and, eq, lte } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { adminBootstrap, emailTemplate, order, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry, siteSetting, user } from "@/database/drizzle/schema";
+import { adminBootstrap, emailTemplate, order, orderDelivery, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry, siteSetting, user } from "@/database/drizzle/schema";
 import { parseEmailProviderConfig, parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { pushRetryDelayMs, renderPushTemplate } from "@/lib/push-utils";
 import { sanitizeDatabaseLogText } from "@/server/database-log-sanitizer";
 import type { PushChannel, PushDispatchInput, PushDispatchResult, PushRecipient } from "./types";
 
-type EmailSender = { send(message: { from: string; to: string; subject: string; text?: string; html?: string; replyTo?: string }): Promise<{ messageId?: string }> };
 type Runtime = Record<string, unknown>;
+
+type CloudflareEmailBinding = {
+  send(message: {
+    to: string;
+    from: string | { email: string; name?: string };
+    subject: string;
+    text?: string;
+    html?: string;
+    replyTo?: string | { email: string; name?: string };
+  }): Promise<{ messageId: string }>;
+};
+
 const DEFAULT_API_TIMEOUT_MS = 15_000;
 
 function isEmail(value: string | null | undefined) {
@@ -75,7 +86,23 @@ async function writeResult(database: D1Database, taskId: number, status: "SUCCES
 }
 
 function isRetryableError(reason: string) {
-  return reason === "EMAIL_SEND_RETRYABLE" || /network|timeout|temporar/i.test(reason);
+  return reason === "EMAIL_SEND_RETRYABLE" || reason === "EMAIL_CLOUDFLARE_RATE_LIMITED" || reason === "EMAIL_CLOUDFLARE_FAILED" || /network|timeout|temporar/i.test(reason);
+}
+
+export function cloudflareEmailError(cause: unknown) {
+  const record = typeof cause === "object" && cause !== null ? cause as { code?: unknown; message?: unknown } : undefined;
+  const code = typeof record?.code === "string" ? record.code : "";
+  const message = cause instanceof Error ? cause.message : typeof record?.message === "string" ? record.message : String(cause);
+  const detail = `${code} ${message}`;
+  if (detail.includes("E_RATE_LIMIT_EXCEEDED")) return "EMAIL_CLOUDFLARE_RATE_LIMITED";
+  if (detail.includes("E_INTERNAL_SERVER_ERROR") || detail.includes("E_DELIVERY_FAILED")) return "EMAIL_CLOUDFLARE_FAILED";
+  if (detail.includes("E_SENDER_NOT_VERIFIED")) return "EMAIL_CLOUDFLARE_SENDER_NOT_VERIFIED";
+  if (detail.includes("E_SENDER_DOMAIN_NOT_AVAILABLE")) return "EMAIL_CLOUDFLARE_SENDER_DOMAIN_UNAVAILABLE";
+  if (detail.includes("E_RECIPIENT_NOT_ALLOWED")) return "EMAIL_CLOUDFLARE_RECIPIENT_NOT_ALLOWED";
+  if (detail.includes("E_RECIPIENT_SUPPRESSED")) return "EMAIL_CLOUDFLARE_RECIPIENT_SUPPRESSED";
+  if (detail.includes("E_CONTENT_TOO_LARGE")) return "EMAIL_CLOUDFLARE_CONTENT_TOO_LARGE";
+  if (detail.includes("E_FIELD_MISSING") || detail.includes("E_VALIDATION_ERROR")) return "EMAIL_CLOUDFLARE_INVALID";
+  return "EMAIL_CLOUDFLARE_FAILED";
 }
 
 async function postEmailApi(endpoint: string, headers: Record<string, string>, body: string, timeoutMs: number) {
@@ -121,9 +148,19 @@ async function sendEmail(database: D1Database, runtime: Runtime, input: PushDisp
     const body = renderPushTemplate(template.body, input.variables);
     let result: { messageId?: string };
     if (provider.kind === "cloudflare") {
-      const sender = runtime[provider.binding] as EmailSender | undefined;
-      if (!sender?.send) throw new Error("EMAIL_CLOUDFLARE_BINDING_UNAVAILABLE");
-      result = await sender.send({ from: provider.from, to: recipient, subject, ...(provider.replyTo ? { replyTo: provider.replyTo } : {}), ...(template.format === "html" ? { html: body } : { text: body }) });
+      const sender = runtime[provider.binding] as CloudflareEmailBinding | undefined;
+      if (!sender || typeof sender.send !== "function") throw new Error("EMAIL_CLOUDFLARE_BINDING_UNAVAILABLE");
+      try {
+        result = await sender.send({
+          to: recipient,
+          from: provider.fromName ? { email: provider.from, name: provider.fromName } : provider.from,
+          subject,
+          ...(template.format === "html" ? { html: body } : { text: body }),
+          ...(provider.replyTo ? { replyTo: provider.replyTo } : {}),
+        });
+      } catch (cause) {
+        throw new Error(cloudflareEmailError(cause));
+      }
     } else if (provider.kind === "api") {
       const apiKey = runtime[provider.apiKey.secret];
       if (typeof apiKey !== "string" || !apiKey) throw new Error("EMAIL_PROVIDER_SECRET_UNAVAILABLE");
@@ -221,12 +258,32 @@ export async function retryDuePushes(database: D1Database, runtime: Runtime, now
   return { attempted, sent };
 }
 
+export function deliveryItemsFromSnapshots(snapshots: string[]) {
+  const items = snapshots.flatMap((snapshot) => {
+    try {
+      const parsed = JSON.parse(snapshot) as unknown;
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [snapshot];
+    } catch {
+      return [snapshot];
+    }
+  });
+  if (!items.length) return "暂无发货内容";
+  return items.length === 1 ? items[0]! : items.map((item, index) => `${index + 1}. ${item}`).join("\n");
+}
+
+export function orderQueryUrl(siteUrl: string | null | undefined, orderNo: string, queryToken: string) {
+  const base = siteUrl?.trim().replace(/\/+$/, "") ?? "";
+  const query = new URLSearchParams({ orderNo, token: queryToken });
+  return `${base}/order?${query.toString()}`;
+}
+
 export async function orderPushVariables(database: D1Database, orderId: number) {
   const db = createDrizzleDb(database);
-  const [[record], [settings]] = await Promise.all([
-    db.select({ orderNo: order.orderNo, contactEmail: order.contactValue, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, buyerNote: order.buyerNote }).from(order).where(eq(order.id, orderId)).limit(1),
+  const [[record], [settings], deliveries] = await Promise.all([
+    db.select({ orderNo: order.orderNo, queryToken: order.queryToken, contactEmail: order.contactValue, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, buyerNote: order.buyerNote }).from(order).where(eq(order.id, orderId)).limit(1),
     db.select({ siteName: siteSetting.siteName, siteUrl: siteSetting.siteUrl, footerText: siteSetting.footerText, supportContact: siteSetting.supportContact }).from(siteSetting).where(eq(siteSetting.id, 1)).limit(1),
+    db.select({ contentSnapshot: orderDelivery.contentSnapshot }).from(orderDelivery).where(and(eq(orderDelivery.orderId, orderId), eq(orderDelivery.status, "SUCCESS"))),
   ]);
   if (!record) return null;
-  return { siteName: settings?.siteName || "CFFK", orderNo: record.orderNo, contactEmail: record.contactEmail || "未提供", productName: record.productName, quantity: record.quantity, amount: new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(record.amount / 100), buyerNote: record.buyerNote || "无", queryUrl: settings?.siteUrl ? `${settings.siteUrl.replace(/\/$/, "")}/order` : "/order", footerText: settings?.footerText || "", supportContact: settings?.supportContact || "" };
+  return { siteName: settings?.siteName || "CFFK", orderNo: record.orderNo, contactEmail: record.contactEmail || "未提供", productName: record.productName, quantity: record.quantity, amount: new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(record.amount / 100), buyerNote: record.buyerNote || "无", deliveryItems: deliveryItemsFromSnapshots(deliveries.map((item) => item.contentSnapshot)), queryUrl: orderQueryUrl(settings?.siteUrl, record.orderNo, record.queryToken), footerText: settings?.footerText || "", supportContact: settings?.supportContact || "" };
 }

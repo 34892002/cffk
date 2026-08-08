@@ -50,7 +50,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { ArrowLeftIcon } from "@lucide/vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +65,13 @@ const queryToken = ref("");
 const result = ref<PublicOrder | null>(null);
 const error = ref<string | null>(null);
 const loading = ref(false);
+
+onMounted(() => {
+  const params = new URLSearchParams(window.location.search);
+  orderNo.value = params.get("orderNo")?.trim() ?? "";
+  queryToken.value = params.get("token")?.trim() ?? "";
+  if (orderNo.value && queryToken.value) void onSubmit();
+});
 
 async function onSubmit() {
   error.value = null;

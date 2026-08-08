@@ -51,7 +51,7 @@ const pageContext = usePageContext();
 const basePath = computed(() => `/${pageContext.routeParams.adminPath}`);
 const historyPath = computed(() => `${basePath.value}/push/history`);
 const quickLinks = computed(() => [
-  { title: "通道配置", description: "配置 API、SMTP 或 Cloudflare 邮件服务。", href: `${basePath.value}/push/email/post-office` },
+  { title: "通道配置", description: "配置 API、SMTP 或 Cloudflare Email Sending 邮件服务。", href: `${basePath.value}/push/email/post-office` },
   { title: "邮件模板", description: "维护支付、发货和测试邮件内容。", href: `${basePath.value}/push/email/templates` },
   { title: "发送日志", description: "按订单号、状态和场景排查投递结果。", href: historyPath.value },
 ]);

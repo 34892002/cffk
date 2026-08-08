@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9a29d972-1430-45a5-aedc-bffa0784d9c2",
+  "id": "9d283d71-b5aa-4f79-b7be-7e67d8304985",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "account": {
@@ -1132,6 +1132,13 @@
             "orderNo"
           ],
           "isUnique": false
+        },
+        "paymentLog_orderId_idx": {
+          "name": "paymentLog_orderId_idx",
+          "columns": [
+            "orderId"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -1185,6 +1192,14 @@
           "autoincrement": false,
           "default": false
         },
+        "sort": {
+          "name": "sort",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "configJson": {
           "name": "configJson",
           "type": "text",
@@ -1214,6 +1229,14 @@
             "provider"
           ],
           "isUnique": true
+        },
+        "paymentProvider_enabled_sort_idx": {
+          "name": "paymentProvider_enabled_sort_idx",
+          "columns": [
+            "isEnabled",
+            "sort"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
