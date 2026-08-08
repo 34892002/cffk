@@ -101,8 +101,8 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     provider: "STRIPE",
     title: "Stripe",
     schemaVersion: 1,
-    fields: [{ key: "secretKey", label: "Secret Key", type: "password", required: true, secret: true }, { key: "webhookSecret", label: "Webhook Secret", type: "password", required: true, secret: true }, { key: "currency", label: "币种", type: "select", required: true, options: [{ label: "CNY", value: "cny" }, { label: "USD", value: "usd" }] }, common.returnUrl],
-    defaults: { schemaVersion: 1, secretKey: "", webhookSecret: "", currency: "cny", returnUrl: "" },
+    fields: [{ key: "secretKey", label: "Secret Key", type: "password", required: true, secret: true }, { key: "webhookSecret", label: "Webhook Secret", type: "password", required: true, secret: true }, { key: "currency", label: "币种", type: "select", required: true, options: [{ label: "CNY", value: "cny" }, { label: "USD", value: "usd" }] }, common.notifyUrl, common.returnUrl],
+    defaults: { schemaVersion: 1, secretKey: "", webhookSecret: "", currency: "cny", notifyUrl: "", returnUrl: "" },
     parseConfig: parseStripeConfig,
     getChannels: () => [],
     createAdapter: (config) => createProviderAdapter("STRIPE", config),
@@ -112,8 +112,8 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     provider: "HASHPAY",
     title: "HashPay",
     schemaVersion: 1,
-    fields: [{ key: "baseUrl", label: "网关地址", type: "url", required: true }, { key: "merchantId", label: "商户 ID", type: "text", required: true }, { key: "privateKey", label: "PKCS#8 私钥", type: "textarea", required: true, secret: true }, { key: "currency", label: "币种", type: "text", required: true }, common.returnUrl],
-    defaults: { schemaVersion: 1, baseUrl: "", merchantId: "", privateKey: "", currency: "CNY", returnUrl: "" },
+    fields: [{ key: "baseUrl", label: "网关地址", type: "url", required: true }, { key: "merchantId", label: "商户 ID", type: "text", required: true }, { key: "privateKey", label: "PKCS#8 私钥", type: "textarea", required: true, secret: true }, { key: "currency", label: "币种", type: "text", required: true }, common.notifyUrl, common.returnUrl],
+    defaults: { schemaVersion: 1, baseUrl: "", merchantId: "", privateKey: "", currency: "CNY", notifyUrl: "", returnUrl: "" },
     parseConfig: parseHashpayConfig,
     getChannels: () => [],
     createAdapter: (config) => createProviderAdapter("HASHPAY", config),
@@ -121,8 +121,29 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
   },
 };
 
+const paymentNotifyPaths: Partial<Record<PaymentProviderKind, string>> = {
+  ALIPAY: "/api/payments/alipay/notify",
+  EPAY: "/api/payments/epay/notify",
+  BEPUSDT: "/api/payments/bepusdt/notify",
+  STRIPE: "/api/payments/stripe/notify",
+  HASHPAY: "/api/payments/hashpay/notify",
+};
+
 export function getProviderDefinition(provider: string) {
   return paymentProviderDefinitions[provider as PaymentProviderKind];
+}
+
+export function getPaymentUrlDefaults(provider: PaymentProviderKind, siteUrl: string | null | undefined) {
+  if (!siteUrl) return { notifyUrl: "", returnUrl: "" };
+  const origin = new URL(siteUrl).origin;
+  return {
+    notifyUrl: `${origin}${paymentNotifyPaths[provider] ?? ""}`,
+    returnUrl: `${origin}/payment-result`,
+  };
+}
+
+export function getPaymentNotifyPath(provider: PaymentProviderKind) {
+  return paymentNotifyPaths[provider] ?? "";
 }
 
 export function parseProviderConfig(provider: string, configJson: string) {

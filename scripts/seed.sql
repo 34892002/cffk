@@ -40,8 +40,8 @@ INSERT INTO `paymentProvider` (
   ('ALIPAY', '支付宝', false, 10, '{"schemaVersion":1,"modes":["web","face_to_face"],"baseUrl":"https://openapi.alipay.com","appId":"","privateKey":"","alipayPublicKey":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
   ('EPAY', '易支付', false, 20, '{"schemaVersion":1,"baseUrl":"","pid":"","key":"","epayChannels":["alipay","wxpay"],"notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
   ('BEPUSDT', 'BEpusdt', false, 30, '{"schemaVersion":1,"baseUrl":"","appSecret":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
-  ('STRIPE', 'Stripe', false, 40, '{"schemaVersion":1,"secretKey":"","webhookSecret":"","currency":"cny","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
-  ('HASHPAY', 'HashPay', false, 50, '{"schemaVersion":1,"baseUrl":"","merchantId":"","privateKey":"","currency":"CNY","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000)
+  ('STRIPE', 'Stripe', false, 40, '{"schemaVersion":1,"secretKey":"","webhookSecret":"","currency":"cny","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
+  ('HASHPAY', 'HashPay', false, 50, '{"schemaVersion":1,"baseUrl":"","merchantId":"","privateKey":"","currency":"CNY","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000)
 ON CONFLICT(`provider`) DO NOTHING;
 
 INSERT INTO `pushChannelConfig` (

@@ -36,6 +36,7 @@ export type StripeConfig = {
   secretKey: string;
   webhookSecret: string;
   currency: string;
+  notifyUrl: string;
   returnUrl: string;
 };
 
@@ -45,6 +46,7 @@ export type HashpayConfig = {
   merchantId: string;
   privateKey: string;
   currency: string;
+  notifyUrl: string;
   returnUrl: string;
 };
 
@@ -173,6 +175,7 @@ export function parseStripeConfig(json: string): StripeConfig {
     secretKey: requireString(value.secretKey, "secretKey"),
     webhookSecret: requireString(value.webhookSecret, "webhookSecret"),
     currency: requireString(value.currency, "currency").toLowerCase(),
+    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
     returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
   };
 }
@@ -186,6 +189,7 @@ export function parseHashpayConfig(json: string): HashpayConfig {
     merchantId: requireString(value.merchantId, "merchantId"),
     privateKey: requireString(value.privateKey, "privateKey"),
     currency: requireString(value.currency, "currency").toUpperCase(),
+    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
     returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
   };
 }

@@ -1,9 +1,10 @@
 import { betterAuthHandler, betterAuthSessionMiddleware } from "./better-auth-handler";
 import { PaymentCallbackService } from "./payment/callback-service";
+import { MAX_PAYMENT_CALLBACK_BYTES, normalizePaymentCallbackPayload } from "./payment/callback-payload";
 import { reportUnexpectedRequestError } from "./error-handling";
 import { telefuncHandler } from "./telefunc-handler";
 import vike from "@vikejs/hono";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { PaymentProviderKind } from "./payment/registry";
 
 function getApp() {
@@ -15,13 +16,16 @@ function getApp() {
     return context.text("Internal Server Error", 500);
   });
   for (const [provider, path] of [["ALIPAY", "/api/payments/alipay/notify"], ["EPAY", "/api/payments/epay/notify"], ["BEPUSDT", "/api/payments/bepusdt/notify"], ["STRIPE", "/api/payments/stripe/notify"], ["HASHPAY", "/api/payments/hashpay/notify"]] as const) {
-    app.all(path, async (context) => {
+    const handlePaymentCallback = async (context: Context<{ Bindings: Record<string, unknown> & { DB: D1Database } }>) => {
+      const contentLength = Number(context.req.header("content-length"));
+      if (Number.isFinite(contentLength) && contentLength > MAX_PAYMENT_CALLBACK_BYTES) return context.text("failure", 400);
       const rawBody = await context.req.text();
-      const payload = Object.fromEntries(new URLSearchParams(rawBody).entries());
-      if (rawBody.trim().startsWith("{")) payload.__raw_body = rawBody;
+      const payload = normalizePaymentCallbackPayload(context.req.method, context.req.url, rawBody);
       const result = await new PaymentCallbackService(context.env.DB, context.env).handle(provider as PaymentProviderKind, { payload, rawBody, headers: context.req.raw.headers });
       return context.body(result.body, result.status as 200 | 400, { "content-type": result.contentType });
-    });
+    };
+    app.all(path, handlePaymentCallback);
+    app.all(`${path}/*`, handlePaymentCallback);
   }
   vike(app, [betterAuthSessionMiddleware, betterAuthHandler, telefuncHandler]);
   return app;

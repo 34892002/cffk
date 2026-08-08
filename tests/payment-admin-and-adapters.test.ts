@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import test from "node:test";
 import { AppError } from "../lib/app-error.ts";
-import { mergePaymentProviderConfig } from "../server/payment/admin.telefunc.ts";
+import { mergePaymentProviderConfig, mergePaymentUrls } from "../server/payment/admin.telefunc.ts";
 import { createProviderAdapter } from "../server/payment/providers.ts";
+import { normalizePaymentCallbackPayload } from "../server/payment/callback-payload.ts";
+import { getPaymentUrlDefaults } from "../server/payment/registry.ts";
 
 const testPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 
@@ -25,6 +27,51 @@ function appErrorCode(operation: () => unknown) {
     return cause instanceof AppError ? cause.code : null;
   }
 }
+
+test("payment URL defaults use the configured site origin and fixed provider paths", () => {
+  assert.deepEqual(getPaymentUrlDefaults("EPAY", "https://shop.example.com/store/"), {
+    notifyUrl: "https://shop.example.com/api/payments/epay/notify",
+    returnUrl: "https://shop.example.com/payment-result",
+  });
+  assert.deepEqual(getPaymentUrlDefaults("HASHPAY", null), { notifyUrl: "", returnUrl: "" });
+});
+
+test("payment callback payloads retain GET query data and raw JSON bodies", () => {
+  assert.deepEqual(
+    normalizePaymentCallbackPayload("GET", "https://shop.example/api/payments/epay/notify?out_trade_no=ORD-1&sign=signature", ""),
+    { out_trade_no: "ORD-1", sign: "signature" },
+  );
+  assert.deepEqual(
+    normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/stripe/notify", '{"id":"evt_1"}'),
+    { id: "evt_1", __raw_body: '{"id":"evt_1"}' },
+  );
+});
+
+test("payment callback payloads reject ambiguous and oversized input", () => {
+  assert.throws(
+    () => normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/epay/notify", "order=ORD-1&order=ORD-2"),
+    /PAYMENT_CALLBACK_PAYLOAD_INVALID/,
+  );
+  assert.throws(
+    () => normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/stripe/notify", '{"data":{"nested":"value"}}'),
+    /PAYMENT_CALLBACK_PAYLOAD_INVALID/,
+  );
+  assert.throws(
+    () => normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/stripe/notify", "x".repeat(64 * 1024 + 1)),
+    /PAYMENT_CALLBACK_PAYLOAD_INVALID/,
+  );
+});
+
+test("payment URL validation identifies the invalid field", () => {
+  assert.equal(appErrorCode(() => mergePaymentUrls("EPAY", "https://shop.example", {
+    notifyUrl: "https://shop.example/api/payments/alipay/notify",
+    returnUrl: "https://shop.example/payment-result",
+  })), "PAYMENT_NOTIFY_URL_INVALID");
+  assert.equal(appErrorCode(() => mergePaymentUrls("EPAY", "https://shop.example", {
+    notifyUrl: "https://shop.example/api/payments/epay/notify",
+    returnUrl: "https://other.example/payment-result",
+  })), "PAYMENT_RETURN_URL_INVALID");
+});
 
 test("payment provider config preserves, replaces, and clears sensitive values", () => {
   const preserved = JSON.parse(mergePaymentProviderConfig({
@@ -94,7 +141,7 @@ test("BEpusdt and Stripe adapters create provider requests and surface failures"
     const bepPayment = await bepusdt.create({ orderNo: "ORD-2", queryToken: "token", amount: 200, subject: "Order", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
     assert.deepEqual(bepPayment, { mode: "redirect", url: "https://cashier.example/pay", paymentOrderNo: "TRADE-1" });
 
-    const stripe = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", returnUrl: "https://shop.example/result" });
+    const stripe = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" });
     const stripePayment = await stripe.create({ orderNo: "ORD-3", queryToken: "token", amount: 1234, subject: "Order", notifyUrl: "", returnUrl: "https://shop.example/result" });
     assert.equal(stripePayment.paymentOrderNo, "cs_1");
     assert.equal(requests.length, 2);
@@ -148,7 +195,7 @@ test("HashPay adapter creates a signed provider request", async () => {
     return new Response(JSON.stringify({ checkoutUrl: "https://hashpay.example/checkout", order: { id: "HP-1" } }), { status: 200 });
   };
   try {
-    const adapter = createProviderAdapter("HASHPAY", { schemaVersion: 1, baseUrl: "https://hashpay.example", merchantId: "merchant-1", privateKey: testPrivateKey, currency: "USD", returnUrl: "https://shop.example/result" });
+    const adapter = createProviderAdapter("HASHPAY", { schemaVersion: 1, baseUrl: "https://hashpay.example", merchantId: "merchant-1", privateKey: testPrivateKey, currency: "USD", notifyUrl: "https://shop.example/api/payments/hashpay/notify", returnUrl: "https://shop.example/result" });
     const payment = await adapter.create({ orderNo: "ORD-6", queryToken: "token", amount: 999, subject: "Order", notifyUrl: "", returnUrl: "https://shop.example/result" });
     assert.deepEqual(payment, { mode: "redirect", url: "https://hashpay.example/checkout", paymentOrderNo: "HP-1" });
     assert.equal(request!.headers.get("X-Merchant-Id"), "merchant-1");
@@ -186,7 +233,7 @@ test("Stripe active query verifies order ownership before confirming payment", a
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ id: "cs_1", metadata: { orderNo: "ORD-4" }, amount_total: 100, currency: "usd", payment_status: "paid" }), { status: 200 });
   try {
-    const adapter = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", returnUrl: "https://shop.example/result" });
+    const adapter = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" });
     const result = await adapter.query!({ orderNo: "ORD-4", paymentOrderNo: "cs_1", amount: 100 });
     assert.deepEqual(result, { provider: "STRIPE", verified: true, orderNo: "ORD-4", paymentOrderNo: "cs_1", amount: 100, currency: "usd", status: "PAID", message: "STRIPE_QUERY" });
   } finally {
@@ -198,7 +245,7 @@ test("Stripe active query rejects a session owned by another order", async () =>
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ id: "cs_1", metadata: { orderNo: "ORD-other" }, amount_total: 100, currency: "usd", payment_status: "paid" }), { status: 200 });
   try {
-    const adapter = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", returnUrl: "https://shop.example/result" });
+    const adapter = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" });
     const result = await adapter.query!({ orderNo: "ORD-4", paymentOrderNo: "cs_1", amount: 100 });
     assert.deepEqual(result, { provider: "STRIPE", verified: false, orderNo: "ORD-4", paymentOrderNo: "cs_1", status: "PENDING", message: "STRIPE_QUERY_FAILED" });
   } finally {

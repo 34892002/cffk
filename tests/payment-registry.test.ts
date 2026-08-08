@@ -6,8 +6,8 @@ const validConfigs = {
   ALIPAY: { schemaVersion: 1, modes: ["web", "face_to_face"], baseUrl: "https://openapi.alipay.com", appId: "app-id", privateKey: "private", alipayPublicKey: "public", notifyUrl: "https://shop.example/payments/alipay", returnUrl: "https://shop.example/payment-result" },
   EPAY: { schemaVersion: 1, baseUrl: "https://epay.example", pid: "1000", key: "secret", epayChannels: ["alipay", "wxpay"], notifyUrl: "https://shop.example/payments/epay", returnUrl: "https://shop.example/payment-result" },
   BEPUSDT: { schemaVersion: 1, baseUrl: "https://bepusdt.example", appSecret: "secret", notifyUrl: "https://shop.example/payments/bepusdt", returnUrl: "https://shop.example/payment-result" },
-  STRIPE: { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", returnUrl: "https://shop.example/payment-result" },
-  HASHPAY: { schemaVersion: 1, baseUrl: "https://hashpay.example", merchantId: "merchant", privateKey: "private", currency: "CNY", returnUrl: "https://shop.example/payment-result" },
+  STRIPE: { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/payment-result" },
+  HASHPAY: { schemaVersion: 1, baseUrl: "https://hashpay.example", merchantId: "merchant", privateKey: "private", currency: "CNY", notifyUrl: "https://shop.example/api/payments/hashpay/notify", returnUrl: "https://shop.example/payment-result" },
 } as const;
 
 test("payment provider registry is complete and unique", () => {
