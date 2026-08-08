@@ -11,7 +11,7 @@
           <Select :model-value="filters.deliveryStatus || 'ALL'" @update:model-value="filters.deliveryStatus = $event === 'ALL' ? '' : $event as Order['deliveryStatus']; resetAndLoad()"><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部交付状态</SelectItem><SelectItem value="NOT_DELIVERED">未交付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="FAILED">交付失败</SelectItem></SelectContent></Select>
           <Button variant="outline" size="sm" @click="resetAndLoad">查询</Button>
         </div>
-        <Button variant="outline" size="icon-sm" :disabled="loading" aria-label="刷新数据" title="刷新数据" @click="loadOrders"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" /></Button>
+        <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadOrders"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
       </template>
       <template #cell-orderNo="{ row }"><span class="font-mono text-xs">{{ row.orderNo }}</span></template>
       <template #cell-productName="{ value }"><span class="font-medium">{{ value }}</span></template>

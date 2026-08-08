@@ -8,8 +8,8 @@ INSERT INTO `siteSetting` (
 ) VALUES (
   1,
   'CFFK',
-  'Cloudflare Workers powered digital goods store',
-  'Welcome to CFFK.',
+  '全球部署 一触即达',
+  '为数字虚拟商品 量身打造的自动寄售平台',
   'Asia/Shanghai',
   unixepoch('now') * 1000,
   unixepoch('now') * 1000
@@ -81,28 +81,28 @@ INSERT INTO `emailTemplate` (
   (
     'TEST',
     '测试邮件',
-    '{"subject":"[{{siteName}}] 测试邮件","body":"这是一封测试邮件。\\n\\n站点：{{siteName}}\\n发送时间：{{sentAt}}\\n\\n{{customContent}}","format":"text","variables":["siteName","sentAt","customContent"]}',
+    '{"subject":"[{{siteName}}] 测试邮件","body":"这是一封测试邮件。\n\n站点：{{siteName}}\n发送时间：{{sentAt}}\n\n{{customContent}}","format":"text","variables":["siteName","sentAt","customContent"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'ORDER_PAID',
     '支付成功通知',
-    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 支付成功","body":"您的订单已支付成功。\\n\\n订单号：{{orderNo}}\\n顾客邮箱：{{contactEmail}}\\n商品：{{productName}}\\n金额：{{amount}}\\n备注：{{buyerNote}}\\n查询地址：{{queryUrl}}\\n\\n{{footerText}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","amount","buyerNote","queryUrl","footerText"]}',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 支付成功","body":"您的订单已支付成功。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n金额：{{amount}}\n备注：{{buyerNote}}\n查询地址：{{queryUrl}}\n\n{{footerText}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","amount","buyerNote","queryUrl","footerText"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'DELIVERY_SUCCESS',
     '发货成功通知',
-    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 已发货","body":"您的订单已完成发货。\\n\\n订单号：{{orderNo}}\\n顾客邮箱：{{contactEmail}}\\n商品：{{productName}}\\n数量：{{quantity}}\\n备注：{{buyerNote}}\\n\\n查询地址：{{queryUrl}}\\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","quantity","buyerNote","queryUrl","supportContact"]}',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 已发货","body":"您的订单已完成发货。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n数量：{{quantity}}\n备注：{{buyerNote}}\n\n查询地址：{{queryUrl}}\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","quantity","buyerNote","queryUrl","supportContact"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'DELIVERY_FAILED',
     '发货失败通知',
-    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 发货失败","body":"订单发货失败，请尽快处理。\\n\\n订单号：{{orderNo}}\\n顾客邮箱：{{contactEmail}}\\n商品：{{productName}}\\n备注：{{buyerNote}}\\n失败原因：{{errorMessage}}\\n\\n查询地址：{{queryUrl}}\\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","buyerNote","errorMessage","queryUrl","supportContact"]}',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 发货失败","body":"订单发货失败，请尽快处理。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n备注：{{buyerNote}}\n失败原因：{{errorMessage}}\n\n查询地址：{{queryUrl}}\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","buyerNote","errorMessage","queryUrl","supportContact"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   )

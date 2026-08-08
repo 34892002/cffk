@@ -38,7 +38,7 @@ const capabilities: ProviderFormDefinition["capabilities"] = { messageTypes: ["N
 
 export const emailProviderDefinitions: ProviderFormDefinition[] = [
   {
-    channel: "EMAIL", provider: "API", schemaVersion: 1, title: "邮件 API", capabilities,
+    channel: "EMAIL", provider: "API", schemaVersion: 1, title: "API", capabilities,
     defaults: { apiProvider: "BREVO", endpoint: "https://api.brevo.com/v3/smtp/email", from: "", fromName: "", replyTo: "", timeoutMs: 10000 },
     fields: [
       { key: "apiProvider", label: "API 服务商", type: "select", required: true, options: [{ label: "Brevo", value: "BREVO" }, { label: "Resend", value: "RESEND" }] },

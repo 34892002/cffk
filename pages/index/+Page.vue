@@ -15,9 +15,18 @@
 
     <section class="border-b bg-background pt-16">
       <div class="mx-auto grid max-w-6xl gap-5 px-5 py-8 sm:grid-cols-[minmax(0,1fr)_22rem] sm:items-center">
-        <div v-if="site.notice" class="flex items-start gap-3 text-sm leading-6 text-muted-foreground">
-          <InfoIcon class="mt-1 size-4 shrink-0 text-foreground" />
-          <p class="m-0">{{ site.notice }}</p>
+        <div v-if="site.notice" class="flex min-w-0 items-center gap-3 text-sm leading-6 text-muted-foreground">
+          <InfoIcon class="size-4 shrink-0 text-foreground" />
+          <div class="min-w-0 max-w-[28.8rem] overflow-hidden whitespace-nowrap">
+            <p v-if="!shouldMarqueeNotice" class="m-0 truncate" :title="site.notice">{{ site.notice }}</p>
+            <template v-else>
+              <p class="sr-only">{{ site.notice }}</p>
+              <div aria-hidden="true" class="notice-marquee-track inline-flex w-max animate-notice-marquee">
+                <span class="shrink-0 pr-12">{{ site.notice }}</span>
+                <span class="shrink-0 pr-12">{{ site.notice }}</span>
+              </div>
+            </template>
+          </div>
         </div>
         <p v-else class="text-sm text-muted-foreground">{{ site.subtitle || "选择商品后进入结算流程" }}</p>
         <div class="relative">
@@ -102,6 +111,7 @@ const pageContext = usePageContext() as unknown as { site: Site };
 const site = pageContext.site;
 const selectedCategory = ref<number | null>(null);
 const query = ref("");
+const shouldMarqueeNotice = computed(() => (site.notice?.length ?? 0) > 30);
 const brandLogoUrl = computed(() => site.logo || logoUrl);
 const visibleProducts = computed(() => {
   const keyword = query.value.trim().toLowerCase();
@@ -143,3 +153,25 @@ function stockClass(product: Product) {
     : "text-muted-foreground";
 }
 </script>
+
+<style scoped>
+@keyframes notice-marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-notice-marquee {
+  animation: notice-marquee 18s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-notice-marquee {
+    animation: none;
+  }
+}
+</style>

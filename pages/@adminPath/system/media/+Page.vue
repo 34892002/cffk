@@ -2,7 +2,7 @@
   <section class="flex w-full flex-col gap-6">
     <AdminPageHeader>
       <template #actions>
-        <Button :disabled="loading" @click="loadConfig">刷新数据</Button>
+        <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadConfig"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
       </template>
     </AdminPageHeader>
 
@@ -29,7 +29,7 @@
     </Card>
 
     <Card>
-      <CardHeader><div class="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>媒体文件</CardTitle><CardDescription>已上传的媒体对象。</CardDescription></div><Button variant="outline" :disabled="loadingMedia" @click="loadMedia">刷新列表</Button></div></CardHeader>
+      <CardHeader><div class="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>媒体文件</CardTitle><CardDescription>已上传的媒体对象。</CardDescription></div><Button variant="outline" size="sm" :disabled="loadingMedia" aria-label="刷新" title="刷新" @click="loadMedia"><RefreshCwIcon :class="loadingMedia ? 'animate-spin' : ''" />刷新</Button></div></CardHeader>
       <CardContent>
         <AdminDataTable :columns="mediaColumns" :rows="media" row-key="id" empty-text="暂无媒体文件。">
           <template #cell-preview="{ row }"><a :href="row.url" target="_blank" rel="noreferrer"><img :src="row.thumbnailUrl || row.url" :alt="row.originalName" class="size-12 rounded-md border object-cover" /></a></template>
@@ -46,6 +46,7 @@
 
 <script lang="ts" setup>
 import { onMounted, ref } from "vue";
+import { RefreshCwIcon } from "@lucide/vue";
 import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

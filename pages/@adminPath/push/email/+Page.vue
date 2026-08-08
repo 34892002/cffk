@@ -1,8 +1,8 @@
 <template>
   <MailSettingsLayout>
-    <section aria-labelledby="email-status-title" class="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]">
+    <section aria-labelledby="email-status-title" class="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]">
       <Card>
-        <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle id="email-status-title">邮件发送中心</CardTitle><CardDescription>从这里查看投递状态、配置发送通道和维护业务模板。</CardDescription></div><Button variant="outline" :disabled="loading" @click="loadOverview">刷新数据</Button></div></CardHeader>
+        <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle id="email-status-title">邮件发送中心</CardTitle><CardDescription>从这里查看投递状态、配置发送通道和维护业务模板。</CardDescription></div><Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadOverview"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button></div></CardHeader>
         <CardContent class="grid gap-3 sm:grid-cols-3">
           <a v-for="item in quickLinks" :key="item.href" :href="item.href" class="group rounded-lg border p-4 transition-colors hover:border-foreground/30 hover:bg-muted/50">
             <div class="flex items-center justify-between gap-3"><span class="font-medium">{{ item.title }}</span><span class="text-muted-foreground transition-transform group-hover:translate-x-0.5">→</span></div>
@@ -37,6 +37,7 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref } from "vue";
+import { RefreshCwIcon } from "@lucide/vue";
 import { usePageContext } from "vike-vue/usePageContext";
 import MailSettingsLayout from "@/components/admin/MailSettingsLayout.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

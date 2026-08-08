@@ -49,6 +49,10 @@ function requireString(value: unknown, field: string): string {
   return value;
 }
 
+function normalizeTemplateText(value: string) {
+  return value.replace(/\\n/g, "\n");
+}
+
 function requireSecretReference(value: unknown, field: string): SecretReference {
   if (!isRecord(value)) throw new Error(`Invalid configuration: ${field} must reference a Worker Secret`);
   return { secret: requireString(value.secret, `${field}.secret`) };
@@ -149,8 +153,8 @@ export function parseEmailTemplateConfig(json: string): EmailTemplateConfig {
   }
 
   return {
-    subject: requireString(value.subject, "subject"),
-    body: requireString(value.body, "body"),
+    subject: normalizeTemplateText(requireString(value.subject, "subject")),
+    body: normalizeTemplateText(requireString(value.body, "body")),
     format: value.format === "html" ? "html" : "text",
     ...(variables ? { variables } : {}),
   };

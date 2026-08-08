@@ -2,7 +2,7 @@
   <section class="flex w-full flex-col gap-6">
     <AdminPageHeader>
       <template #actions>
-        <Button :disabled="loading" @click="loadProviders">刷新数据</Button>
+        <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadProviders"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
       </template>
     </AdminPageHeader>
 
@@ -34,6 +34,7 @@
 
 <script lang="ts" setup>
 import { onMounted, reactive, ref } from "vue";
+import { RefreshCwIcon } from "@lucide/vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";

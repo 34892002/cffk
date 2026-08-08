@@ -10,7 +10,7 @@
           <Input v-model="query" class="h-8 w-60" placeholder="搜索优惠码" />
           <Select v-model="statusFilter"><SelectTrigger size="sm" class="min-w-28" aria-label="按状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部状态</SelectItem><SelectItem value="ACTIVE">启用</SelectItem><SelectItem value="INACTIVE">停用</SelectItem></SelectContent></Select>
         </div>
-        <div class="flex items-center gap-2"><Button variant="outline" size="icon-sm" :disabled="loading" aria-label="刷新数据" title="刷新数据" @click="loadDiscounts"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" /></Button><Button size="sm" @click="openCreate"><PlusIcon />添加优惠码</Button></div>
+        <div class="flex items-center gap-2"><Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadDiscounts"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button><Button size="sm" @click="openCreate"><PlusIcon />添加优惠码</Button></div>
       </template>
       <template #cell-code="{ row }"><span class="font-mono font-medium">{{ row.code }}</span></template>
       <template #cell-rule="{ row }"><span>{{ ruleLabel(row) }}</span></template>
@@ -25,24 +25,24 @@
       <template #pagination><Pagination :total="filteredDiscounts.length" :page="currentPage" :page-size="pageSize" @update:page="currentPage = $event" @update:page-size="pageSize = $event" /></template>
     </AdminDataTable>
 
-    <DialogRoot v-model:open="dialogOpen">
-      <DialogPortal>
-        <DialogOverlay class="fixed inset-0 z-50 bg-black/50" />
-        <DialogContent class="fixed left-1/2 top-1/2 z-50 grid max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-background p-0 shadow-lg">
-          <div class="border-b px-6 py-5"><DialogTitle class="text-lg font-semibold">{{ form.id ? "编辑优惠码" : "新建优惠码" }}</DialogTitle><DialogDescription>空值或 `0` 表示不限制最低金额、使用次数和有效期。</DialogDescription></div>
-          <form class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" @submit.prevent="saveDiscount">
-            <div class="min-h-0 overflow-y-auto px-6 py-5"><div class="grid gap-4"><label class="grid gap-2 text-sm font-medium">优惠码<Input v-model="form.code" required maxlength="64" placeholder="SUMMER2026" /></label><label class="grid gap-2 text-sm font-medium">类型<Select v-model="form.type"><SelectTrigger class="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FIXED">固定减免（分）</SelectItem><SelectItem value="PERCENT">百分比减免</SelectItem></SelectContent></Select></label><label class="grid gap-2 text-sm font-medium">{{ form.type === "FIXED" ? "优惠金额（分）" : "优惠百分比" }}<Input v-model.number="form.value" type="number" min="1" :max="form.type === 'PERCENT' ? 100 : undefined" required /></label><label class="grid gap-2 text-sm font-medium">最低订单金额（分）<Input v-model.number="form.minAmount" type="number" min="0" /></label><label class="grid gap-2 text-sm font-medium">最多使用次数<Input v-model.number="form.maxUses" type="number" min="0" /></label><label class="grid gap-2 text-sm font-medium">适用商品 ID<Input v-model="form.productIds" class="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="例如：1,2,3；留空为全部商品" /></label><label class="grid gap-2 text-sm font-medium">过期时间<Input v-model="form.expiresAt" type="datetime-local" class="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm" /></label><label class="flex items-center justify-between gap-3 text-sm font-medium"><span>启用此优惠码</span><Switch v-model="form.isActive" /></label></div></div>
-            <div class="flex justify-end gap-2 border-t bg-background px-6 py-4"><DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose><Button type="submit" :disabled="saving">{{ saving ? "保存中..." : form.id ? "保存优惠码" : "创建优惠码" }}</Button></div>
-          </form>
-        </DialogContent>
-      </DialogPortal>
-    </DialogRoot>
+    <Dialog v-model:open="dialogOpen">
+      <DialogContent class="grid max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0">
+        <DialogHeader class="border-b px-6 py-5 pr-8">
+          <DialogTitle class="text-lg font-semibold">{{ form.id ? "编辑优惠码" : "新建优惠码" }}</DialogTitle>
+          <DialogDescription>空值或 `0` 表示不限制最低金额、使用次数和有效期。</DialogDescription>
+        </DialogHeader>
+        <form class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" @submit.prevent="saveDiscount">
+          <div class="min-h-0 overflow-y-auto px-6 py-5"><div class="grid gap-4"><label class="grid gap-2 text-sm font-medium">优惠码<Input v-model="form.code" required maxlength="64" placeholder="SUMMER2026" /></label><label class="grid gap-2 text-sm font-medium">类型<Select v-model="form.type"><SelectTrigger class="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FIXED">固定减免（分）</SelectItem><SelectItem value="PERCENT">百分比减免</SelectItem></SelectContent></Select></label><label class="grid gap-2 text-sm font-medium">{{ form.type === "FIXED" ? "优惠金额（分）" : "优惠百分比" }}<Input v-model.number="form.value" type="number" min="1" :max="form.type === 'PERCENT' ? 100 : undefined" required /></label><label class="grid gap-2 text-sm font-medium">最低订单金额（分）<Input v-model.number="form.minAmount" type="number" min="0" /></label><label class="grid gap-2 text-sm font-medium">最多使用次数<Input v-model.number="form.maxUses" type="number" min="0" /></label><label class="grid gap-2 text-sm font-medium">适用商品 ID<Input v-model="form.productIds" class="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="例如：1,2,3；留空为全部商品" /></label><label class="grid gap-2 text-sm font-medium">过期时间<Input v-model="form.expiresAt" type="datetime-local" class="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm" /></label><label class="flex items-center justify-between gap-3 text-sm font-medium"><span>启用此优惠码</span><Switch v-model="form.isActive" /></label></div></div>
+          <DialogFooter class="border-t bg-background px-6 py-4"><DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose><Button type="submit" :disabled="saving">{{ saving ? "保存中..." : form.id ? "保存优惠码" : "创建优惠码" }}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>
 
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from "reka-ui";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

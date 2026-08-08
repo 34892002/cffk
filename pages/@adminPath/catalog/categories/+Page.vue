@@ -19,8 +19,8 @@
           </Select>
         </div>
         <div class="flex items-center gap-2">
-          <Button variant="outline" size="icon-sm" :disabled="loading" aria-label="刷新数据" title="刷新数据" @click="loadCategories">
-            <RefreshCwIcon :class="loading ? 'animate-spin' : ''" />
+          <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadCategories">
+            <RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新
           </Button>
           <Button size="sm" @click="openCreate"><PlusIcon />添加分类</Button>
         </div>
@@ -39,28 +39,30 @@
       </template>
     </AdminDataTable>
 
-    <DialogRoot v-model:open="dialogOpen">
-      <DialogPortal>
-        <DialogOverlay class="fixed inset-0 z-50 bg-black/50" />
-        <DialogContent class="fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 rounded-lg border bg-background p-6 shadow-lg">
-          <DialogTitle class="text-lg font-semibold">{{ form.id ? "编辑分类" : "添加分类" }}</DialogTitle>
+    <Dialog v-model:open="dialogOpen">
+      <DialogContent>
+        <DialogHeader class="pr-8">
+          <DialogTitle>{{ form.id ? "编辑分类" : "添加分类" }}</DialogTitle>
           <DialogDescription>停用分类前，需要先下架该分类下的商品。</DialogDescription>
-          <form class="grid gap-4" @submit.prevent="saveCategory">
-            <div class="grid gap-2"><Label for="category-name">名称</Label><Input id="category-name" v-model="form.name" required /></div>
-            <div class="grid gap-2"><Label for="category-slug">Slug</Label><Input id="category-slug" v-model="form.slug" required placeholder="software" /></div>
-            <div class="grid gap-2"><Label for="category-description">描述</Label><Input id="category-description" v-model="form.description" /></div>
-            <div class="grid gap-2"><Label for="category-sort">排序</Label><Input id="category-sort" v-model.number="form.sort" type="number" min="0" required /></div>
-            <div class="flex justify-end gap-2 pt-2"><DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose><Button type="submit" :disabled="saving">{{ saving ? "保存中..." : form.id ? "保存分类" : "创建分类" }}</Button></div>
-          </form>
-        </DialogContent>
-      </DialogPortal>
-    </DialogRoot>
+        </DialogHeader>
+        <form class="grid gap-4" @submit.prevent="saveCategory">
+          <div class="grid gap-2"><Label for="category-name">名称</Label><Input id="category-name" v-model="form.name" required /></div>
+          <div class="grid gap-2"><Label for="category-slug">Slug</Label><Input id="category-slug" v-model="form.slug" required placeholder="software" /></div>
+          <div class="grid gap-2"><Label for="category-description">描述</Label><Input id="category-description" v-model="form.description" /></div>
+          <div class="grid gap-2"><Label for="category-sort">排序</Label><Input id="category-sort" v-model.number="form.sort" type="number" min="0" required /></div>
+          <DialogFooter>
+            <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
+            <Button type="submit" :disabled="saving">{{ saving ? "保存中..." : form.id ? "保存分类" : "创建分类" }}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>
 
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from "reka-ui";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

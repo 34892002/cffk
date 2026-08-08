@@ -2,15 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { PlusIcon, RefreshCwIcon, Trash2Icon, UploadIcon } from "@lucide/vue";
 import { toast } from "vue-sonner";
-import {
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogOverlay,
-  DialogPortal,
-  DialogRoot,
-  DialogTitle,
-} from "reka-ui";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 
@@ -269,60 +261,50 @@ function formatDate(value: Date) {
       </CardContent>
     </Card>
 
-    <DialogRoot v-model:open="addDialogOpen">
-      <DialogPortal>
-        <DialogOverlay class="fixed inset-0 z-50 bg-black/50" />
-        <DialogContent class="fixed left-1/2 top-1/2 z-50 grid max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-background p-0 shadow-lg">
-          <div class="border-b px-6 py-5"><DialogTitle class="text-lg font-semibold">新增卡密</DialogTitle><DialogDescription>为自动发货商品添加一条未售出的卡密。</DialogDescription></div>
-          <form class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" @submit.prevent="createCard">
-            <div class="min-h-0 overflow-y-auto px-6 py-5">
-              <div class="grid gap-4">
-                <label class="grid gap-2 text-sm font-medium">商品<Select :model-value="singleForm.productId === undefined ? undefined : String(singleForm.productId)" @update:model-value="singleForm.productId = Number($event)"><SelectTrigger><SelectValue placeholder="选择自动卡密商品" /></SelectTrigger><SelectContent><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent></Select></label>
-                <label class="grid gap-2 text-sm font-medium">批次号（可选）<Input v-model="singleForm.batchNo" placeholder="例如：20260806" /></label>
-                <label class="grid gap-2 text-sm font-medium">卡密内容<Textarea v-model="singleForm.content" required class="min-h-28" placeholder="输入一条卡密" /></label>
-              </div>
-            </div><div class="flex justify-end gap-2 border-t bg-background px-6 py-4"><DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose><Button type="submit" :disabled="saving || !singleForm.productId">新增卡密</Button></div>
-          </form>
-        </DialogContent>
-      </DialogPortal>
-    </DialogRoot>
+    <Dialog v-model:open="addDialogOpen">
+      <DialogContent class="grid max-h-[calc(100vh-2rem)] max-w-xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0">
+        <DialogHeader class="border-b px-6 py-5 pr-8"><DialogTitle>新增卡密</DialogTitle><DialogDescription>为自动发货商品添加一条未售出的卡密。</DialogDescription></DialogHeader>
+        <form class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" @submit.prevent="createCard">
+          <div class="min-h-0 overflow-y-auto px-6 py-5">
+            <div class="grid gap-4">
+              <label class="grid gap-2 text-sm font-medium">商品<Select :model-value="singleForm.productId === undefined ? undefined : String(singleForm.productId)" @update:model-value="singleForm.productId = Number($event)"><SelectTrigger><SelectValue placeholder="选择自动卡密商品" /></SelectTrigger><SelectContent><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent></Select></label>
+              <label class="grid gap-2 text-sm font-medium">批次号（可选）<Input v-model="singleForm.batchNo" placeholder="例如：20260806" /></label>
+              <label class="grid gap-2 text-sm font-medium">卡密内容<Textarea v-model="singleForm.content" required class="min-h-28" placeholder="输入一条卡密" /></label>
+            </div>
+          </div>
+          <DialogFooter class="border-t bg-background px-6 py-4"><DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose><Button type="submit" :disabled="saving || !singleForm.productId">新增卡密</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
 
-    <DialogRoot v-model:open="importDialogOpen">
-      <DialogPortal>
-        <DialogOverlay class="fixed inset-0 z-50 bg-black/50" />
-        <DialogContent class="fixed left-1/2 top-1/2 z-50 grid max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-background p-0 shadow-lg">
-          <div class="border-b px-6 py-5"><DialogTitle class="text-lg font-semibold">批量导入卡密</DialogTitle><DialogDescription>每行一条卡密；重复行会自动去重，单次最多 1,000 条。</DialogDescription></div>
-          <form class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" @submit.prevent="importCards">
-            <div class="min-h-0 overflow-y-auto px-6 py-5">
-              <div class="grid gap-4">
-                <label class="grid gap-2 text-sm font-medium">商品<Select :model-value="importForm.productId === undefined ? undefined : String(importForm.productId)" @update:model-value="importForm.productId = Number($event)"><SelectTrigger><SelectValue placeholder="选择自动卡密商品" /></SelectTrigger><SelectContent><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent></Select></label>
-                <label class="grid gap-2 text-sm font-medium">批次号（可选）<Input v-model="importForm.batchNo" placeholder="例如：20260806" /></label>
-                <label class="grid gap-2 text-sm font-medium">卡密内容<Textarea v-model="importForm.content" required class="min-h-48" placeholder="每行输入一条卡密" /></label>
-              </div>
-            </div><div class="flex justify-end gap-2 border-t bg-background px-6 py-4"><DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose><Button type="submit" :disabled="saving || !importForm.productId">批量导入</Button></div>
-          </form>
-        </DialogContent>
-      </DialogPortal>
-    </DialogRoot>
+    <Dialog v-model:open="importDialogOpen">
+      <DialogContent class="grid max-h-[calc(100vh-2rem)] max-w-xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0">
+        <DialogHeader class="border-b px-6 py-5 pr-8"><DialogTitle>批量导入卡密</DialogTitle><DialogDescription>每行一条卡密；重复行会自动去重，单次最多 1,000 条。</DialogDescription></DialogHeader>
+        <form class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" @submit.prevent="importCards">
+          <div class="min-h-0 overflow-y-auto px-6 py-5">
+            <div class="grid gap-4">
+              <label class="grid gap-2 text-sm font-medium">商品<Select :model-value="importForm.productId === undefined ? undefined : String(importForm.productId)" @update:model-value="importForm.productId = Number($event)"><SelectTrigger><SelectValue placeholder="选择自动卡密商品" /></SelectTrigger><SelectContent><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent></Select></label>
+              <label class="grid gap-2 text-sm font-medium">批次号（可选）<Input v-model="importForm.batchNo" placeholder="例如：20260806" /></label>
+              <label class="grid gap-2 text-sm font-medium">卡密内容<Textarea v-model="importForm.content" required class="min-h-48" placeholder="每行输入一条卡密" /></label>
+            </div>
+          </div>
+          <DialogFooter class="border-t bg-background px-6 py-4"><DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose><Button type="submit" :disabled="saving || !importForm.productId">批量导入</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
 
-    <DialogRoot v-model:open="deleteDialogOpen">
-      <DialogPortal>
-        <DialogOverlay class="fixed inset-0 z-50 bg-black/50" />
-        <DialogContent class="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-6 shadow-lg">
-          <DialogTitle class="text-lg font-semibold">删除未售出卡密？</DialogTitle><DialogDescription class="mt-2">此操作不可恢复。卡密 #{{ cardToDelete?.id }} 将被永久删除。</DialogDescription>
-          <div class="mt-6 flex justify-end gap-2"><DialogClose as-child><Button variant="outline">取消</Button></DialogClose><Button variant="destructive" :disabled="saving" @click="deleteCard">确认删除</Button></div>
-        </DialogContent>
-      </DialogPortal>
-    </DialogRoot>
+    <Dialog v-model:open="deleteDialogOpen">
+      <DialogContent class="max-w-md">
+        <DialogHeader class="pr-8"><DialogTitle>删除未售出卡密？</DialogTitle><DialogDescription>此操作不可恢复。卡密 #{{ cardToDelete?.id }} 将被永久删除。</DialogDescription></DialogHeader>
+        <DialogFooter><DialogClose as-child><Button variant="outline">取消</Button></DialogClose><Button variant="destructive" :disabled="saving" @click="deleteCard">确认删除</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-    <DialogRoot v-model:open="clearDialogOpen">
-      <DialogPortal>
-        <DialogOverlay class="fixed inset-0 z-50 bg-black/50" />
-        <DialogContent class="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-6 shadow-lg">
-          <DialogTitle class="text-lg font-semibold">清空未售库存？</DialogTitle><DialogDescription class="mt-2">将永久删除“{{ selectedProductName }}”的所有未售出卡密。此操作不可恢复。</DialogDescription>
-          <div class="mt-6 flex justify-end gap-2"><DialogClose as-child><Button variant="outline">取消</Button></DialogClose><Button variant="destructive" :disabled="saving" @click="clearUnusedCards">确认清空</Button></div>
-        </DialogContent>
-      </DialogPortal>
-    </DialogRoot>
+    <Dialog v-model:open="clearDialogOpen">
+      <DialogContent class="max-w-md">
+        <DialogHeader class="pr-8"><DialogTitle>清空未售库存？</DialogTitle><DialogDescription>将永久删除“{{ selectedProductName }}”的所有未售出卡密。此操作不可恢复。</DialogDescription></DialogHeader>
+        <DialogFooter><DialogClose as-child><Button variant="outline">取消</Button></DialogClose><Button variant="destructive" :disabled="saving" @click="clearUnusedCards">确认清空</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>

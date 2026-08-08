@@ -29,7 +29,7 @@ type SeoPageContext = { site?: Site; data?: ProductData; urlPathname?: string; r
 const pageContext = usePageContext() as SeoPageContext;
 const isPrivatePage = computed(() => {
   const pathname = pageContext.urlPathname || "/";
-  return Boolean(pageContext.routeParams?.adminPath) || pathname === "/reg" || pathname === "/order" || pathname === "/payment-result" || pathname.startsWith("/_error");
+  return Boolean(pageContext.routeParams?.adminPath) || pathname === "/setup" || pathname === "/order" || pathname === "/payment-result" || pathname.startsWith("/_error");
 });
 const siteUrl = computed(() => normalizeOrigin(pageContext.site?.siteUrl) || normalizeOrigin(pageContext.urlParsed?.origin));
 const iconUrl = computed(() => pageContext.site?.logoIcon || pageContext.site?.logo || defaultLogoUrl);

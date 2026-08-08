@@ -994,7 +994,7 @@ SEO 文本处理要求：
 | 商品详情 `/product/:slug` | 商品名 - 站点名 | 商品摘要 | 是 | product | 默认 |
 | 订单查询 `/order` | 订单查询 - 站点名 | 固定描述或站点描述 | 否或 noindex | 不重点生成 | noindex |
 | 支付结果 `/payment-result` | 支付结果 - 站点名 | 固定描述 | 否 | 不重点生成 | noindex |
-| 注册 `/reg` | 注册 - 站点名 | 固定描述 | 否或 noindex | 不重点生成 | noindex |
+| 初始化 `/setup` | 初始化管理员账号 - 站点名 | 固定描述 | 否或 noindex | 不重点生成 | noindex |
 | 后台登录 | 后台登录 - 站点名 | 固定描述 | 否 | 不生成公共 OG | noindex |
 | 后台管理 | 页面名 - 站点名 | 不重要 | 否 | 不生成公共 OG | noindex |
 | 错误页 | 页面未找到 - 站点名 | 固定描述 | 否 | 不生成 | noindex |

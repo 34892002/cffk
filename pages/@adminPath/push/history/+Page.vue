@@ -4,15 +4,16 @@
     <Alert v-if="error" variant="destructive"><AlertTitle>无法读取发送日志</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
     <AdminDataTable :columns="columns" :rows="logs" row-key="id" empty-text="没有符合条件的推送记录。">
       <template #toolbar>
-        <Select v-model="channel" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按渠道筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部渠道</SelectItem><SelectItem value="EMAIL">电子邮件</SelectItem><SelectItem value="WECHAT">微信</SelectItem><SelectItem value="TELEGRAM">Telegram</SelectItem></SelectContent></Select>
-        <Select v-model="messageType" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按消息类型筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部类型</SelectItem><SelectItem value="NORMAL">客户消息</SelectItem><SelectItem value="ADMIN">管理消息</SelectItem></SelectContent></Select>
-        <Select v-model="scene" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按场景筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部场景</SelectItem><SelectItem value="ORDER_PAID">支付成功</SelectItem><SelectItem value="DELIVERY_SUCCESS">发货成功</SelectItem><SelectItem value="DELIVERY_FAILED">发货失败</SelectItem></SelectContent></Select>
-        <Input v-model="orderNo" class="h-8 w-36" placeholder="订单号" @change="resetAndLoad" />
-        <Input v-model.number="orderId" class="h-8 w-28" placeholder="订单 ID" inputmode="numeric" @change="resetAndLoad" />
-        <Input v-model="from" class="h-8 w-36" type="datetime-local" aria-label="开始时间" @change="resetAndLoad" />
-        <Input v-model="to" class="h-8 w-36" type="datetime-local" aria-label="结束时间" @change="resetAndLoad" />
-        <Select v-model="status" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部状态</SelectItem><SelectItem value="PENDING">等待发送</SelectItem><SelectItem value="SUCCESS">成功</SelectItem><SelectItem value="FAILED">失败</SelectItem><SelectItem value="SKIPPED">已跳过</SelectItem><SelectItem value="EXHAUSTED">重试耗尽</SelectItem></SelectContent></Select>
-        <Button variant="outline" size="icon-sm" :disabled="loading" aria-label="刷新数据" title="刷新数据" @click="loadLogs"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" /></Button>
+        <div class="flex flex-1 flex-wrap items-center gap-2">
+          <Select v-model="channel" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按渠道筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部渠道</SelectItem><SelectItem value="EMAIL">电子邮件</SelectItem><SelectItem value="WECHAT">微信</SelectItem><SelectItem value="TELEGRAM">Telegram</SelectItem></SelectContent></Select>
+          <Select v-model="messageType" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按消息类型筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部类型</SelectItem><SelectItem value="NORMAL">客户消息</SelectItem><SelectItem value="ADMIN">管理消息</SelectItem></SelectContent></Select>
+          <Select v-model="scene" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按场景筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部场景</SelectItem><SelectItem value="ORDER_PAID">支付成功</SelectItem><SelectItem value="DELIVERY_SUCCESS">发货成功</SelectItem><SelectItem value="DELIVERY_FAILED">发货失败</SelectItem></SelectContent></Select>
+          <Select v-model="status" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部状态</SelectItem><SelectItem value="PENDING">等待发送</SelectItem><SelectItem value="SUCCESS">成功</SelectItem><SelectItem value="FAILED">失败</SelectItem><SelectItem value="SKIPPED">已跳过</SelectItem><SelectItem value="EXHAUSTED">重试耗尽</SelectItem></SelectContent></Select>
+          <Input v-model="orderNo" class="h-8 w-48" placeholder="订单号" @change="resetAndLoad" />
+          <Input v-model="from" class="h-8 w-44" type="datetime-local" aria-label="开始时间" @change="resetAndLoad" />
+          <Input v-model="to" class="h-8 w-44" type="datetime-local" aria-label="结束时间" @change="resetAndLoad" />
+        </div>
+        <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadLogs"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
       </template>
       <template #cell-createdAt="{ row }"><span class="whitespace-nowrap text-xs">{{ formatDate(row.createdAt) }}</span></template>
       <template #cell-channel="{ row }"><Badge variant="outline">{{ channelLabel(row.channel) }}</Badge></template>
@@ -57,7 +58,7 @@ const status = ref<"ALL" | "PENDING" | "SUCCESS" | "FAILED" | "SKIPPED" | "EXHAU
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
-const orderId = ref<number | undefined>();
+
 const orderNo = ref("");
 const from = ref("");
 const to = ref("");
@@ -68,7 +69,7 @@ async function loadLogs() {
   loading.value = true;
   error.value = null;
   try {
-    const result = await runTelefunc(() => onGetPushLogs({ page: page.value, pageSize: pageSize.value, ...(channel.value !== "ALL" ? { channel: channel.value } : {}), ...(messageType.value !== "ALL" ? { messageType: messageType.value } : {}), ...(scene.value !== "ALL" ? { scene: scene.value } : {}), ...(status.value !== "ALL" ? { status: status.value } : {}), ...(orderId.value ? { orderId: orderId.value } : {}), ...(orderNo.value.trim() ? { orderNo: orderNo.value.trim() } : {}), ...(from.value ? { from: new Date(from.value).toISOString() } : {}), ...(to.value ? { to: new Date(to.value).toISOString() } : {}) }), { notifyError: false });
+    const result = await runTelefunc(() => onGetPushLogs({ page: page.value, pageSize: pageSize.value, ...(channel.value !== "ALL" ? { channel: channel.value } : {}), ...(messageType.value !== "ALL" ? { messageType: messageType.value } : {}), ...(scene.value !== "ALL" ? { scene: scene.value } : {}), ...(status.value !== "ALL" ? { status: status.value } : {}), ...(orderNo.value.trim() ? { orderNo: orderNo.value.trim() } : {}), ...(from.value ? { from: new Date(from.value).toISOString() } : {}), ...(to.value ? { to: new Date(to.value).toISOString() } : {}) }), { notifyError: false });
     logs.value = result.logs;
     total.value = result.total;
     page.value = result.page;

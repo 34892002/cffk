@@ -120,7 +120,7 @@ BETTER_AUTH_SECRET=local-development-secret
 
 提供的页面：
 
-- `/reg`：注册
+- `/setup`：初始化管理员账号
 - `/${ADMIN_PATH}`：管理员登录
 - `/${ADMIN_PATH}/dash`：受登录保护的后台主页
 

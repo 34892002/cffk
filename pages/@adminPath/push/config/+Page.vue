@@ -1,7 +1,7 @@
 <template>
   <section class="flex w-full flex-col gap-6">
     <AdminPageHeader>
-      <template #actions><Button variant="outline" :disabled="loading" @click="loadConfig">刷新数据</Button></template>
+      <template #actions><Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadConfig"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button></template>
     </AdminPageHeader>
 
     <Alert v-if="error" variant="destructive"><AlertTitle>操作未完成</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
@@ -30,6 +30,7 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref } from "vue";
+import { RefreshCwIcon } from "@lucide/vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
