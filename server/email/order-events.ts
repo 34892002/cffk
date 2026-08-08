@@ -1,132 +1,27 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { adminBootstrap, emailLog, order, siteSetting, user } from "@/database/drizzle/schema";
-import { sendEmail, type EmailScene } from "./service";
+import { order } from "@/database/drizzle/schema";
+import { dispatchPush, orderPushVariables } from "@/server/push/service";
 
 type EmailRuntime = Record<string, unknown>;
+type OrderScene = "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED";
 
-type OrderEmailRecord = {
-  id: number;
-  orderNo: string;
-  queryToken: string;
-  productName: string;
-  quantity: number;
-  amount: number;
-  contactType: "EMAIL" | "QQ" | "TELEGRAM" | "OTHER";
-  contactValue: string | null;
-  paymentStatus: "UNPAID" | "PAID" | "FAILED";
-  deliveryStatus: "NOT_DELIVERED" | "DELIVERED" | "FAILED";
-};
-
-type RecipientType = "CUSTOMER" | "ADMIN";
-
-function isEmailAddress(value: string | null | undefined) {
-  return /^\S+@\S+\.\S+$/.test(value?.trim() ?? "");
-}
-
-function formatAmount(amount: number) {
-  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100);
-}
-
-async function hasSuccessfulDelivery(database: D1Database, orderId: number, scene: EmailScene, to: string) {
-  const [record] = await createDrizzleDb(database)
-    .select({ id: emailLog.id })
-    .from(emailLog)
-    .where(and(eq(emailLog.orderId, orderId), eq(emailLog.scene, scene), eq(emailLog.toEmail, to), eq(emailLog.status, "SUCCESS")))
-    .limit(1);
-  return Boolean(record);
-}
-
-async function sendOnce(
-  database: D1Database,
-  runtime: EmailRuntime,
-  record: OrderEmailRecord,
-  scene: EmailScene,
-  to: string,
-  recipientType: RecipientType,
-  variables: Record<string, string | number>,
-) {
-  const recipient = to.trim();
-  if (!isEmailAddress(recipient) || await hasSuccessfulDelivery(database, record.id, scene, recipient)) return;
-  await sendEmail(database, runtime, {
-    scene,
-    to: recipient,
-    orderId: record.id,
-    variables,
-    recipientType,
-    ...(recipientType === "ADMIN" ? { triggeredBy: "system:admin" } : {}),
-  });
-}
-
-async function getRootEmails(database: D1Database) {
-  const rows = await createDrizzleDb(database)
-    .select({ email: user.email })
-    .from(adminBootstrap)
-    .innerJoin(user, eq(adminBootstrap.userId, user.id))
-    .where(eq(adminBootstrap.id, 1));
-  return rows.map((row) => row.email.trim()).filter(isEmailAddress);
-}
-
-async function sendToRoot(
-  database: D1Database,
-  runtime: EmailRuntime,
-  record: OrderEmailRecord,
-  scene: EmailScene,
-  variables: Record<string, string | number>,
-) {
-  const emails = await getRootEmails(database);
-  await Promise.all(emails.map((email) => sendOnce(database, runtime, record, scene, email, "ADMIN", variables).catch(() => undefined)));
-}
-
-async function getOrderEmailContext(database: D1Database, orderId: number) {
-  const db = createDrizzleDb(database);
-  const [record] = await db
-    .select({
-      id: order.id,
-      orderNo: order.orderNo,
-      queryToken: order.queryToken,
-      productName: order.productNameSnapshot,
-      quantity: order.quantity,
-      amount: order.amount,
-      contactType: order.contactType,
-      contactValue: order.contactValue,
-      paymentStatus: order.paymentStatus,
-      deliveryStatus: order.deliveryStatus,
-    })
-    .from(order)
-    .where(eq(order.id, orderId))
-    .limit(1);
-  if (!record) return null;
-  const [settings] = await db.select({ siteName: siteSetting.siteName, siteUrl: siteSetting.siteUrl, footerText: siteSetting.footerText, supportContact: siteSetting.supportContact }).from(siteSetting).where(eq(siteSetting.id, 1)).limit(1);
-  const siteName = settings?.siteName || "CFFK";
-  const queryUrl = settings?.siteUrl ? `${settings.siteUrl.replace(/\/$/, "")}/order` : "/order";
-  return { record, common: { siteName, orderNo: record.orderNo, productName: record.productName, quantity: record.quantity, amount: formatAmount(record.amount), queryUrl, footerText: settings?.footerText || "", supportContact: settings?.supportContact || "" } };
-}
-
-async function notifyScene(
-  database: D1Database,
-  runtime: EmailRuntime,
-  record: OrderEmailRecord,
-  scene: EmailScene,
-  variables: Record<string, string | number>,
-) {
-  const sends: Promise<void>[] = [sendToRoot(database, runtime, record, scene, variables)];
-  const customerEmail = record.contactValue?.trim();
-  if (record.contactType === "EMAIL" && customerEmail && isEmailAddress(customerEmail)) {
-    sends.push(sendOnce(database, runtime, record, scene, customerEmail, "CUSTOMER", variables));
-  }
-  await Promise.all(sends.map((send) => send.catch(() => undefined)));
+async function notify(database: D1Database, runtime: EmailRuntime, orderId: number, scene: OrderScene, extraVariables: Record<string, string | number> = {}) {
+  const variables = await orderPushVariables(database, orderId);
+  if (!variables) return;
+  const payload = { ...variables, ...extraVariables };
+  await Promise.all([
+    dispatchPush(database, runtime, { scene, messageType: "NORMAL", orderId, variables: payload, source: `order:${scene.toLowerCase()}` }),
+    dispatchPush(database, runtime, { scene, messageType: "ADMIN", orderId, variables: payload, source: `order:${scene.toLowerCase()}` }),
+  ]);
 }
 
 export async function notifyOrderEmailEvents(database: D1Database, runtime: EmailRuntime, orderId: number) {
   try {
-    const context = await getOrderEmailContext(database, orderId);
-    if (!context) return;
-    const { record, common } = context;
-    if (record.paymentStatus === "PAID") await notifyScene(database, runtime, record, "ORDER_PAID", common);
-    if (record.deliveryStatus === "DELIVERED") {
-      await notifyScene(database, runtime, record, "DELIVERY_SUCCESS", { ...common, deliveryItems: "请使用订单号和查询令牌在订单查询页查看交付内容。" });
-    }
+    const [record] = await createDrizzleDb(database).select({ paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus }).from(order).where(eq(order.id, orderId)).limit(1);
+    if (!record) return;
+    if (record.paymentStatus === "PAID") await notify(database, runtime, orderId, "ORDER_PAID");
+    if (record.deliveryStatus === "DELIVERED") await notify(database, runtime, orderId, "DELIVERY_SUCCESS");
   } catch {
     // Notification failures never change payment or order state.
   }
@@ -134,9 +29,7 @@ export async function notifyOrderEmailEvents(database: D1Database, runtime: Emai
 
 export async function notifyOrderDeliveryFailure(database: D1Database, runtime: EmailRuntime, orderId: number, errorMessage: string) {
   try {
-    const context = await getOrderEmailContext(database, orderId);
-    if (!context) return;
-    await notifyScene(database, runtime, context.record, "DELIVERY_FAILED", { ...context.common, errorMessage });
+    await notify(database, runtime, orderId, "DELIVERY_FAILED", { errorMessage });
   } catch {
     // Delivery failure notices are best-effort and cannot affect the recorded order state.
   }

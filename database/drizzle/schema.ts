@@ -258,18 +258,19 @@ export const paymentLog = sqliteTable(
   (table) => [index("paymentLog_provider_createdAt_idx").on(table.provider, table.createdAt), index("paymentLog_orderNo_idx").on(table.orderNo)],
 );
 
-export const emailProvider = sqliteTable(
-  "emailProvider",
+export const pushChannelConfig = sqliteTable(
+  "pushChannelConfig",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    provider: text("provider", { enum: ["API", "SMTP", "CLOUDFLARE"] }).notNull(),
+    channel: text("channel", { enum: ["EMAIL", "WECHAT", "TELEGRAM"] }).notNull(),
+    provider: text("provider").notNull(),
     name: text("name").notNull(),
     isEnabled: integer("isEnabled", { mode: "boolean" }).notNull().default(false),
     configJson: text("configJson").notNull(),
     createdAt,
     updatedAt,
   },
-  (table) => [uniqueIndex("emailProvider_provider_unique").on(table.provider)],
+  (table) => [index("pushChannelConfig_channel_provider_idx").on(table.channel, table.provider), index("pushChannelConfig_channel_enabled_idx").on(table.channel, table.isEnabled)],
 );
 
 export const emailTemplate = sqliteTable(
@@ -278,7 +279,6 @@ export const emailTemplate = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     scene: text("scene", { enum: ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"] }).notNull(),
     name: text("name").notNull(),
-    isEnabled: integer("isEnabled", { mode: "boolean" }).notNull().default(true),
     templateJson: text("templateJson").notNull(),
     createdAt,
     updatedAt,
@@ -286,72 +286,58 @@ export const emailTemplate = sqliteTable(
   (table) => [uniqueIndex("emailTemplate_scene_unique").on(table.scene)],
 );
 
-export const emailLog = sqliteTable(
-  "emailLog",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    orderId: integer("orderId").references(() => order.id, { onDelete: "set null" }),
-    provider: text("provider").notNull(),
-    scene: text("scene").notNull(),
-    status: text("status", { enum: ["SUCCESS", "FAILED"] }).notNull(),
-    toEmail: text("toEmail").notNull(),
-    subject: text("subject").notNull(),
-    messageId: text("messageId"),
-    error: text("error"),
-    triggeredBy: text("triggeredBy"),
-    createdAt,
-  },
-  (table) => [index("emailLog_orderId_idx").on(table.orderId), index("emailLog_status_createdAt_idx").on(table.status, table.createdAt)],
-);
-
 export const pushConfig = sqliteTable("pushConfig", {
   id: integer("id").primaryKey().default(1),
   isEnabled: integer("isEnabled", { mode: "boolean" }).notNull().default(true),
-  emailEnabled: integer("emailEnabled", { mode: "boolean" }).notNull().default(true),
-  wecomEnabled: integer("wecomEnabled", { mode: "boolean" }).notNull().default(false),
-  telegramEnabled: integer("telegramEnabled", { mode: "boolean" }).notNull().default(false),
-  customerOrderPaid: integer("customerOrderPaid", { mode: "boolean" }).notNull().default(true),
-  customerDeliverySuccess: integer("customerDeliverySuccess", { mode: "boolean" }).notNull().default(true),
-  customerDeliveryFailed: integer("customerDeliveryFailed", { mode: "boolean" }).notNull().default(false),
-  adminOrderPaid: integer("adminOrderPaid", { mode: "boolean" }).notNull().default(false),
-  adminDeliverySuccess: integer("adminDeliverySuccess", { mode: "boolean" }).notNull().default(true),
-  adminDeliveryFailed: integer("adminDeliveryFailed", { mode: "boolean" }).notNull().default(true),
   createdAt,
   updatedAt,
 });
+
+export const pushPolicy = sqliteTable(
+  "pushPolicy",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    messageType: text("messageType", { enum: ["NORMAL", "ADMIN"] }).notNull(),
+    scene: text("scene", { enum: ["ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"] }).notNull(),
+    channelsJson: text("channelsJson").notNull().default("[]"),
+    isEnabled: integer("isEnabled", { mode: "boolean" }).notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [uniqueIndex("pushPolicy_messageType_scene_unique").on(table.messageType, table.scene)],
+);
 
 export const pushLog = sqliteTable(
   "pushLog",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     orderId: integer("orderId").references(() => order.id, { onDelete: "set null" }),
-    channel: text("channel", { enum: ["EMAIL", "WECOM", "TELEGRAM"] }).notNull(),
+    channelConfigId: integer("channelConfigId").references(() => pushChannelConfig.id, { onDelete: "set null" }),
+    idempotencyKey: text("idempotencyKey"),
+    messageType: text("messageType", { enum: ["NORMAL", "ADMIN"] }).notNull().default("NORMAL"),
+    channel: text("channel", { enum: ["EMAIL", "WECHAT", "TELEGRAM"] }).notNull(),
     provider: text("provider").notNull(),
     scene: text("scene", { enum: ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"] }).notNull(),
     recipient: text("recipient").notNull(),
     subject: text("subject"),
-    status: text("status", { enum: ["SUCCESS", "FAILED"] }).notNull(),
+    status: text("status", { enum: ["PENDING", "PROCESSING", "SUCCESS", "FAILED", "SKIPPED", "EXHAUSTED"] }).notNull(),
+    attemptCount: integer("attemptCount").notNull().default(0),
     messageId: text("messageId"),
     error: text("error"),
     triggeredBy: text("triggeredBy"),
     createdAt,
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }),
   },
-  (table) => [index("pushLog_channel_createdAt_idx").on(table.channel, table.createdAt), index("pushLog_status_createdAt_idx").on(table.status, table.createdAt), index("pushLog_orderId_idx").on(table.orderId)],
+  (table) => [uniqueIndex("pushLog_idempotencyKey_unique").on(table.idempotencyKey), index("pushLog_channel_createdAt_idx").on(table.channel, table.createdAt), index("pushLog_status_createdAt_idx").on(table.status, table.createdAt), index("pushLog_orderId_idx").on(table.orderId)],
 );
 
-export const emailRetry = sqliteTable(
-  "emailRetry",
+export const pushRetry = sqliteTable(
+  "pushRetry",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    emailLogId: integer("emailLogId").notNull().references(() => emailLog.id),
-    provider: text("provider").notNull(),
-    providerConfigJson: text("providerConfigJson").notNull(),
-    scene: text("scene").notNull(),
-    toEmail: text("toEmail").notNull(),
-    subject: text("subject").notNull(),
-    body: text("body").notNull(),
-    format: text("format", { enum: ["text", "html"] }).notNull(),
-    status: text("status", { enum: ["PENDING", "SENT", "EXHAUSTED"] }).notNull().default("PENDING"),
+    pushLogId: integer("pushLogId").notNull().references(() => pushLog.id, { onDelete: "cascade" }),
+    payloadJson: text("payloadJson").notNull(),
+    status: text("status", { enum: ["PENDING", "PROCESSING", "EXHAUSTED"] }).notNull().default("PENDING"),
     attemptCount: integer("attemptCount").notNull().default(0),
     maxAttempts: integer("maxAttempts").notNull().default(5),
     nextAttemptAt: integer("nextAttemptAt", { mode: "timestamp_ms" }).notNull(),
@@ -359,7 +345,7 @@ export const emailRetry = sqliteTable(
     createdAt,
     updatedAt,
   },
-  (table) => [index("emailRetry_status_nextAttemptAt_idx").on(table.status, table.nextAttemptAt), index("emailRetry_emailLogId_idx").on(table.emailLogId)],
+  (table) => [index("pushRetry_status_nextAttemptAt_idx").on(table.status, table.nextAttemptAt), uniqueIndex("pushRetry_pushLogId_unique").on(table.pushLogId)],
 );
 
 
@@ -405,12 +391,14 @@ export const schema = {
   orderDelivery,
   paymentProvider,
   paymentLog,
-  emailProvider,
+  pushChannelConfig,
   emailTemplate,
-  emailLog,
+
   pushConfig,
+  pushPolicy,
   pushLog,
-  emailRetry,
+  pushRetry,
+
   s3Config,
   media,
 };

@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { adminPages, getAdminPageMeta } from "@/lib/admin-navigation";
+import { adminNavigation, adminPages, getAdminPageMeta, isNavigationModule } from "@/lib/admin-navigation";
 import { usePageContext } from "vike-vue/usePageContext";
 
 const pageContext = usePageContext();
 const basePath = computed(() => `/${pageContext.routeParams.adminPath}`);
 const currentPath = computed(() => pageContext.urlPathname.replace(/\/$/, ""));
 const page = computed(() => getAdminPageMeta(pageContext.urlPathname, basePath.value));
-const items = [
-  adminPages.email,
-  adminPages.mailPostOffice,
-  adminPages.mailTemplates,
-];
+const items = computed(() => {
+  const pushItems = adminNavigation.push.items;
+  const emailItem = pushItems.find((item) => item.path === adminPages.email.path);
+  return emailItem && isNavigationModule(emailItem) ? [emailItem, ...emailItem.items] : [adminPages.email];
+});
 
 function isActive(path: string) {
   return currentPath.value === `${basePath.value}${path}`;

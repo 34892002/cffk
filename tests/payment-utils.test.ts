@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { canonicalizeAlipayParameters, parseAmountToCents } from "../lib/payment-utils.ts";
-import { emailRetryDelayMs, renderEmailTemplate } from "../lib/email-utils.ts";
+import { pushRetryDelayMs, renderPushTemplate } from "../lib/push-utils.ts";
 import { canConfirmPayment, paymentConfirmationOutcome } from "../lib/order-state.ts";
 import { sanitizeDatabaseLogJson, sanitizeDatabaseLogText } from "../server/database-log-sanitizer.ts";
 
@@ -22,15 +22,15 @@ test("parseAmountToCents rejects malformed and unsafe values", () => {
   assert.equal(parseAmountToCents("999999999999999999999999"), null);
 });
 
-test("renderEmailTemplate replaces known variables and blanks missing variables", () => {
-  assert.equal(renderEmailTemplate("Hi {{ name }} / {{missing}} / {{amount}}", { name: "Ada", amount: 12 }), "Hi Ada /  / 12");
+test("renderPushTemplate replaces known variables and blanks missing variables", () => {
+  assert.equal(renderPushTemplate("Hi {{ name }} / {{missing}} / {{amount}}", { name: "Ada", amount: 12 }), "Hi Ada /  / 12");
 });
 
-test("email retry delay backs off and caps at one hour", () => {
-  assert.equal(emailRetryDelayMs(1), 60_000);
-  assert.equal(emailRetryDelayMs(2), 120_000);
-  assert.equal(emailRetryDelayMs(7), 3_600_000);
-  assert.equal(emailRetryDelayMs(10), 3_600_000);
+test("push retry delay backs off and caps at one hour", () => {
+  assert.equal(pushRetryDelayMs(1), 60_000);
+  assert.equal(pushRetryDelayMs(2), 120_000);
+  assert.equal(pushRetryDelayMs(7), 3_600_000);
+  assert.equal(pushRetryDelayMs(10), 3_600_000);
 });
 
 test("payment confirmation accepts only a pending unpaid order", () => {

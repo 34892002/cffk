@@ -70,61 +70,10 @@ CREATE TABLE `discountCode` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `discountCode_code_unique` ON `discountCode` (`code`);--> statement-breakpoint
 CREATE INDEX `discountCode_active_idx` ON `discountCode` (`isActive`);--> statement-breakpoint
-CREATE TABLE `emailLog` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`orderId` integer,
-	`provider` text NOT NULL,
-	`scene` text NOT NULL,
-	`status` text NOT NULL,
-	`toEmail` text NOT NULL,
-	`subject` text NOT NULL,
-	`messageId` text,
-	`error` text,
-	`triggeredBy` text,
-	`createdAt` integer NOT NULL,
-	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE set null
-);
---> statement-breakpoint
-CREATE INDEX `emailLog_orderId_idx` ON `emailLog` (`orderId`);--> statement-breakpoint
-CREATE INDEX `emailLog_status_createdAt_idx` ON `emailLog` (`status`,`createdAt`);--> statement-breakpoint
-CREATE TABLE `emailProvider` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`provider` text NOT NULL,
-	`name` text NOT NULL,
-	`isEnabled` integer DEFAULT false NOT NULL,
-	`configJson` text NOT NULL,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `emailProvider_provider_unique` ON `emailProvider` (`provider`);--> statement-breakpoint
-CREATE TABLE `emailRetry` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`emailLogId` integer NOT NULL,
-	`provider` text NOT NULL,
-	`providerConfigJson` text NOT NULL,
-	`scene` text NOT NULL,
-	`toEmail` text NOT NULL,
-	`subject` text NOT NULL,
-	`body` text NOT NULL,
-	`format` text NOT NULL,
-	`status` text DEFAULT 'PENDING' NOT NULL,
-	`attemptCount` integer DEFAULT 0 NOT NULL,
-	`maxAttempts` integer DEFAULT 5 NOT NULL,
-	`nextAttemptAt` integer NOT NULL,
-	`lastError` text,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	FOREIGN KEY (`emailLogId`) REFERENCES `emailLog`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE INDEX `emailRetry_status_nextAttemptAt_idx` ON `emailRetry` (`status`,`nextAttemptAt`);--> statement-breakpoint
-CREATE INDEX `emailRetry_emailLogId_idx` ON `emailRetry` (`emailLogId`);--> statement-breakpoint
 CREATE TABLE `emailTemplate` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`scene` text NOT NULL,
 	`name` text NOT NULL,
-	`isEnabled` integer DEFAULT true NOT NULL,
 	`templateJson` text NOT NULL,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL
@@ -256,18 +205,22 @@ CREATE TABLE `product` (
 CREATE UNIQUE INDEX `product_slug_unique` ON `product` (`slug`);--> statement-breakpoint
 CREATE INDEX `product_categoryId_idx` ON `product` (`categoryId`);--> statement-breakpoint
 CREATE INDEX `product_status_sort_idx` ON `product` (`status`,`sort`);--> statement-breakpoint
+CREATE TABLE `pushChannelConfig` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`channel` text NOT NULL,
+	`provider` text NOT NULL,
+	`name` text NOT NULL,
+	`isEnabled` integer DEFAULT false NOT NULL,
+	`configJson` text NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `pushChannelConfig_channel_provider_idx` ON `pushChannelConfig` (`channel`,`provider`);--> statement-breakpoint
+CREATE INDEX `pushChannelConfig_channel_enabled_idx` ON `pushChannelConfig` (`channel`,`isEnabled`);--> statement-breakpoint
 CREATE TABLE `pushConfig` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`isEnabled` integer DEFAULT true NOT NULL,
-	`emailEnabled` integer DEFAULT true NOT NULL,
-	`wecomEnabled` integer DEFAULT false NOT NULL,
-	`telegramEnabled` integer DEFAULT false NOT NULL,
-	`customerOrderPaid` integer DEFAULT true NOT NULL,
-	`customerDeliverySuccess` integer DEFAULT true NOT NULL,
-	`customerDeliveryFailed` integer DEFAULT false NOT NULL,
-	`adminOrderPaid` integer DEFAULT false NOT NULL,
-	`adminDeliverySuccess` integer DEFAULT true NOT NULL,
-	`adminDeliveryFailed` integer DEFAULT true NOT NULL,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL
 );
@@ -275,22 +228,56 @@ CREATE TABLE `pushConfig` (
 CREATE TABLE `pushLog` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`orderId` integer,
+	`channelConfigId` integer,
+	`idempotencyKey` text,
+	`messageType` text DEFAULT 'NORMAL' NOT NULL,
 	`channel` text NOT NULL,
 	`provider` text NOT NULL,
 	`scene` text NOT NULL,
 	`recipient` text NOT NULL,
 	`subject` text,
 	`status` text NOT NULL,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
 	`messageId` text,
 	`error` text,
 	`triggeredBy` text,
 	`createdAt` integer NOT NULL,
-	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE set null
+	`updatedAt` integer,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`channelConfigId`) REFERENCES `pushChannelConfig`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `pushLog_idempotencyKey_unique` ON `pushLog` (`idempotencyKey`);--> statement-breakpoint
 CREATE INDEX `pushLog_channel_createdAt_idx` ON `pushLog` (`channel`,`createdAt`);--> statement-breakpoint
 CREATE INDEX `pushLog_status_createdAt_idx` ON `pushLog` (`status`,`createdAt`);--> statement-breakpoint
 CREATE INDEX `pushLog_orderId_idx` ON `pushLog` (`orderId`);--> statement-breakpoint
+CREATE TABLE `pushPolicy` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`messageType` text NOT NULL,
+	`scene` text NOT NULL,
+	`channelsJson` text DEFAULT '[]' NOT NULL,
+	`isEnabled` integer DEFAULT true NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `pushPolicy_messageType_scene_unique` ON `pushPolicy` (`messageType`,`scene`);--> statement-breakpoint
+CREATE TABLE `pushRetry` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`pushLogId` integer NOT NULL,
+	`payloadJson` text NOT NULL,
+	`status` text DEFAULT 'PENDING' NOT NULL,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
+	`maxAttempts` integer DEFAULT 5 NOT NULL,
+	`nextAttemptAt` integer NOT NULL,
+	`lastError` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`pushLogId`) REFERENCES `pushLog`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `pushRetry_status_nextAttemptAt_idx` ON `pushRetry` (`status`,`nextAttemptAt`);--> statement-breakpoint
+CREATE UNIQUE INDEX `pushRetry_pushLogId_unique` ON `pushRetry` (`pushLogId`);--> statement-breakpoint
 CREATE TABLE `s3Config` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`configJson` text NOT NULL,
@@ -318,6 +305,7 @@ CREATE TABLE `siteSetting` (
 	`siteUrl` text,
 	`siteSubtitle` text,
 	`logo` text,
+	`logoIcon` text,
 	`notice` text,
 	`supportContact` text,
 	`footerText` text,

@@ -47,16 +47,23 @@ INSERT INTO `paymentProvider` (
   unixepoch('now') * 1000
 ) ON CONFLICT(`provider`) DO NOTHING;
 
-INSERT INTO `emailProvider` (
-  `provider`, `name`, `isEnabled`, `configJson`, `createdAt`, `updatedAt`
-) VALUES (
-  'CLOUDFLARE',
-  'Cloudflare Email Sending',
-  false,
-  '{"kind":"cloudflare","binding":"EMAIL","from":"orders@example.com"}',
-  unixepoch('now') * 1000,
-  unixepoch('now') * 1000
-) ON CONFLICT(`provider`) DO NOTHING;
+INSERT INTO `pushChannelConfig` (
+  `channel`, `provider`, `name`, `isEnabled`, `configJson`, `createdAt`, `updatedAt`
+)
+SELECT 'EMAIL', 'API', 'Brevo API', false, '{"schemaVersion":1,"kind":"api","apiProvider":"BREVO","endpoint":"https://api.brevo.com/v3/smtp/email","apiKey":{"secret":"BREVO_API_KEY"},"from":"orders@example.com"}', unixepoch('now') * 1000, unixepoch('now') * 1000
+WHERE NOT EXISTS (SELECT 1 FROM `pushChannelConfig` WHERE `channel` = 'EMAIL' AND `provider` = 'API' AND `name` = 'Brevo API');
+
+INSERT INTO `pushChannelConfig` (
+  `channel`, `provider`, `name`, `isEnabled`, `configJson`, `createdAt`, `updatedAt`
+)
+SELECT 'EMAIL', 'SMTP', 'SMTP 邮局', false, '{"schemaVersion":1,"kind":"smtp","host":"smtp.example.com","port":587,"secure":false,"authType":"plain","username":"","password":{"secret":"SMTP_PASSWORD"},"from":"orders@example.com"}', unixepoch('now') * 1000, unixepoch('now') * 1000
+WHERE NOT EXISTS (SELECT 1 FROM `pushChannelConfig` WHERE `channel` = 'EMAIL' AND `provider` = 'SMTP' AND `name` = 'SMTP 邮局');
+
+INSERT INTO `pushChannelConfig` (
+  `channel`, `provider`, `name`, `isEnabled`, `configJson`, `createdAt`, `updatedAt`
+)
+SELECT 'EMAIL', 'CLOUDFLARE', 'Cloudflare Email Sending', false, '{"schemaVersion":1,"kind":"cloudflare","binding":"EMAIL","from":"orders@example.com"}', unixepoch('now') * 1000, unixepoch('now') * 1000
+WHERE NOT EXISTS (SELECT 1 FROM `pushChannelConfig` WHERE `channel` = 'EMAIL' AND `provider` = 'CLOUDFLARE' AND `name` = 'Cloudflare Email Sending');
 
 -- S3-compatible storage remains disabled until its Worker Secrets are configured.
 INSERT INTO `s3Config` (
@@ -69,37 +76,33 @@ INSERT INTO `s3Config` (
 ) ON CONFLICT(`id`) DO NOTHING;
 
 INSERT INTO `emailTemplate` (
-  `scene`, `name`, `isEnabled`, `templateJson`, `createdAt`, `updatedAt`
+  `scene`, `name`, `templateJson`, `createdAt`, `updatedAt`
 ) VALUES
   (
     'TEST',
-    'Test email',
-    true,
-    '{"subject":"[{{siteName}}] Test email","body":"Site: {{siteName}}\\nSent at: {{sentAt}}\\n\\n{{customContent}}","format":"text","variables":["siteName","sentAt","customContent"]}',
+    '测试邮件',
+    '{"subject":"[{{siteName}}] 测试邮件","body":"这是一封测试邮件。\\n\\n站点：{{siteName}}\\n发送时间：{{sentAt}}\\n\\n{{customContent}}","format":"text","variables":["siteName","sentAt","customContent"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'ORDER_PAID',
-    'Payment received',
-    true,
-    '{"subject":"[{{siteName}}] Order {{orderNo}} paid","body":"Your order has been paid.\\n\\nOrder: {{orderNo}}\\nProduct: {{productName}}\\nAmount: {{amount}}\\nQuery: {{queryUrl}}\\n\\n{{footerText}}","format":"text","variables":["siteName","orderNo","productName","amount","queryUrl","footerText"]}',
+    '支付成功通知',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 支付成功","body":"您的订单已支付成功。\\n\\n订单号：{{orderNo}}\\n顾客邮箱：{{contactEmail}}\\n商品：{{productName}}\\n金额：{{amount}}\\n备注：{{buyerNote}}\\n查询地址：{{queryUrl}}\\n\\n{{footerText}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","amount","buyerNote","queryUrl","footerText"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'DELIVERY_SUCCESS',
-    'Delivery successful',
-    true,
-    '{"subject":"[{{siteName}}] Order {{orderNo}} delivered","body":"Your order has been delivered.\\n\\nOrder: {{orderNo}}\\nProduct: {{productName}}\\nQuantity: {{quantity}}\\nItems:\\n{{deliveryItems}}\\n\\nQuery: {{queryUrl}}\\nSupport: {{supportContact}}","format":"text","variables":["siteName","orderNo","productName","quantity","deliveryItems","queryUrl","supportContact"]}',
+    '发货成功通知',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 已发货","body":"您的订单已完成发货。\\n\\n订单号：{{orderNo}}\\n顾客邮箱：{{contactEmail}}\\n商品：{{productName}}\\n数量：{{quantity}}\\n备注：{{buyerNote}}\\n\\n查询地址：{{queryUrl}}\\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","quantity","buyerNote","queryUrl","supportContact"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'DELIVERY_FAILED',
-    'Delivery failed',
-    true,
-    '{"subject":"[{{siteName}}] Order {{orderNo}} delivery failed","body":"Order delivery failed and requires attention.\\n\\nOrder: {{orderNo}}\\nProduct: {{productName}}\\nReason: {{errorMessage}}\\n\\nQuery: {{queryUrl}}\\nSupport: {{supportContact}}","format":"text","variables":["siteName","orderNo","productName","errorMessage","queryUrl","supportContact"]}',
+    '发货失败通知',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 发货失败","body":"订单发货失败，请尽快处理。\\n\\n订单号：{{orderNo}}\\n顾客邮箱：{{contactEmail}}\\n商品：{{productName}}\\n备注：{{buyerNote}}\\n失败原因：{{errorMessage}}\\n\\n查询地址：{{queryUrl}}\\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","buyerNote","errorMessage","queryUrl","supportContact"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   )

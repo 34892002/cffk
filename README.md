@@ -172,7 +172,27 @@ npm run generate-types
 npx wrangler secret put BETTER_AUTH_SECRET
 ```
 
-### 4. 应用远程数据库迁移
+### 4. 配置邮件 Provider
+
+后台进入 `/${ADMIN_PATH}/push/email/post-office`，点击“新增邮局”即可配置邮件发送方式。支持三类 Provider：
+
+- `API`：Brevo 或 Resend。填写发件邮箱、API 地址，并填写 API Key 对应的 Worker Secret 名称。
+- `SMTP`：填写 SMTP Host、端口、用户名，并填写密码对应的 Worker Secret 名称。
+- `Cloudflare`：填写 Email Sending Binding 名称和发件邮箱。
+
+密钥原文不能写入 D1 配置或代码仓库。先设置 Worker Secret，例如：
+
+```bash
+npx wrangler secret put BREVO_API_KEY
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put SMTP_PASSWORD
+```
+
+页面中的 Secret 名称必须与实际 Secret 名称一致。配置保存后，在邮局列表中点击“测试”验证指定 Provider；点击“启用”后该邮件 Provider 才会用于业务通知，同一时间只会启用一个邮件 Provider。
+
+邮件模板在 `/${ADMIN_PATH}/push/email/templates` 配置，业务发送策略在 `/${ADMIN_PATH}/push/config` 配置，投递结果在 `/${ADMIN_PATH}/push/history` 查看。
+
+### 5. 应用远程数据库迁移
 
 先检查并提交需要的 migration，然后运行：
 
@@ -182,13 +202,20 @@ npm run db:migrate:remote
 
 该命令会连接 Cloudflare 上的 D1。执行前请确认 `wrangler.jsonc` 中的数据库配置和 migration SQL 均正确。
 
-### 5. 构建并部署
+### 6. 构建并部署
 
 ```bash
 npm run deploy
 ```
 
 该命令会执行 `vike build`，然后执行 `wrangler deploy`。
+
+## 邮件配置排查
+
+- 页面没有任何邮局：执行 `npm run db:seed:local` 或 `npm run db:seed:remote` 初始化默认 API、SMTP 和 Cloudflare 配置。
+- Provider 显示已启用但发送失败：检查对应 Worker Secret 是否存在、Secret 名称是否拼写一致，以及发件域名是否已在服务商处验证。
+- Cloudflare 邮件发送失败：检查 `wrangler.jsonc` 中的 Email Sending Binding 名称是否与页面中的 Binding 一致。
+- 业务没有发送记录：检查 `/push/config` 的全局开关、消息策略和 `/push/email/templates` 中对应场景模板是否启用。
 
 ## 项目命令
 

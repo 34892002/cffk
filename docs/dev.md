@@ -72,6 +72,14 @@ import "vue-sonner/style.css";
 
 服务端仍必须对所有输入进行完整权限、格式、长度和业务状态校验；客户端 schema 仅是提升体验的第一道校验。
 
+### 1.4 新增与编辑交互
+
+实体的新增和编辑表单使用 `DialogRoot` 弹窗承载，不在列表下方插入长表单。新增和编辑共用同一个弹窗及表单状态：点击行操作后加载目标数据，保存成功后关闭并刷新列表；取消仅关闭弹窗，不提交修改。
+
+- 弹窗内容超出视口时，内容区必须 `overflow-y-auto`，保存操作固定在底部，避免长配置表单需要滚动到页面末尾才能提交。
+- 表单有未保存输入时，禁止通过点击遮罩或 `Escape` 意外关闭；提供明确的“关闭”或“取消”操作。
+- 不可恢复的删除操作仍单独使用确认 Dialog，不与新增/编辑表单共用。
+
 ```vue
 <VeeField v-slot="{ componentField, errors }" name="siteName" :validate-on-input="true">
   <Field :data-invalid="errors.length > 0">
@@ -82,7 +90,7 @@ import "vue-sonner/style.css";
 </VeeField>
 ```
 
-### 1.4 公开商城首页
+### 1.5 公开商城首页
 
 首页（`pages/index/+Page.vue`）遵循以下固定结构与视觉规则：
 
@@ -92,7 +100,7 @@ import "vue-sonner/style.css";
 - 商品卡片仅展示分类、名称/副标题、库存或交付说明与价格；点击整张卡片进入商品详情，不额外堆叠重复的“查看商品”按钮。
 - 色彩：公开商城只使用组件默认的黑、白、灰色阶，以及 Logo 的蓝色与橙色；不得使用红色、绿色、黄色、紫色等额外状态色。缺货状态使用 Logo 橙色（`text-orange-500`），普通库存说明使用 `text-muted-foreground`；不得使用 `text-destructive`。
 
-### 1.5 破坏性操作
+### 1.6 破坏性操作
 
 删除、清空、关闭等不可恢复的操作必须：
 

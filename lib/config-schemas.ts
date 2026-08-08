@@ -17,9 +17,9 @@ export type PaymentProviderConfig =
   | { endpoint: string; merchantId: string; apiKey: SecretReference; notifyUrl?: string };
 
 export type EmailProviderConfig =
-  | { kind: "smtp"; host: string; port: number; secure: boolean; username: string; password: SecretReference; from: string }
-  | { kind: "api"; endpoint: string; apiKey: SecretReference; from: string }
-  | { kind: "cloudflare"; binding: string; from: string };
+  | { kind: "smtp"; host: string; port: number; secure: boolean; username: string; password: SecretReference; authType?: "plain" | "login" | "cram-md5"; from: string; fromName?: string; replyTo?: string }
+  | { kind: "api"; endpoint: string; apiKey: SecretReference; apiProvider?: "BREVO" | "RESEND"; from: string; fromName?: string; replyTo?: string; timeoutMs?: number }
+  | { kind: "cloudflare"; binding: string; from: string; fromName?: string; replyTo?: string; destination?: string; allowedDestinations?: string[] };
 
 export type S3Config = {
   endpoint: string;
@@ -72,10 +72,19 @@ export function parseAlipayConfig(json: string): AlipayConfig {
 export function parseEmailProviderConfig(json: string): EmailProviderConfig {
   const value: unknown = JSON.parse(json);
   if (!isRecord(value)) throw new Error("Invalid email provider configuration");
+  if (value.schemaVersion !== undefined && value.schemaVersion !== 1) throw new Error("Invalid email provider configuration version");
   const from = requireString(value.from, "from");
 
   if (value.kind === "cloudflare") {
-    return { kind: "cloudflare", binding: requireString(value.binding, "binding"), from };
+    return {
+      kind: "cloudflare",
+      binding: requireString(value.binding, "binding"),
+      from,
+      ...(typeof value.fromName === "string" && value.fromName.trim() ? { fromName: value.fromName.trim() } : {}),
+      ...(typeof value.replyTo === "string" && value.replyTo.trim() ? { replyTo: value.replyTo.trim() } : {}),
+      ...(typeof value.destination === "string" && value.destination.trim() ? { destination: value.destination.trim() } : {}),
+      ...(Array.isArray(value.allowedDestinations) ? { allowedDestinations: value.allowedDestinations.filter((item): item is string => typeof item === "string" && item.trim().length > 0) } : {}),
+    };
   }
   if (value.kind === "smtp") {
     if (typeof value.port !== "number" || !Number.isInteger(value.port) || value.port < 1 || value.port > 65535) {
@@ -90,6 +99,9 @@ export function parseEmailProviderConfig(json: string): EmailProviderConfig {
       username: requireString(value.username, "username"),
       password: requireSecretReference(value.password, "password"),
       from,
+      ...(value.authType === "login" || value.authType === "cram-md5" || value.authType === "plain" ? { authType: value.authType } : {}),
+      ...(typeof value.fromName === "string" && value.fromName.trim() ? { fromName: value.fromName.trim() } : {}),
+      ...(typeof value.replyTo === "string" && value.replyTo.trim() ? { replyTo: value.replyTo.trim() } : {}),
     };
   }
   if (value.kind === "api") {
@@ -98,6 +110,10 @@ export function parseEmailProviderConfig(json: string): EmailProviderConfig {
       endpoint: requireString(value.endpoint, "endpoint"),
       apiKey: requireSecretReference(value.apiKey, "apiKey"),
       from,
+      ...(value.apiProvider === "BREVO" || value.apiProvider === "RESEND" ? { apiProvider: value.apiProvider } : {}),
+      ...(typeof value.fromName === "string" && value.fromName.trim() ? { fromName: value.fromName.trim() } : {}),
+      ...(typeof value.replyTo === "string" && value.replyTo.trim() ? { replyTo: value.replyTo.trim() } : {}),
+      ...(typeof value.timeoutMs === "number" && Number.isInteger(value.timeoutMs) && value.timeoutMs > 0 ? { timeoutMs: value.timeoutMs } : {}),
     };
   }
   throw new Error("Invalid configuration: kind must be smtp, api, or cloudflare");
