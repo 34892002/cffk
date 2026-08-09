@@ -42,6 +42,7 @@
               <label class="grid gap-2 text-sm font-medium">名称<Input v-model="productForm.name" required /></label>
               <label class="grid gap-2 text-sm font-medium">Slug<Input v-model="productForm.slug" required placeholder="license-key" /></label>
               <label class="grid gap-2 text-sm font-medium">副标题<Input v-model="productForm.subtitle" /></label>
+              <div class="grid gap-2 text-sm font-medium"><span>商品封面</span><div class="flex gap-2"><Input v-model="productForm.coverImage" placeholder="/media/proxy/... 或外部图片 URL" /><Button type="button" variant="outline" @click="mediaPickerOpen = true">从媒体库选择</Button></div><img v-if="productForm.coverImage" :src="productForm.coverImage" alt="商品封面预览" class="mt-1 h-24 w-40 rounded-md border object-cover" /></div>
               <label class="grid gap-2 text-sm font-medium">详细描述<Textarea v-model="productForm.description" rows="3" class="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
               <label class="grid gap-2 text-sm font-medium">分类
                 <Select :model-value="productForm.categoryId === null ? undefined : String(productForm.categoryId)" @update:model-value="productForm.categoryId = Number($event)">
@@ -67,13 +68,14 @@
         </form>
       </DialogContent>
     </Dialog>
+    <MediaPickerDialog v-model:open="mediaPickerOpen" @select="productForm.coverImage = $event" />
   </section>
 </template>
 
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
-import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
+import MediaPickerDialog from "@/components/admin/MediaPickerDialog.vue";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -108,9 +110,10 @@ const statusFilter = ref<"ALL" | Product["status"]>("ALL");
 const currentPage = ref(1);
 const pageSize = ref(10);
 const dialogOpen = ref(false);
+const mediaPickerOpen = ref(false);
 const error = ref<string | null>(null);
 
-const productForm = reactive({ id: undefined as number | undefined, categoryId: null as number | null, name: "", slug: "", subtitle: "", description: "", fixedDeliveryContent: "", manualDeliveryHint: "", purchaseNote: "", isVisibleStock: true, isContactRequired: true, price: 0, status: "DRAFT" as Product["status"], deliveryType: "CARD_AUTO" as Product["deliveryType"], physicalStock: null as number | null, minBuy: 1, maxBuy: 1, sort: 0 });
+const productForm = reactive({ id: undefined as number | undefined, categoryId: null as number | null, name: "", slug: "", subtitle: "", coverImage: "", description: "", fixedDeliveryContent: "", manualDeliveryHint: "", purchaseNote: "", isVisibleStock: true, isContactRequired: true, price: 0, status: "DRAFT" as Product["status"], deliveryType: "CARD_AUTO" as Product["deliveryType"], physicalStock: null as number | null, minBuy: 1, maxBuy: 1, sort: 0 });
 const requiresPhysicalStock = computed(() => productForm.deliveryType === "MANUAL" || productForm.deliveryType === "EXPRESS");
 const filteredProducts = computed(() => {
   const value = query.value.trim().toLowerCase();
@@ -144,7 +147,7 @@ async function loadCatalog() {
 async function saveProduct() {
   saving.value = true;
   error.value = null;
-  try { await runTelefunc(() => onSaveProduct({ ...productForm, physicalStock: requiresPhysicalStock.value ? productForm.physicalStock : null }), { notifyError: false }); resetProductForm(); await loadCatalog(); } catch (cause) { error.value = userErrorMessage(cause); } finally { saving.value = false; }
+  try { await runTelefunc(() => onSaveProduct({ ...productForm, coverImage: productForm.coverImage, physicalStock: requiresPhysicalStock.value ? productForm.physicalStock : null }), { notifyError: false }); resetProductForm(); await loadCatalog(); } catch (cause) { error.value = userErrorMessage(cause); } finally { saving.value = false; }
 }
 async function setProductStatus(id: number, status: Product["status"]) {
   error.value = null;
@@ -152,8 +155,8 @@ async function setProductStatus(id: number, status: Product["status"]) {
 }
 function defaultCategoryId() { return catalog.categories.find((item) => item.slug === "default" && item.status === "ACTIVE")?.id ?? null; }
 function openCreate() { resetProductForm(); dialogOpen.value = true; }
-function editProduct(item: Product) { Object.assign(productForm, { id: item.id, categoryId: item.categoryId, name: item.name, slug: item.slug, subtitle: item.subtitle ?? "", description: item.description ?? "", fixedDeliveryContent: item.fixedDeliveryContent ?? "", manualDeliveryHint: item.manualDeliveryHint ?? "", purchaseNote: item.purchaseNote ?? "", isVisibleStock: item.isVisibleStock, isContactRequired: item.isContactRequired, price: item.price, status: item.status, deliveryType: item.deliveryType, physicalStock: item.physicalStock, minBuy: item.minBuy, maxBuy: item.maxBuy, sort: item.sort }); dialogOpen.value = true; }
-function resetProductForm() { Object.assign(productForm, { id: undefined, categoryId: defaultCategoryId(), name: "", slug: "", subtitle: "", description: "", fixedDeliveryContent: "", manualDeliveryHint: "", purchaseNote: "", isVisibleStock: true, isContactRequired: true, price: 0, status: "DRAFT", deliveryType: "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1, sort: 0 }); }
+function editProduct(item: Product) { Object.assign(productForm, { id: item.id, categoryId: item.categoryId, name: item.name, slug: item.slug, subtitle: item.subtitle ?? "", coverImage: item.coverImage ?? "", description: item.description ?? "", fixedDeliveryContent: item.fixedDeliveryContent ?? "", manualDeliveryHint: item.manualDeliveryHint ?? "", purchaseNote: item.purchaseNote ?? "", isVisibleStock: item.isVisibleStock, isContactRequired: item.isContactRequired, price: item.price, status: item.status, deliveryType: item.deliveryType, physicalStock: item.physicalStock, minBuy: item.minBuy, maxBuy: item.maxBuy, sort: item.sort }); dialogOpen.value = true; }
+function resetProductForm() { Object.assign(productForm, { id: undefined, categoryId: defaultCategoryId(), name: "", slug: "", subtitle: "", coverImage: "", description: "", fixedDeliveryContent: "", manualDeliveryHint: "", purchaseNote: "", isVisibleStock: true, isContactRequired: true, price: 0, status: "DRAFT", deliveryType: "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1, sort: 0 }); }
 function setPhysicalStock(value: string | number) { productForm.physicalStock = value === "" ? null : Number(value); }
 function formatAmount(amount: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100); }
 function deliveryLabel(value: Product["deliveryType"]) { return { CARD_AUTO: "自动卡密", FIXED_CARD: "固定内容", MANUAL: "人工发货", EXPRESS: "物流发货" }[value]; }

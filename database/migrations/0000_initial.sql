@@ -88,7 +88,6 @@ CREATE TABLE `media` (
 	`fileSize` integer NOT NULL,
 	`fileKey` text NOT NULL,
 	`url` text NOT NULL,
-	`thumbnailUrl` text,
 	`path` text,
 	`metadataJson` text,
 	`uploadedBy` text NOT NULL,
@@ -97,9 +96,10 @@ CREATE TABLE `media` (
 	FOREIGN KEY (`uploadedBy`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `media_storedName_unique` ON `media` (`storedName`);--> statement-breakpoint
 CREATE UNIQUE INDEX `media_fileKey_unique` ON `media` (`fileKey`);--> statement-breakpoint
-CREATE INDEX `media_uploadedAt_idx` ON `media` (`uploadedAt`);--> statement-breakpoint
+CREATE INDEX `media_mimeType_idx` ON `media` (`mimeType`);--> statement-breakpoint
+CREATE INDEX `media_path_idx` ON `media` (`path`);--> statement-breakpoint
+CREATE INDEX `media_uploadedAt_id_idx` ON `media` (`uploadedAt`,`id`);--> statement-breakpoint
 CREATE TABLE `order` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`orderNo` text NOT NULL,
@@ -137,6 +137,27 @@ CREATE INDEX `order_productId_idx` ON `order` (`productId`);--> statement-breakp
 CREATE INDEX `order_status_createdAt_idx` ON `order` (`status`,`createdAt`);--> statement-breakpoint
 CREATE INDEX `order_paymentStatus_createdAt_idx` ON `order` (`paymentStatus`,`createdAt`);--> statement-breakpoint
 CREATE INDEX `order_deliveryStatus_createdAt_idx` ON `order` (`deliveryStatus`,`createdAt`);--> statement-breakpoint
+CREATE TABLE `orderCloseCompensation` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer NOT NULL,
+	`productId` integer NOT NULL,
+	`quantity` integer NOT NULL,
+	`deliveryType` text NOT NULL,
+	`discountCodeId` integer,
+	`cardsReleased` integer DEFAULT false NOT NULL,
+	`stockRestored` integer DEFAULT false NOT NULL,
+	`discountReleased` integer DEFAULT false NOT NULL,
+	`attempts` integer DEFAULT 0 NOT NULL,
+	`status` text DEFAULT 'PENDING' NOT NULL,
+	`lastError` text,
+	`nextAttemptAt` integer NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `orderCloseCompensation_orderId_unique` ON `orderCloseCompensation` (`orderId`);--> statement-breakpoint
+CREATE INDEX `orderCloseCompensation_nextAttemptAt_idx` ON `orderCloseCompensation` (`nextAttemptAt`);--> statement-breakpoint
 CREATE TABLE `orderDelivery` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`orderId` integer NOT NULL,
@@ -284,10 +305,29 @@ CREATE UNIQUE INDEX `pushRetry_pushLogId_unique` ON `pushRetry` (`pushLogId`);--
 CREATE TABLE `s3Config` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`configJson` text NOT NULL,
+	`accessKeyId` text,
+	`secretAccessKey` text,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE `scheduledTaskRun` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`task` text NOT NULL,
+	`status` text NOT NULL,
+	`scannedOrderCount` integer,
+	`closedOrderCount` integer,
+	`compensationRetried` integer,
+	`compensationFailed` integer,
+	`compensationExhausted` integer,
+	`pushRetryAttempted` integer,
+	`pushRetrySent` integer,
+	`error` text,
+	`startedAt` integer NOT NULL,
+	`completedAt` integer
+);
+--> statement-breakpoint
+CREATE INDEX `scheduledTaskRun_task_startedAt_idx` ON `scheduledTaskRun` (`task`,`startedAt`);--> statement-breakpoint
 CREATE TABLE `session` (
 	`id` text PRIMARY KEY NOT NULL,
 	`expiresAt` integer NOT NULL,

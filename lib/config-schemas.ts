@@ -58,13 +58,13 @@ export type EmailProviderConfig =
   | { kind: "cloudflare"; binding: string; from: string; fromName?: string; replyTo?: string };
 
 export type S3Config = {
+  schemaVersion: 2;
   endpoint: string;
   region: string;
   bucket: string;
-  accessKeyId: SecretReference;
-  secretAccessKey: SecretReference;
-  publicBaseUrl?: string;
-  forcePathStyle?: boolean;
+  pathPrefix: string;
+  cacheControl: string;
+  forcePathStyle: boolean;
 };
 
 export type EmailTemplateConfig = {
@@ -96,6 +96,15 @@ function requireSecretReference(value: unknown, field: string): SecretReference 
 
 function requireSchemaVersion(value: JsonObject, field: string) {
   if (value.schemaVersion !== 1) throw new Error(`Invalid configuration: ${field} must be 1`);
+}
+
+function isForbiddenS3EndpointHost(hostname: string) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host === "::1" || host.endsWith(".localhost")) return true;
+  const parts = host.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  const [first, second] = parts;
+  return first === 0 || first === 10 || first === 127 || (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168) || (first === 100 && second >= 64 && second <= 127);
 }
 
 function requireUrl(value: unknown, field: string, allowEmpty = false) {
@@ -243,23 +252,26 @@ export function parseEmailProviderConfig(json: string): EmailProviderConfig {
 }
 
 export function parseS3Config(json: string): S3Config {
-  const value: unknown = JSON.parse(json);
-  if (!isRecord(value)) throw new Error("Invalid S3 configuration");
-  const endpoint = requireString(value.endpoint, "endpoint");
-  try { new URL(endpoint); } catch { throw new Error("Invalid configuration: endpoint must be a URL"); }
-  const publicBaseUrl = typeof value.publicBaseUrl === "string" && value.publicBaseUrl.trim() ? value.publicBaseUrl.trim().replace(/\/$/, "") : undefined;
-  if (publicBaseUrl) {
-    try { new URL(publicBaseUrl); } catch { throw new Error("Invalid configuration: publicBaseUrl must be a URL"); }
-  }
-  if (value.forcePathStyle !== undefined && typeof value.forcePathStyle !== "boolean") throw new Error("Invalid configuration: forcePathStyle must be boolean");
+  const value = parseJsonObject(json, "S3");
+  if (value.schemaVersion !== 2) throw new Error("Invalid configuration: schemaVersion must be 2");
+  const endpoint = requireUrl(value.endpoint, "endpoint").replace(/\/$/, "");
+  const endpointUrl = new URL(endpoint);
+  if (endpointUrl.username || endpointUrl.password || endpointUrl.search || endpointUrl.hash || endpointUrl.port) throw new Error("Invalid configuration: endpoint is not allowed");
+  if (isForbiddenS3EndpointHost(endpointUrl.hostname)) throw new Error("Invalid configuration: endpoint host is not allowed");
+  const pathPrefix = typeof value.pathPrefix === "string" ? value.pathPrefix.trim().replace(/\\/g, "/").replace(/(^\/|\/$)/g, "") : "media";
+  if (!pathPrefix || pathPrefix.includes("..") || pathPrefix.includes("//")) throw new Error("Invalid configuration: pathPrefix is invalid");
+  const cacheControl = typeof value.cacheControl === "string" && value.cacheControl.trim()
+    ? value.cacheControl.trim()
+    : "public, max-age=31536000, s-maxage=31536000, immutable";
+  if (cacheControl.length > 500 || typeof value.forcePathStyle !== "boolean") throw new Error("Invalid S3 configuration");
   return {
+    schemaVersion: 2,
     endpoint,
     region: requireString(value.region, "region"),
     bucket: requireString(value.bucket, "bucket"),
-    accessKeyId: requireSecretReference(value.accessKeyId, "accessKeyId"),
-    secretAccessKey: requireSecretReference(value.secretAccessKey, "secretAccessKey"),
-    ...(publicBaseUrl ? { publicBaseUrl } : {}),
-    ...(typeof value.forcePathStyle === "boolean" ? { forcePathStyle: value.forcePathStyle } : {}),
+    pathPrefix,
+    cacheControl,
+    forcePathStyle: value.forcePathStyle,
   };
 }
 

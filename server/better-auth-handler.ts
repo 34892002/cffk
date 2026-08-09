@@ -19,13 +19,17 @@ function getAuth(runtime: RuntimeAdapter, publicOrigin?: string) {
  * Add the Better Auth user to the context.
  * @link {@see https://better-auth.com/docs/concepts/session-management}
  */
+export async function getRequestSession(request: Request, runtime: RuntimeAdapter) {
+  const publicOrigin = await resolveAuthOrigin(request, runtime);
+  const authRequest = rewriteRequestOrigin(request, publicOrigin);
+  return getAuth(runtime, publicOrigin).api.getSession({ headers: authRequest.headers });
+}
+
 export const betterAuthSessionMiddleware: UniversalMiddleware = enhance(
   // The context we add here is automatically merged into pageContext
   async (request, context, runtime) => {
     try {
-      const publicOrigin = await resolveAuthOrigin(request, runtime);
-      const authRequest = rewriteRequestOrigin(request, publicOrigin);
-      const data = await getAuth(runtime, publicOrigin).api.getSession({ headers: authRequest.headers });
+      const data = await getRequestSession(request, runtime);
       return {
         ...context,
         // Sets pageContext.user and keeps authorization separate from identity.

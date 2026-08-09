@@ -192,7 +192,15 @@ npx wrangler secret put SMTP_PASSWORD
 
 邮件模板在 `/${ADMIN_PATH}/push/email/templates` 配置，业务发送策略在 `/${ADMIN_PATH}/push/config` 配置，投递结果在 `/${ADMIN_PATH}/push/history` 查看。
 
-### 5. 应用远程数据库迁移
+### 5. 配置媒体存储
+
+后台进入 `/${ADMIN_PATH}/system/media`，点击“存储配置”填写 S3 兼容端点、bucket、region、路径前缀、缓存策略、Access Key ID 和 Secret Access Key。访问密钥保存在 D1，仅由 Worker 服务端读取；配置读取接口只返回是否已配置，不会将原始凭据返回浏览器。更新凭据保存后立即生效，无需重新部署 Worker。请勿将凭据提交到仓库或写入 `.dev.vars`。
+
+媒体库仅支持 JPEG、PNG、GIF、WebP 与 PDF；图片最大 10 MiB，PDF 最大 20 MiB。所有公开 URL 均为站内 `/media/proxy/*`，由 Worker 读取对象并使用 `caches.default` 缓存；删除会清理当前 PoP 缓存，但其他 PoP 可能会在 immutable TTL 内继续提供旧对象。
+
+配置保存后使用“测试连接”验证 PUT、读取和 DELETE 权限。不要为此授予 ListObjects 权限。
+
+### 6. 应用远程数据库迁移
 
 先检查并提交需要的 migration，然后运行：
 
@@ -202,13 +210,17 @@ npm run db:migrate:remote
 
 该命令会连接 Cloudflare 上的 D1。执行前请确认 `wrangler.jsonc` 中的数据库配置和 migration SQL 均正确。
 
-### 6. 构建并部署
+### 7. 构建并部署
 
 ```bash
 npm run deploy
 ```
 
 该命令会执行 `vike build`，然后执行 `wrangler deploy`。
+
+## 定时任务
+
+Worker 通过 `wrangler.jsonc` 的 Cron Trigger 每 5 分钟运行一次维护任务。系统会自动关闭创建超过 30 分钟且仍为 `PENDING`、`UNPAID` 的订单，释放已锁定卡密、恢复实物库存和优惠码占用，并写入 `AUTO_CLOSE` 支付日志。关闭后的订单不接受延迟支付回调。
 
 ## 邮件配置排查
 

@@ -123,7 +123,7 @@ export const adminPages = {
     title: "媒体存储",
     path: "/system/media",
     pageTitle: "媒体存储配置",
-    description: "配置 S3 兼容存储。访问密钥仅通过 Worker Secret 引用。",
+    description: "配置 S3 兼容存储与保存在 D1 的访问凭据。",
   },
   settings: {
     title: "站点配置",

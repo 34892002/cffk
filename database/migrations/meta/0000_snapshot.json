@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9d283d71-b5aa-4f79-b7be-7e67d8304985",
+  "id": "e55a87c3-9a9e-4de8-94c5-711c955285ce",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "account": {
@@ -605,13 +605,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "thumbnailUrl": {
-          "name": "thumbnailUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "path": {
           "name": "path",
           "type": "text",
@@ -649,13 +642,6 @@
         }
       },
       "indexes": {
-        "media_storedName_unique": {
-          "name": "media_storedName_unique",
-          "columns": [
-            "storedName"
-          ],
-          "isUnique": true
-        },
         "media_fileKey_unique": {
           "name": "media_fileKey_unique",
           "columns": [
@@ -663,10 +649,25 @@
           ],
           "isUnique": true
         },
-        "media_uploadedAt_idx": {
-          "name": "media_uploadedAt_idx",
+        "media_mimeType_idx": {
+          "name": "media_mimeType_idx",
           "columns": [
-            "uploadedAt"
+            "mimeType"
+          ],
+          "isUnique": false
+        },
+        "media_path_idx": {
+          "name": "media_path_idx",
+          "columns": [
+            "path"
+          ],
+          "isUnique": false
+        },
+        "media_uploadedAt_id_idx": {
+          "name": "media_uploadedAt_id_idx",
+          "columns": [
+            "uploadedAt",
+            "id"
           ],
           "isUnique": false
         }
@@ -952,6 +953,155 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "orderCloseCompensation": {
+      "name": "orderCloseCompensation",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "orderId": {
+          "name": "orderId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "productId": {
+          "name": "productId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deliveryType": {
+          "name": "deliveryType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discountCodeId": {
+          "name": "discountCodeId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cardsReleased": {
+          "name": "cardsReleased",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "stockRestored": {
+          "name": "stockRestored",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "discountReleased": {
+          "name": "discountReleased",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'PENDING'"
+        },
+        "lastError": {
+          "name": "lastError",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nextAttemptAt": {
+          "name": "nextAttemptAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "orderCloseCompensation_orderId_unique": {
+          "name": "orderCloseCompensation_orderId_unique",
+          "columns": [
+            "orderId"
+          ],
+          "isUnique": true
+        },
+        "orderCloseCompensation_nextAttemptAt_idx": {
+          "name": "orderCloseCompensation_nextAttemptAt_idx",
+          "columns": [
+            "nextAttemptAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "orderCloseCompensation_orderId_order_id_fk": {
+          "name": "orderCloseCompensation_orderId_order_id_fk",
+          "tableFrom": "orderCloseCompensation",
+          "tableTo": "order",
+          "columnsFrom": [
+            "orderId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -1967,6 +2117,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "accessKeyId": {
+          "name": "accessKeyId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "secretAccessKey": {
+          "name": "secretAccessKey",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "integer",
@@ -1983,6 +2147,116 @@
         }
       },
       "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "scheduledTaskRun": {
+      "name": "scheduledTaskRun",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "task": {
+          "name": "task",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scannedOrderCount": {
+          "name": "scannedOrderCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "closedOrderCount": {
+          "name": "closedOrderCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "compensationRetried": {
+          "name": "compensationRetried",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "compensationFailed": {
+          "name": "compensationFailed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "compensationExhausted": {
+          "name": "compensationExhausted",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pushRetryAttempted": {
+          "name": "pushRetryAttempted",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pushRetrySent": {
+          "name": "pushRetrySent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "startedAt": {
+          "name": "startedAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completedAt": {
+          "name": "completedAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "scheduledTaskRun_task_startedAt_idx": {
+          "name": "scheduledTaskRun_task_startedAt_idx",
+          "columns": [
+            "task",
+            "startedAt"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

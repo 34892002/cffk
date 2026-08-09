@@ -62,16 +62,6 @@ INSERT INTO `pushChannelConfig` (
 SELECT 'EMAIL', 'CLOUDFLARE', 'Cloudflare Email Sending', false, '{"schemaVersion":1,"kind":"cloudflare","binding":"EMAIL","from":"orders@example.com"}', unixepoch('now') * 1000, unixepoch('now') * 1000
 WHERE NOT EXISTS (SELECT 1 FROM `pushChannelConfig` WHERE `channel` = 'EMAIL' AND `provider` = 'CLOUDFLARE' AND `name` = 'Cloudflare Email Sending');
 
--- S3-compatible storage remains disabled until its Worker Secrets are configured.
-INSERT INTO `s3Config` (
-  `id`, `configJson`, `createdAt`, `updatedAt`
-) VALUES (
-  1,
-  '{"endpoint":"https://s3.example.com","region":"auto","bucket":"cffk-media","accessKeyId":{"secret":"S3_ACCESS_KEY_ID"},"secretAccessKey":{"secret":"S3_SECRET_ACCESS_KEY"},"publicBaseUrl":"https://cdn.example.com","forcePathStyle":false}',
-  unixepoch('now') * 1000,
-  unixepoch('now') * 1000
-) ON CONFLICT(`id`) DO NOTHING;
-
 INSERT INTO `emailTemplate` (
   `scene`, `name`, `templateJson`, `createdAt`, `updatedAt`
 ) VALUES

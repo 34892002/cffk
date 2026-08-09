@@ -76,8 +76,11 @@
                 <VeeField v-slot="{ componentField, errors }" name="logoIcon" :validate-on-input="true">
                   <Field :data-invalid="errors.length > 0">
                     <FieldLabel for="site-favicon">网站 Favicon 地址</FieldLabel>
-                    <Input id="site-favicon" v-bind="componentField" type="url" inputmode="url" placeholder="https://example.com/favicon.ico" :aria-invalid="errors.length > 0" />
-                    <FieldDescription>支持 ico、png、svg 或其他浏览器可识别的公开图片地址。</FieldDescription>
+                    <div class="flex gap-2">
+                      <Input id="site-favicon" v-bind="componentField" type="url" inputmode="url" placeholder="https://example.com/favicon.png" :aria-invalid="errors.length > 0" />
+                      <Button type="button" variant="outline" @click="mediaPickerTarget = 'logoIcon'">选择图片</Button>
+                    </div>
+                    <FieldDescription>支持媒体库中的 PNG、JPEG、GIF 或 WebP，也可手工填写公开图片地址。</FieldDescription>
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
                 </VeeField>
@@ -85,7 +88,10 @@
                 <VeeField v-slot="{ componentField, errors }" name="logo" :validate-on-input="true">
                   <Field :data-invalid="errors.length > 0">
                     <FieldLabel for="site-logo">网站 Logo 地址</FieldLabel>
-                    <Input id="site-logo" v-bind="componentField" type="url" inputmode="url" placeholder="https://example.com/logo.png" :aria-invalid="errors.length > 0" />
+                    <div class="flex gap-2">
+                      <Input id="site-logo" v-bind="componentField" type="url" inputmode="url" placeholder="https://example.com/logo.png" :aria-invalid="errors.length > 0" />
+                      <Button type="button" variant="outline" @click="mediaPickerTarget = 'logo'">选择图片</Button>
+                    </div>
                     <FieldDescription>用于公开商城导航和社交分享图片 fallback。</FieldDescription>
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
@@ -166,11 +172,14 @@
         </CardFooter>
       </form>
     </Card>
+    <MediaPickerDialog :open="mediaPickerTarget !== null" @update:open="(open) => { if (!open) mediaPickerTarget = null; }" @select="setSelectedImage" />
   </section>
 </template>
 
 <script lang="ts" setup>
 import { onMounted, ref } from "vue";
+
+import MediaPickerDialog from "@/components/admin/MediaPickerDialog.vue";
 
 import { toTypedSchema } from "@vee-validate/zod";
 import { Field as VeeField, useForm } from "vee-validate";
@@ -243,9 +252,16 @@ const initialValues: FormValues = {
   timezone: "Asia/Shanghai",
 };
 
-const { handleSubmit, resetForm } = useForm<FormValues>({ validationSchema: formSchema, initialValues });
+const { handleSubmit, resetForm, setFieldValue } = useForm<FormValues>({ validationSchema: formSchema, initialValues });
 const loading = ref(false);
 const error = ref<string | null>(null);
+const mediaPickerTarget = ref<"logo" | "logoIcon" | null>(null);
+
+function setSelectedImage(url: string) {
+  if (mediaPickerTarget.value === "logo") setFieldValue("logo", url);
+  if (mediaPickerTarget.value === "logoIcon") setFieldValue("logoIcon", url);
+  mediaPickerTarget.value = null;
+}
 
 function toFormValues(settings: Awaited<ReturnType<typeof onGetSiteSettings>>): FormValues {
   const timezone = initialValues.timezone;

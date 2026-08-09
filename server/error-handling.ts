@@ -40,7 +40,8 @@ function errorSnapshot(cause: unknown): ErrorSnapshot {
 }
 
 function isVikeControlFlow(cause: unknown) {
-  return cause instanceof Error && (cause.name === "AbortError" || cause.name === "AbortRender");
+  if (!(cause instanceof Error)) return false;
+  return [cause.name, cause.message].some((value) => value === "AbortError" || value === "AbortRender");
 }
 
 export function isExpectedServerError(cause: unknown) {

@@ -2,6 +2,7 @@ import { betterAuthHandler, betterAuthSessionMiddleware } from "./better-auth-ha
 import { PaymentCallbackService } from "./payment/callback-service";
 import { MAX_PAYMENT_CALLBACK_BYTES, normalizePaymentCallbackPayload } from "./payment/callback-payload";
 import { reportUnexpectedRequestError } from "./error-handling";
+import { registerMediaRoutes } from "./media/routes";
 import { telefuncHandler } from "./telefunc-handler";
 import vike from "@vikejs/hono";
 import { Hono, type Context } from "hono";
@@ -27,6 +28,7 @@ function getApp() {
     app.all(path, handlePaymentCallback);
     app.all(`${path}/*`, handlePaymentCallback);
   }
+  registerMediaRoutes(app);
   vike(app, [betterAuthSessionMiddleware, betterAuthHandler, telefuncHandler]);
   return app;
 }

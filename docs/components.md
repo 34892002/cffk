@@ -6,6 +6,25 @@
 
 ## 后台组件
 
+### `MediaPickerDialog`
+
+导入：
+
+```ts
+import MediaPickerDialog from "@/components/admin/MediaPickerDialog.vue";
+```
+
+媒体库图片选择对话框，统一从媒体库读取 JPEG、PNG、GIF 和 WebP 图片，并向调用页面返回媒体代理 URL。组件只负责展示和选择，不负责业务鉴权或直接处理上传；页面应通过 `v-model:open` 控制显示，并在 `select` 事件中保存返回值。调用方仍可保留手工 URL 输入，以兼容外部公开图片地址。
+
+```vue
+<MediaPickerDialog v-model:open="pickerOpen" @select="form.logo = $event" />
+```
+
+- `open`：是否打开对话框。
+- `update:open`：打开状态变化事件。
+- `select`：选中图片时返回规范化媒体 URL。
+
+
 ### `AdminDataTable`
 
 导入：

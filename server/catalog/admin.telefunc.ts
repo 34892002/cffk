@@ -62,6 +62,7 @@ export async function onGetCatalogAdminData() {
         name: product.name,
         slug: product.slug,
         subtitle: product.subtitle,
+        coverImage: product.coverImage,
         description: product.description,
         fixedDeliveryContent: product.fixedDeliveryContent,
         manualDeliveryHint: product.manualDeliveryHint,
@@ -142,6 +143,7 @@ export async function onSaveProduct(input: {
   name: string;
   slug: string;
   subtitle?: string;
+  coverImage?: string;
   description?: string;
   fixedDeliveryContent?: string;
   manualDeliveryHint?: string;
@@ -171,6 +173,7 @@ export async function onSaveProduct(input: {
     name: requiredText(input.name, "PRODUCT_NAME"),
     slug: normalizeSlug(input.slug),
     subtitle: input.subtitle?.trim() || null,
+    coverImage: input.coverImage?.trim() || null,
     description: input.description?.trim() || null,
     fixedDeliveryContent: input.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null,
     manualDeliveryHint: (input.deliveryType === "MANUAL" || input.deliveryType === "EXPRESS") ? input.manualDeliveryHint?.trim() || null : null,

@@ -357,9 +357,53 @@ export const pushRetry = sqliteTable(
 );
 
 
+export const orderCloseCompensation = sqliteTable(
+  "orderCloseCompensation",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orderId: integer("orderId").notNull().references(() => order.id, { onDelete: "cascade" }),
+    productId: integer("productId").notNull(),
+    quantity: integer("quantity").notNull(),
+    deliveryType: text("deliveryType", { enum: ["CARD_AUTO", "MANUAL", "EXPRESS", "FIXED_CARD"] }).notNull(),
+    discountCodeId: integer("discountCodeId"),
+    cardsReleased: integer("cardsReleased", { mode: "boolean" }).notNull().default(false),
+    stockRestored: integer("stockRestored", { mode: "boolean" }).notNull().default(false),
+    discountReleased: integer("discountReleased", { mode: "boolean" }).notNull().default(false),
+    attempts: integer("attempts").notNull().default(0),
+    status: text("status", { enum: ["PENDING", "EXHAUSTED"] }).notNull().default("PENDING"),
+    lastError: text("lastError"),
+    nextAttemptAt: integer("nextAttemptAt", { mode: "timestamp_ms" }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [uniqueIndex("orderCloseCompensation_orderId_unique").on(table.orderId), index("orderCloseCompensation_nextAttemptAt_idx").on(table.nextAttemptAt)],
+);
+
+export const scheduledTaskRun = sqliteTable(
+  "scheduledTaskRun",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    task: text("task", { enum: ["MAINTENANCE"] }).notNull(),
+    status: text("status", { enum: ["RUNNING", "SUCCESS", "PARTIAL", "FAILED"] }).notNull(),
+    scannedOrderCount: integer("scannedOrderCount"),
+    closedOrderCount: integer("closedOrderCount"),
+    compensationRetried: integer("compensationRetried"),
+    compensationFailed: integer("compensationFailed"),
+    compensationExhausted: integer("compensationExhausted"),
+    pushRetryAttempted: integer("pushRetryAttempted"),
+    pushRetrySent: integer("pushRetrySent"),
+    error: text("error"),
+    startedAt: integer("startedAt", { mode: "timestamp_ms" }).notNull(),
+    completedAt: integer("completedAt", { mode: "timestamp_ms" }),
+  },
+  (table) => [index("scheduledTaskRun_task_startedAt_idx").on(table.task, table.startedAt)],
+);
+
 export const s3Config = sqliteTable("s3Config", {
   id: integer("id").primaryKey().default(1),
   configJson: text("configJson").notNull(),
+  accessKeyId: text("accessKeyId"),
+  secretAccessKey: text("secretAccessKey"),
   createdAt,
   updatedAt,
 });
@@ -374,14 +418,13 @@ export const media = sqliteTable(
     fileSize: integer("fileSize").notNull(),
     fileKey: text("fileKey").notNull(),
     url: text("url").notNull(),
-    thumbnailUrl: text("thumbnailUrl"),
     path: text("path"),
     metadataJson: text("metadataJson"),
     uploadedBy: text("uploadedBy").notNull().references(() => user.id),
     uploadedAt: integer("uploadedAt", { mode: "timestamp_ms" }).notNull(),
     updatedAt,
   },
-  (table) => [uniqueIndex("media_storedName_unique").on(table.storedName), uniqueIndex("media_fileKey_unique").on(table.fileKey), index("media_uploadedAt_idx").on(table.uploadedAt)],
+  (table) => [uniqueIndex("media_fileKey_unique").on(table.fileKey), index("media_mimeType_idx").on(table.mimeType), index("media_path_idx").on(table.path), index("media_uploadedAt_id_idx").on(table.uploadedAt, table.id)],
 );
 
 export const schema = {
@@ -406,6 +449,8 @@ export const schema = {
   pushPolicy,
   pushLog,
   pushRetry,
+  scheduledTaskRun,
+  orderCloseCompensation,
 
   s3Config,
   media,
