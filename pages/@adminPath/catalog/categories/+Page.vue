@@ -47,7 +47,7 @@
         </DialogHeader>
         <form class="grid gap-4" @submit.prevent="saveCategory">
           <div class="grid gap-2"><Label for="category-name">名称</Label><Input id="category-name" v-model="form.name" required /></div>
-          <div class="grid gap-2"><Label for="category-slug">Slug</Label><Input id="category-slug" v-model="form.slug" required placeholder="software" /></div>
+          <div class="grid gap-2"><Label for="category-slug">Slug</Label><Input id="category-slug" v-model="form.slug" required placeholder="输入名称后自动生成，可手动修改" /></div>
           <div class="grid gap-2"><Label for="category-description">描述</Label><Input id="category-description" v-model="form.description" /></div>
           <div class="grid gap-2"><Label for="category-sort">排序</Label><Input id="category-sort" v-model.number="form.sort" type="number" min="0" required /></div>
           <DialogFooter>
@@ -62,6 +62,7 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
+import { pinyin } from "pinyin-pro";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
@@ -123,5 +124,7 @@ function openEdit(item: Category) { Object.assign(form, { id: item.id, name: ite
 async function saveCategory() { saving.value = true; error.value = null; try { await runTelefunc(() => onSaveCategory({ ...form }), { notifyError: false }); dialogOpen.value = false; resetForm(); await loadCategories(); } catch (cause) { error.value = userErrorMessage(cause); } finally { saving.value = false; } }
 async function setStatus(item: Category) { error.value = null; try { await runTelefunc(() => onSetCategoryStatus({ id: item.id, status: item.status === "ACTIVE" ? "DISABLED" : "ACTIVE" }), { notifyError: false }); await loadCategories(); } catch (cause) { error.value = userErrorMessage(cause); } }
 function resetForm() { Object.assign(form, { id: undefined, name: "", slug: "", description: "", sort: 0 }); }
+watch(() => form.name, (name) => { if (!form.slug.trim()) form.slug = slugify(name); });
+function slugify(value: string) { return pinyin(value, { toneType: "none", nonZh: "consecutive" }).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 
 </script>

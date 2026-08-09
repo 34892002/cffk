@@ -1,4 +1,5 @@
 import { and, asc, count, eq } from "drizzle-orm";
+import { pinyin } from "pinyin-pro";
 import { requireAdmin } from "@/server/telefunc-context";
 import { category, product } from "@/database/drizzle/schema";
 
@@ -18,13 +19,17 @@ function requiredText(value: string, field: string) {
 }
 
 function normalizeSlug(value: string) {
-  const slug = value
+  return pinyin(value, { toneType: "none", nonZh: "consecutive" })
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  if (!slug) throw new Error("SLUG_REQUIRED");
-  return slug;
+}
+
+function resolveSlug(slug: string | undefined, name: string) {
+  const normalized = normalizeSlug(slug?.trim() || name);
+  if (!normalized) throw new Error("SLUG_REQUIRED");
+  return normalized;
 }
 
 function nonNegativeInteger(value: number, field: string) {
@@ -87,12 +92,13 @@ export async function onGetCatalogAdminData() {
   return { categories, products };
 }
 
-export async function onSaveCategory(input: { id?: number; name: string; slug: string; description?: string; sort: number }) {
+export async function onSaveCategory(input: { id?: number; name: string; slug?: string; description?: string; sort: number }) {
   const { db } = getAdminDb();
   const now = new Date();
+  const name = requiredText(input.name, "CATEGORY_NAME");
   const values = {
-    name: requiredText(input.name, "CATEGORY_NAME"),
-    slug: normalizeSlug(input.slug),
+    name,
+    slug: resolveSlug(input.slug, name),
     description: input.description?.trim() || null,
     sort: nonNegativeInteger(input.sort, "CATEGORY_SORT"),
     updatedAt: now,
@@ -141,7 +147,7 @@ export async function onSaveProduct(input: {
   id?: number;
   categoryId: number | null;
   name: string;
-  slug: string;
+  slug?: string;
   subtitle?: string;
   coverImage?: string;
   description?: string;
@@ -168,10 +174,11 @@ export async function onSaveProduct(input: {
   const fixedDeliveryContent = input.fixedDeliveryContent?.trim() || null;
   if (input.deliveryType === "FIXED_CARD" && input.status === "ACTIVE" && !fixedDeliveryContent) throw new Error("FIXED_DELIVERY_CONTENT_REQUIRED");
   const categoryId = await resolveProductCategoryId(db, input.categoryId);
+  const name = requiredText(input.name, "PRODUCT_NAME");
   const values = {
     categoryId,
-    name: requiredText(input.name, "PRODUCT_NAME"),
-    slug: normalizeSlug(input.slug),
+    name,
+    slug: resolveSlug(input.slug, name),
     subtitle: input.subtitle?.trim() || null,
     coverImage: input.coverImage?.trim() || null,
     description: input.description?.trim() || null,
