@@ -12,6 +12,7 @@ export const user = sqliteTable("user", {
   displayUsername: text("displayUsername"),
   emailVerified: integer("emailVerified", { mode: "boolean" }).notNull().default(false),
   image: text("image"),
+  twoFactorEnabled: integer("twoFactorEnabled", { mode: "boolean" }).notNull().default(false),
   createdAt,
   updatedAt,
 });
@@ -50,6 +51,16 @@ export const account = sqliteTable(
   },
   (table) => [index("account_userId_idx").on(table.userId)],
 );
+
+export const twoFactor = sqliteTable("twoFactor", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull().unique().references(() => user.id),
+  secret: text("secret").notNull(),
+  backupCodes: text("backupCodes").notNull(),
+  verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+  failedVerificationCount: integer("failedVerificationCount").notNull().default(0),
+  lockedUntil: integer("lockedUntil", { mode: "timestamp_ms" }),
+});
 
 export const verification = sqliteTable("verification", {
   id: text("id").primaryKey(),
@@ -433,6 +444,7 @@ export const schema = {
   session,
   account,
   verification,
+  twoFactor,
   adminBootstrap,
   siteSetting,
   category,

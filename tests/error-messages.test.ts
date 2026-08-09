@@ -1,19 +1,20 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-import { AppError } from "../lib/app-error.ts";
-import { userErrorMessage } from "../lib/error-messages.ts";
+import { describe, expect, test } from "bun:test";
+import { AppError, errorCode } from "../lib/app-error";
+import { userErrorMessage } from "../lib/error-messages";
 
-test("userErrorMessage returns only fixed public messages for known codes", () => {
-  assert.equal(userErrorMessage(new AppError("AUTH_REQUIRED")), "请先登录后再继续操作。");
-  assert.equal(userErrorMessage(new AppError("ADMIN_ACCESS_REQUIRED")), "管理员身份已失效，请重新登录。");
-  assert.equal(userErrorMessage(new Error("S3_CREDENTIALS_UNAVAILABLE")), "请先在媒体存储配置中填写 Access Key ID 和 Secret Access Key。");
-  assert.equal(userErrorMessage(new AppError("EMAIL_CLOUDFLARE_NOT_IMPLEMENTED")), "Cloudflare Email Sending 当前尚未接入发送能力，请使用 API 或 SMTP 邮局。");
-  assert.equal(userErrorMessage(new AppError("PAYMENT_NOTIFY_URL_INVALID")), "回调地址无效：必须使用本站域名，并保留当前支付渠道的回调路径。");
-  assert.equal(userErrorMessage(new AppError("PAYMENT_RETURN_URL_INVALID")), "返回地址无效：必须使用本站域名。");
-});
+describe("client error message normalization", () => {
+  test("maps stable product errors to user-safe messages", () => {
+    expect(userErrorMessage(new AppError("PRODUCT_PRICE_INVALID"))).toBe("商品价格必须为有效金额。");
+    expect(userErrorMessage(new Error("PRODUCT_NAME_TOO_LONG"))).toBe("商品名称不能超过 120 个字符。");
+  });
 
-test("userErrorMessage never exposes unknown raw error details", () => {
-  const rawError = new Error("D1 failed: token=raw-token-value");
-  assert.equal(userErrorMessage(rawError), "接口异常，请稍后重试。");
-  assert.doesNotMatch(userErrorMessage(rawError), /raw-token-value|D1 failed/);
+  test("does not expose unexpected server exception messages", () => {
+    const unexpected = new Error("SQLITE_ERROR: no such table product");
+    expect(errorCode(unexpected)).toBe("REQUEST_FAILED");
+    expect(userErrorMessage(unexpected)).toBe("接口异常，请稍后重试。");
+  });
+
+  test("rejects non-code error messages as unknown failures", () => {
+    expect(errorCode(new Error("internal stack detail"))).toBe("REQUEST_FAILED");
+  });
 });

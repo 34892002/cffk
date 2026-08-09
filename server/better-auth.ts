@@ -2,7 +2,7 @@ import { env } from "./env";
 import type { RuntimeAdapter } from "@universal-middleware/core";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { username } from "better-auth/plugins";
+import { captcha, twoFactor, username } from "better-auth/plugins";
 import { getDrizzleDb } from "../database/drizzle";
 import { schema } from "../database/drizzle/schema";
 
@@ -28,9 +28,14 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string): 
         updateEmailWithoutVerification: true,
       },
     },
+    appName: "CFFK 发卡",
     // `user.username` is the unique administrator sign-in identifier, matching
     // EdgeKey's Admin.username behavior while Better Auth owns credentials.
-    plugins: [username()],
+    plugins: [
+      username(),
+      twoFactor({ issuer: "CFFK 发卡" }),
+      ...(env.TURNSTILE_SECRET_KEY?.trim() ? [captcha({ provider: "cloudflare-turnstile", secretKey: env.TURNSTILE_SECRET_KEY.trim(), endpoints: ["/sign-in/username"] })] : []),
+    ],
     disabledPaths: ["/is-username-available"],
   };
 }

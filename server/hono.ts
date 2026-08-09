@@ -28,6 +28,11 @@ function getApp() {
     app.all(path, handlePaymentCallback);
   }
   registerMediaRoutes(app);
+  app.get("/api/security/turnstile", (context) => {
+    const siteKey = String(context.env.TURNSTILE_SITE_KEY ?? "").trim();
+    const secretKey = String(context.env.TURNSTILE_SECRET_KEY ?? "").trim();
+    return context.json({ enabled: Boolean(siteKey && secretKey), siteKey: siteKey && secretKey ? siteKey : null });
+  });
   vike(app, [betterAuthSessionMiddleware, betterAuthHandler, telefuncHandler]);
   return app;
 }

@@ -92,6 +92,20 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+.product-rich-content {
+  overflow-wrap: anywhere;
+}
+.product-rich-content h2 { margin: 1.5rem 0 0.75rem; font-size: 1.5rem; font-weight: 700; }
+.product-rich-content h3 { margin: 1.25rem 0 0.5rem; font-size: 1.25rem; font-weight: 600; }
+.product-rich-content p { margin: 0.75rem 0; }
+.product-rich-content ul, .product-rich-content ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+.product-rich-content ul { list-style: disc; }
+.product-rich-content ol { list-style: decimal; }
+.product-rich-content blockquote { margin: 1rem 0; border-left: 3px solid var(--border); background: color-mix(in oklab, var(--muted) 60%, transparent); padding: 0.75rem 1rem; }
+.product-rich-content a { color: var(--primary); text-decoration: underline; }
+.product-rich-content img { max-width: 100%; border-radius: 0.5rem; border: 1px solid var(--border); }
+.product-rich-content hr { margin: 1.5rem 0; border-color: var(--border); }
+
 @layer base {
   * {
     @apply border-border;

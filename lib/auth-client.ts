@@ -1,6 +1,13 @@
 import { createAuthClient } from "better-auth/vue";
-import { usernameClient } from "better-auth/client/plugins";
+import { twoFactorClient, usernameClient } from "better-auth/client/plugins";
 
 export const authClient = createAuthClient({
-  plugins: [usernameClient()],
+  plugins: [
+      usernameClient(),
+      twoFactorClient({
+        onTwoFactorRedirect() {
+          if (typeof window !== "undefined") window.location.assign(`${window.location.pathname.replace(/\/$/, "")}/two-factor`);
+        },
+      }),
+    ],
 });
