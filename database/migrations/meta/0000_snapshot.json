@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e55a87c3-9a9e-4de8-94c5-711c955285ce",
+  "id": "2a26af6e-222a-4365-92b0-86bbd0d425a7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "account": {
@@ -2220,6 +2220,13 @@
         },
         "pushRetrySent": {
           "name": "pushRetrySent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pushRetryExhausted": {
+          "name": "pushRetryExhausted",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

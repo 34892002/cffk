@@ -322,6 +322,7 @@ CREATE TABLE `scheduledTaskRun` (
 	`compensationExhausted` integer,
 	`pushRetryAttempted` integer,
 	`pushRetrySent` integer,
+	`pushRetryExhausted` integer,
 	`error` text,
 	`startedAt` integer NOT NULL,
 	`completedAt` integer

@@ -45,7 +45,7 @@ export class PaymentFlowService {
     if (!record) appError("ORDER_NOT_FOUND");
     if (amount !== undefined && amount !== record.amount) appError("PAYMENT_AMOUNT_MISMATCH");
     const outcome = await confirmOrderPayment(this.database, record.id);
-    await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: record.paymentProvider as never, orderNo, paymentOrderNo: record.paymentOrderNo ?? undefined, eventType: "CONFIRM", verifyStatus: "VERIFIED", message: outcome, payload: { source } });
+    await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: record.paymentProvider as never, orderNo, paymentOrderNo: record.paymentOrderNo ?? undefined, eventType: "CONFIRM", verifyStatus: outcome === "NOT_PAYABLE" ? "FAILED" : "VERIFIED", message: outcome, payload: { source } });
     return outcome;
   }
 

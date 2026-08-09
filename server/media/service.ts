@@ -3,7 +3,7 @@ import { createDrizzleDb } from "@/database/drizzle";
 import { media, s3Config } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { parseS3Config, type S3Config } from "@/lib/config-schemas";
-import { createStorageClient, objectRequestUrl, proxyUrl, storageFetchWithRetry } from "./storage-client";
+import { createStorageClient, deleteMediaCache, objectRequestUrl, proxyUrl, storageFetchWithRetry } from "./storage-client";
 import type { MediaConfigInput, MediaListQuery } from "./types";
 
 const MIME_EXTENSIONS: Record<string, string> = {
@@ -185,7 +185,7 @@ export async function deleteMedia(database: D1Database, runtime: Record<string, 
   if (!isDeleteResponseSuccessful(response)) appError("S3_DELETE_FAILED");
   await db.delete(media).where(eq(media.id, id));
   if (options.cache && options.cacheOrigin) {
-    try { await options.cache.delete(new Request(new URL(proxyUrl(row.fileKey), options.cacheOrigin))); } catch { /* Cache cleanup does not roll back a completed deletion. */ }
+    await deleteMediaCache(options.cache, new Request(new URL(proxyUrl(row.fileKey), options.cacheOrigin)));
   }
   return { id };
 }

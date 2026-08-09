@@ -43,8 +43,7 @@ export function registerMediaRoutes(app: Hono<{ Bindings: Bindings }>) {
     if (!Number.isInteger(id) || id < 1) return context.json(body("MEDIA_NOT_FOUND", "媒体文件不存在。"), 404);
     try {
       const { deleteMedia } = await import("./service");
-      const cache = (caches as unknown as { default: Cache }).default;
-      const result = await deleteMedia(context.env.DB, context.env, id, { cache, cacheOrigin: context.req.url });
+      const result = await deleteMedia(context.env.DB, context.env, id, { cache: (caches as unknown as { default: Cache }).default, cacheOrigin: context.req.url });
       return context.json(body(0 as unknown as string, "媒体文件已删除。", result));
     } catch (error) {
       return context.json(body(errorCode(error), "媒体文件删除失败，请稍后重试。"), 400);
@@ -53,14 +52,14 @@ export function registerMediaRoutes(app: Hono<{ Bindings: Bindings }>) {
   app.get("/media/proxy/*", async (context: Context<{ Bindings: Bindings }>) => {
     const request = context.req.raw;
     if (new URL(request.url).search) return context.text("Not Found", 404);
-    const cache = (caches as unknown as { default: Cache }).default;
-    const cached = await readMediaCache(cache, request);
-    if (cached) return cached;
     const wildcard = context.req.param("*");
     const fileKey = cleanFileKey(wildcard ?? "");
     if (!fileKey) return context.text("Not Found", 404);
     const [record] = await createDrizzleDb(context.env.DB).select().from(media).where(eq(media.fileKey, fileKey)).limit(1);
     if (!record) return context.text("Not Found", 404);
+    const cache = (caches as unknown as { default: Cache }).default;
+    const cached = await readMediaCache(cache, canonicalProxyRequest(fileKey, request.url));
+    if (cached) return cached;
     const { config, client } = await (await import("./service")).storage(context.env.DB, context.env);
     const response = await storageFetchWithRetry(client, objectRequestUrl(config, record.fileKey), { method: "GET" });
     if (response.status === 404) return context.text("Not Found", 404);

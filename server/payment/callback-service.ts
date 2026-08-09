@@ -32,17 +32,31 @@ export class PaymentCallbackService {
     const config = JSON.parse(configured.configJson) as Record<string, unknown>;
     const expectedCurrency = typeof config.currency === "string" ? config.currency.toUpperCase() : undefined;
     const record = result.orderNo ? await paymentRepository(this.database).findOrder(result.orderNo, provider) : null;
-    if (!result.verified || !result.orderNo || !record || (result.amount !== undefined && result.amount !== record.amount) || (result.paymentOrderNo && record.paymentOrderNo && result.paymentOrderNo !== record.paymentOrderNo) || record.paymentStatus === "FAILED" || (result.currency && expectedCurrency && result.currency.toUpperCase() !== expectedCurrency) || result.status !== "PAID") {
+    const callbackMatches = result.verified
+      && result.orderNo
+      && record
+      && result.amount !== undefined
+      && result.amount === record.amount
+      && (!expectedCurrency || (result.currency !== undefined && result.currency.toUpperCase() === expectedCurrency))
+      && (!record.paymentOrderNo || (result.paymentOrderNo !== undefined && result.paymentOrderNo === record.paymentOrderNo))
+      && record.paymentStatus !== "FAILED"
+      && result.status === "PAID";
+    if (!callbackMatches) {
       await logs.writeBestEffort({ orderId: record?.id, provider, orderNo: result.orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "NOTIFY", verifyStatus: "FAILED", message: !result.verified ? "PAYMENT_CALLBACK_VERIFY_FAILED" : "PAYMENT_CALLBACK_INVALID", payload: input.payload });
       return this.response(provider, false);
     }
+    if (!record || !result.orderNo || result.amount === undefined) return this.response(provider, false);
     const orderNo = result.orderNo;
 
     try {
       const outcome = await new PaymentFlowService(this.database, this.runtime).confirm(orderNo, "CALLBACK", result.amount);
+      if (outcome === "NOT_PAYABLE") {
+        await logs.writeBestEffort({ orderId: record.id, provider, orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "NOTIFY", verifyStatus: "FAILED", message: "PAYMENT_CALLBACK_NOT_PAYABLE", payload: input.payload });
+        return this.response(provider, false);
+      }
       if (outcome === "CONFIRMED") await notifyOrderEmailEvents(this.database, this.runtime, record.id);
       await logs.writeBestEffort({ orderId: record.id, provider, orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "NOTIFY", verifyStatus: "VERIFIED", message: outcome, payload: input.payload });
-      return this.response(provider, true);
+      return this.response(provider, outcome === "CONFIRMED" || outcome === "ALREADY_PAID");
     } catch (cause) {
       reportUnexpectedServerError("payment-callback-confirm", cause, { provider, orderNo });
       await logs.writeBestEffort({ orderId: record.id, provider, orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "NOTIFY", verifyStatus: "FAILED", message: "PAYMENT_CONFIRM_FAILED", payload: input.payload });

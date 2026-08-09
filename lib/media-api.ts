@@ -14,3 +14,8 @@ export async function mediaApiError(response: Response): Promise<Error> {
 export function mediaApiUserError(cause: unknown) {
   return userErrorMessage(cause);
 }
+
+export async function deleteMedia(id: number) {
+  const response = await fetch(`/api/media/${id}`, { method: "DELETE" });
+  if (!response.ok) throw await mediaApiError(response);
+}

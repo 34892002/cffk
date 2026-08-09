@@ -36,13 +36,21 @@ test("payment URL defaults use the configured site origin and fixed provider pat
   assert.deepEqual(getPaymentUrlDefaults("HASHPAY", null), { notifyUrl: "", returnUrl: "" });
 });
 
+test("Stripe callback payloads retain nested JSON and the exact raw body", () => {
+  const rawBody = '{"id":"evt_1","data":{"object":{"metadata":{"orderNo":"ORD-1"},"amount_total":1234}}}';
+  assert.deepEqual(
+    normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/stripe/notify", rawBody, "STRIPE"),
+    { id: "evt_1", __raw_body: rawBody },
+  );
+});
+
 test("payment callback payloads retain GET query data and raw JSON bodies", () => {
   assert.deepEqual(
     normalizePaymentCallbackPayload("GET", "https://shop.example/api/payments/epay/notify?out_trade_no=ORD-1&sign=signature", ""),
     { out_trade_no: "ORD-1", sign: "signature" },
   );
   assert.deepEqual(
-    normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/stripe/notify", '{"id":"evt_1"}'),
+    normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/stripe/notify", '{"id":"evt_1"}', "STRIPE"),
     { id: "evt_1", __raw_body: '{"id":"evt_1"}' },
   );
 });

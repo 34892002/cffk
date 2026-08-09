@@ -1,4 +1,4 @@
-import { and, eq, lt, lte } from "drizzle-orm";
+import { and, eq, lt, lte, or } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { reportUnexpectedServerError } from "@/server/error-handling";
 import { discountCode, order, orderCloseCompensation, orderDelivery, product } from "@/database/drizzle/schema";
@@ -95,13 +95,6 @@ async function releaseDiscount(database: D1Database, id: number) {
     .run();
 }
 
-async function consumeDiscount(database: D1Database, id: number) {
-  const result = await database
-    .prepare("UPDATE discountCode SET reservedCount = CASE WHEN reservedCount > 0 THEN reservedCount - 1 ELSE 0 END, usedCount = usedCount + 1, updatedAt = ? WHERE id = ? AND (maxUses IS NULL OR usedCount < maxUses)")
-    .bind(Date.now(), id)
-    .run();
-  if (result.meta.changes !== 1) fail("DISCOUNT_CODE_EXHAUSTED");
-}
 
 function discountAllowsProduct(productIds: string | null, productId: number) {
   if (!productIds?.trim()) return true;
@@ -218,14 +211,31 @@ export async function confirmOrderPayment(database: D1Database, orderId: number)
   }
   if (!canConfirmPayment(record.status, record.paymentStatus)) return "NOT_PAYABLE" as const;
 
-  const result = await db
-    .update(order)
-    .set({ status: "PAID", paymentStatus: "PAID", paidAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(order.id, orderId), eq(order.status, "PENDING"), eq(order.paymentStatus, "UNPAID")))
-    .returning({ id: order.id });
-  if (!result[0]) return "NOT_PAYABLE" as const;
+  const now = new Date();
+  const statements: D1PreparedStatement[] = [];
+  if (record.discountCodeId !== null) {
+    statements.push(
+      database.prepare("UPDATE discountCode SET reservedCount = reservedCount - 1, usedCount = usedCount + 1, updatedAt = ? WHERE id = ? AND reservedCount > 0 AND EXISTS (SELECT 1 FROM `order` WHERE id = ? AND status = 'PENDING' AND paymentStatus = 'UNPAID')").bind(now.getTime(), record.discountCodeId, orderId),
+      database.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('PAYMENT_CONFIRM_DISCOUNT_CONFLICT') END"),
+    );
+  }
+  statements.push(
+    database.prepare("UPDATE `order` SET status = 'PAID', paymentStatus = 'PAID', paidAt = ?, updatedAt = ? WHERE id = ? AND status = 'PENDING' AND paymentStatus = 'UNPAID'").bind(now.getTime(), now.getTime(), orderId),
+    database.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('PAYMENT_CONFIRM_ORDER_CONFLICT') END"),
+  );
+  try {
+    await database.batch(statements);
+  } catch (cause) {
+    const [current] = await db.select({ paymentStatus: order.paymentStatus }).from(order).where(eq(order.id, orderId)).limit(1);
+    if (current?.paymentStatus === "PAID") {
+      await deliverPaidOrder(database, orderId);
+      return "ALREADY_PAID" as const;
+    }
+    if (record.discountCodeId !== null) fail("DISCOUNT_CODE_EXHAUSTED");
+    if (cause instanceof Error) throw cause;
+    fail("PAYMENT_CONFIRM_FAILED");
+  }
 
-  if (record.discountCodeId !== null) await consumeDiscount(database, record.discountCodeId);
   await deliverPaidOrder(database, orderId);
   return "CONFIRMED" as const;
 }
@@ -382,18 +392,35 @@ type OrderCloseResult = { closed: boolean; compensationFailed: boolean; compensa
 type CloseCompensationRecord = typeof orderCloseCompensation.$inferSelect;
 
 const MAX_ORDER_CLOSE_COMPENSATION_ATTEMPTS = 5;
+const ORDER_CLOSE_COMPENSATION_LEASE_MS = 10 * 60 * 1000;
+
+async function claimOrderCloseCompensation(database: D1Database, record: CloseCompensationRecord, now: Date) {
+  if (record.attempts >= MAX_ORDER_CLOSE_COMPENSATION_ATTEMPTS) return null;
+  const [claimed] = await createDrizzleDb(database).update(orderCloseCompensation).set({
+    status: "PROCESSING",
+    attempts: record.attempts + 1,
+    nextAttemptAt: new Date(now.getTime() + ORDER_CLOSE_COMPENSATION_LEASE_MS),
+    updatedAt: now,
+  }).where(and(
+    eq(orderCloseCompensation.id, record.id),
+    eq(orderCloseCompensation.status, record.status),
+    eq(orderCloseCompensation.attempts, record.attempts),
+    lte(orderCloseCompensation.nextAttemptAt, now),
+  )).returning();
+  return claimed ?? null;
+}
 
 async function applyOrderCloseCompensation(database: D1Database, record: CloseCompensationRecord) {
   const db = createDrizzleDb(database);
   const errors: string[] = [];
   const now = new Date();
-  const attempts = record.attempts + 1;
+  const attempts = record.attempts;
 
   if (!record.cardsReleased) {
     try {
       await database.batch([
-        database.prepare("UPDATE card SET status = 'UNUSED', orderId = NULL, updatedAt = ? WHERE orderId = ? AND status = 'LOCKED'").bind(now.getTime(), record.orderId),
-        database.prepare("UPDATE orderCloseCompensation SET cardsReleased = 1, updatedAt = ? WHERE id = ?").bind(now.getTime(), record.id),
+        database.prepare("UPDATE card SET status = 'UNUSED', orderId = NULL, updatedAt = ? WHERE orderId = ? AND status = 'LOCKED' AND EXISTS (SELECT 1 FROM orderCloseCompensation WHERE id = ? AND status = 'PROCESSING' AND attempts = ? AND cardsReleased = 0)").bind(now.getTime(), record.orderId, record.id, attempts),
+        database.prepare("UPDATE orderCloseCompensation SET cardsReleased = 1, updatedAt = ? WHERE id = ? AND status = 'PROCESSING' AND attempts = ?").bind(now.getTime(), record.id, attempts),
       ]);
     } catch (cause) {
       errors.push(`cards: ${errorMessage(cause)}`);
@@ -403,8 +430,8 @@ async function applyOrderCloseCompensation(database: D1Database, record: CloseCo
   if (!record.stockRestored && (record.deliveryType === "MANUAL" || record.deliveryType === "EXPRESS")) {
     try {
       await database.batch([
-        database.prepare("UPDATE product SET physicalStock = physicalStock + ?, updatedAt = ? WHERE id = ?").bind(record.quantity, now.getTime(), record.productId),
-        database.prepare("UPDATE orderCloseCompensation SET stockRestored = 1, updatedAt = ? WHERE id = ?").bind(now.getTime(), record.id),
+        database.prepare("UPDATE product SET physicalStock = physicalStock + ?, updatedAt = ? WHERE id = ? AND EXISTS (SELECT 1 FROM orderCloseCompensation WHERE id = ? AND status = 'PROCESSING' AND attempts = ? AND stockRestored = 0)").bind(record.quantity, now.getTime(), record.productId, record.id, attempts),
+        database.prepare("UPDATE orderCloseCompensation SET stockRestored = 1, updatedAt = ? WHERE id = ? AND status = 'PROCESSING' AND attempts = ?").bind(now.getTime(), record.id, attempts),
       ]);
     } catch (cause) {
       errors.push(`stock: ${errorMessage(cause)}`);
@@ -414,8 +441,8 @@ async function applyOrderCloseCompensation(database: D1Database, record: CloseCo
   if (!record.discountReleased && record.discountCodeId !== null) {
     try {
       await database.batch([
-        database.prepare("UPDATE discountCode SET reservedCount = CASE WHEN reservedCount > 0 THEN reservedCount - 1 ELSE 0 END, updatedAt = ? WHERE id = ?").bind(now.getTime(), record.discountCodeId),
-        database.prepare("UPDATE orderCloseCompensation SET discountReleased = 1, updatedAt = ? WHERE id = ?").bind(now.getTime(), record.id),
+        database.prepare("UPDATE discountCode SET reservedCount = CASE WHEN reservedCount > 0 THEN reservedCount - 1 ELSE 0 END, updatedAt = ? WHERE id = ? AND EXISTS (SELECT 1 FROM orderCloseCompensation WHERE id = ? AND status = 'PROCESSING' AND attempts = ? AND discountReleased = 0)").bind(now.getTime(), record.discountCodeId, record.id, attempts),
+        database.prepare("UPDATE orderCloseCompensation SET discountReleased = 1, updatedAt = ? WHERE id = ? AND status = 'PROCESSING' AND attempts = ?").bind(now.getTime(), record.id, attempts),
       ]);
     } catch (cause) {
       errors.push(`discount: ${errorMessage(cause)}`);
@@ -425,11 +452,11 @@ async function applyOrderCloseCompensation(database: D1Database, record: CloseCo
 
   await db.update(orderCloseCompensation).set({
     attempts,
-    status: errors.length && attempts >= MAX_ORDER_CLOSE_COMPENSATION_ATTEMPTS ? "EXHAUSTED" : "PENDING",
+    status: errors.length ? attempts >= MAX_ORDER_CLOSE_COMPENSATION_ATTEMPTS ? "EXHAUSTED" : "PENDING" : "COMPLETED",
     lastError: errors.length ? errors.join("\\n").slice(0, 1_000) : null,
     nextAttemptAt: new Date(now.getTime() + (errors.length && attempts < MAX_ORDER_CLOSE_COMPENSATION_ATTEMPTS ? 5 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000)),
     updatedAt: now,
-  }).where(eq(orderCloseCompensation.id, record.id));
+  }).where(and(eq(orderCloseCompensation.id, record.id), eq(orderCloseCompensation.status, "PROCESSING"), eq(orderCloseCompensation.attempts, attempts)));
   return { failed: errors.length > 0, exhausted: errors.length > 0 && attempts >= MAX_ORDER_CLOSE_COMPENSATION_ATTEMPTS };
 }
 
@@ -437,18 +464,25 @@ function errorMessage(cause: unknown) { return cause instanceof Error ? cause.me
 
 export async function retryOrderCloseCompensations(database: D1Database, now: Date, limit = 100) {
   const db = createDrizzleDb(database);
+  const timedOut = await db.update(orderCloseCompensation).set({ status: "EXHAUSTED", lastError: "ORDER_CLOSE_COMPENSATION_PROCESSING_TIMEOUT", updatedAt: now })
+    .where(and(eq(orderCloseCompensation.status, "PROCESSING"), lte(orderCloseCompensation.nextAttemptAt, now), eq(orderCloseCompensation.attempts, MAX_ORDER_CLOSE_COMPENSATION_ATTEMPTS)))
+    .returning({ id: orderCloseCompensation.id });
   const records = await db.select({ compensation: orderCloseCompensation }).from(orderCloseCompensation)
     .innerJoin(order, eq(order.id, orderCloseCompensation.orderId))
-    .where(and(lte(orderCloseCompensation.nextAttemptAt, now), eq(orderCloseCompensation.status, "PENDING"), eq(order.status, "CLOSED"), eq(order.paymentStatus, "UNPAID")))
+    .where(and(lte(orderCloseCompensation.nextAttemptAt, now), or(eq(orderCloseCompensation.status, "PENDING"), eq(orderCloseCompensation.status, "PROCESSING")), eq(order.status, "CLOSED"), eq(order.paymentStatus, "UNPAID")))
     .limit(limit);
   let failed = 0;
-  let exhausted = 0;
+  let exhausted = timedOut.length;
+  let retried = 0;
   for (const record of records) {
-    const result = await applyOrderCloseCompensation(database, record.compensation);
+    const claimed = await claimOrderCloseCompensation(database, record.compensation, now);
+    if (!claimed) continue;
+    retried += 1;
+    const result = await applyOrderCloseCompensation(database, claimed);
     if (result.failed) failed += 1;
     if (result.exhausted) exhausted += 1;
   }
-  return { retried: records.length, failed, exhausted };
+  return { retried, failed, exhausted };
 }
 
 export async function closePendingOrder(database: D1Database, orderId: number): Promise<OrderCloseResult> {
@@ -463,38 +497,38 @@ export async function closePendingOrder(database: D1Database, orderId: number): 
   if (record.paymentStatus !== "UNPAID" || record.status !== "PENDING") return { closed: false, compensationFailed: false, compensationExhausted: false };
 
   const now = new Date();
-  let compensation: CloseCompensationRecord | null = null;
+  let closeResult: D1Result;
   try {
-    [compensation] = await db.insert(orderCloseCompensation).values({
-      orderId,
-      productId: record.productId,
-      quantity: record.quantity,
-      deliveryType: record.deliveryType,
-      discountCodeId: record.discountCodeId,
-      cardsReleased: record.deliveryType !== "CARD_AUTO",
-      stockRestored: record.deliveryType === "MANUAL" || record.deliveryType === "EXPRESS" ? record.physicalStock === null : true,
-      discountReleased: record.discountCodeId === null,
-      attempts: 0,
-      lastError: null,
-      nextAttemptAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).returning();
+    const results = await database.batch([
+      database.prepare("INSERT OR IGNORE INTO orderCloseCompensation (orderId, productId, quantity, deliveryType, discountCodeId, cardsReleased, stockRestored, discountReleased, attempts, status, lastError, nextAttemptAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', NULL, ?, ?, ?)").bind(
+        orderId,
+        record.productId,
+        record.quantity,
+        record.deliveryType,
+        record.discountCodeId,
+        record.deliveryType !== "CARD_AUTO" ? 1 : 0,
+        (record.deliveryType === "MANUAL" || record.deliveryType === "EXPRESS") && record.physicalStock !== null ? 0 : 1,
+        record.discountCodeId === null ? 1 : 0,
+        now.getTime(),
+        now.getTime(),
+        now.getTime(),
+      ),
+      database.prepare("UPDATE `order` SET status = 'CLOSED', closedAt = ?, updatedAt = ? WHERE id = ? AND status = 'PENDING' AND paymentStatus = 'UNPAID'").bind(now.getTime(), now.getTime(), orderId),
+      database.prepare("DELETE FROM orderCloseCompensation WHERE orderId = ? AND NOT EXISTS (SELECT 1 FROM `order` WHERE id = ? AND status = 'CLOSED' AND paymentStatus = 'UNPAID')").bind(orderId, orderId),
+    ]);
+    closeResult = results[1]!;
   } catch (cause) {
-    reportUnexpectedServerError("order-auto-close-create-compensation", cause, { orderId });
+    reportUnexpectedServerError("order-auto-close-prepare-compensation", cause, { orderId });
     return { closed: false, compensationFailed: true, compensationExhausted: false };
   }
-  if (!compensation) return { closed: false, compensationFailed: true, compensationExhausted: false };
+  if (closeResult.meta.changes !== 1) return { closed: false, compensationFailed: false, compensationExhausted: false };
 
-  const result = await db.update(order).set({ status: "CLOSED", closedAt: now, updatedAt: now }).where(and(eq(order.id, orderId), eq(order.status, "PENDING"), eq(order.paymentStatus, "UNPAID"))).returning({ id: order.id });
-  if (!result[0]) {
-    await db.delete(orderCloseCompensation).where(eq(orderCloseCompensation.id, compensation.id));
-    return { closed: false, compensationFailed: false, compensationExhausted: false };
-  }
+  const [compensation] = await db.select().from(orderCloseCompensation).where(eq(orderCloseCompensation.orderId, orderId)).limit(1);
+  if (!compensation) return { closed: true, compensationFailed: true, compensationExhausted: false };
+  const claimed = await claimOrderCloseCompensation(database, compensation, now);
+  const compensationResult = claimed ? await applyOrderCloseCompensation(database, claimed) : { failed: compensation.status === "PROCESSING", exhausted: compensation.status === "EXHAUSTED" };
 
-  {
-    const result = await applyOrderCloseCompensation(database, compensation);
-    await new PaymentLogService(database).writeBestEffort({
+  await new PaymentLogService(database).writeBestEffort({
       orderId,
       provider: record.paymentProvider as PaymentProviderKind,
       orderNo: record.orderNo,
@@ -502,8 +536,7 @@ export async function closePendingOrder(database: D1Database, orderId: number): 
       eventType: "AUTO_CLOSE",
       verifyStatus: "PENDING",
       message: "订单超时未支付，已自动关闭（30分钟）",
-      payload: {},
-    });
-    return { closed: true, compensationFailed: result.failed, compensationExhausted: result.exhausted };
-  }
+    payload: {},
+  });
+  return { closed: true, compensationFailed: compensationResult.failed, compensationExhausted: compensationResult.exhausted };
 }

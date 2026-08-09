@@ -33,6 +33,7 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
       ...(orderCleanup.status === "rejected" ? [`订单自动关闭: ${errorMessage(orderCleanup.reason)}`] : []),
       ...(orderResult && orderResult.compensationFailed > 0 ? [`资源补偿失败: ${orderResult.compensationFailed}`] : []),
       ...(orderResult && orderResult.compensationExhausted > 0 ? [`资源补偿重试已耗尽: ${orderResult.compensationExhausted}`] : []),
+      ...(pushRetryResult && pushRetryResult.exhausted > 0 ? [`推送重试已耗尽: ${pushRetryResult.exhausted}`] : []),
       ...(pushRetry.status === "rejected" ? [`推送重试: ${errorMessage(pushRetry.reason)}`] : []),
     ];
     try {
@@ -45,6 +46,7 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
         compensationExhausted: orderResult?.compensationExhausted ?? null,
         pushRetryAttempted: pushRetryResult?.attempted ?? null,
         pushRetrySent: pushRetryResult?.sent ?? null,
+        pushRetryExhausted: pushRetryResult?.exhausted ?? null,
         error: failures.length ? failures.join("\n").slice(0, 1_000) : null,
         completedAt: new Date(),
       });

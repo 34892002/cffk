@@ -6,7 +6,7 @@ import { isExpectedServerError } from "../server/error-handling.ts";
 import { parseS3Config, type S3Config } from "../lib/config-schemas.ts";
 import { detectedMime, isDeleteResponseSuccessful, normalizeMediaListQuery, normalizePath, validateMediaFile } from "../server/media/service.ts";
 import { canonicalProxyRequest, cleanFileKey } from "../server/media/storage-client.ts";
-import { objectRequestUrl, proxyUrl, readMediaCache, storageFetchWithRetry, writeMediaCache } from "../server/media/storage-client.ts";
+import { deleteMediaCache, objectRequestUrl, proxyUrl, readMediaCache, storageFetchWithRetry, writeMediaCache } from "../server/media/storage-client.ts";
 
 function errorCode(operation: () => unknown) {
   try {
@@ -109,16 +109,20 @@ test("storage retry stops on client errors and retries transient failures", asyn
   assert.equal(networkCalls, 3);
 });
 
-test("media cache helpers preserve hits and tolerate cache write failures", async () => {
+test("media cache helpers preserve hits and tolerate cache failures", async () => {
   const request = new Request("https://shop.example/media/proxy/media/file.webp");
   const cachedResponse = new Response("cached", { headers: { "content-type": "image/webp" } });
   let puts = 0;
-  const cache = { match: async () => cachedResponse, put: async () => { puts += 1; } } as never;
+  let deletes = 0;
+  const cache = { match: async () => cachedResponse, put: async () => { puts += 1; }, delete: async () => { deletes += 1; return true; } } as never;
   assert.equal(await readMediaCache(cache, request), cachedResponse);
   await writeMediaCache(cache, request, new Response("origin"));
+  await deleteMediaCache(cache, request);
   assert.equal(puts, 1);
-  const failingCache = { match: async () => undefined, put: async () => { throw new Error("cache unavailable"); } } as never;
+  assert.equal(deletes, 1);
+  const failingCache = { match: async () => undefined, put: async () => { throw new Error("cache unavailable"); }, delete: async () => { throw new Error("cache unavailable"); } } as never;
   await assert.doesNotReject(() => writeMediaCache(failingCache, request, new Response("origin")));
+  await assert.doesNotReject(() => deleteMediaCache(failingCache, request));
 });
 
 test("Vike abort control flow is not reported as an unexpected error", () => {

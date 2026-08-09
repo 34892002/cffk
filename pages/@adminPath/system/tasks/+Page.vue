@@ -74,7 +74,7 @@ function compensationSummary(run: ScheduledTaskRun) {
   if (run.compensationRetried === null) return "-";
   return `${run.compensationRetried} 重试 / ${run.compensationFailed ?? 0} 失败${run.compensationExhausted ? ` / ${run.compensationExhausted} 已耗尽` : ""}`;
 }
-function retrySummary(run: ScheduledTaskRun) { return run.pushRetryAttempted === null ? "-" : `${run.pushRetrySent ?? 0} 成功 / ${run.pushRetryAttempted} 尝试`; }
+function retrySummary(run: ScheduledTaskRun) { return run.pushRetryAttempted === null ? "-" : `${run.pushRetrySent ?? 0} 成功 / ${run.pushRetryAttempted} 尝试${run.pushRetryExhausted ? ` / ${run.pushRetryExhausted} 已耗尽` : ""}`; }
 function statusLabel(status: ScheduledTaskRun["status"]) { return { RUNNING: "运行中", SUCCESS: "成功", PARTIAL: "部分失败", FAILED: "失败" }[status]; }
 function statusVariant(status: ScheduledTaskRun["status"]) { return status === "SUCCESS" ? "secondary" : status === "PARTIAL" || status === "FAILED" ? "destructive" : "outline"; }
 onMounted(loadRuns);

@@ -27,7 +27,7 @@ function formPayload(parameters: URLSearchParams) {
   return payload;
 }
 
-export function normalizePaymentCallbackPayload(method: string, url: string, rawBody: string) {
+export function normalizePaymentCallbackPayload(method: string, url: string, rawBody: string, provider?: string) {
   if (method === "GET") {
     if (url.length > MAX_PAYMENT_CALLBACK_BYTES) failPayload();
     return formPayload(new URL(url).searchParams);
@@ -41,7 +41,10 @@ export function normalizePaymentCallbackPayload(method: string, url: string, raw
     if (entries.length > MAX_PAYMENT_CALLBACK_FIELDS) failPayload();
     const payload: Record<string, string> = {};
     for (const [key, item] of entries) {
-      if (typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean" && item !== null) failPayload();
+      if (typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean" && item !== null) {
+        if (provider === "STRIPE") continue;
+        failPayload();
+      }
       const normalized = item === null ? "" : String(item);
       assertField(key, normalized);
       payload[key] = normalized;

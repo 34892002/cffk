@@ -21,12 +21,11 @@ function getApp() {
       const contentLength = Number(context.req.header("content-length"));
       if (Number.isFinite(contentLength) && contentLength > MAX_PAYMENT_CALLBACK_BYTES) return context.text("failure", 400);
       const rawBody = await context.req.text();
-      const payload = normalizePaymentCallbackPayload(context.req.method, context.req.url, rawBody);
+      const payload = normalizePaymentCallbackPayload(context.req.method, context.req.url, rawBody, provider);
       const result = await new PaymentCallbackService(context.env.DB, context.env).handle(provider as PaymentProviderKind, { payload, rawBody, headers: context.req.raw.headers });
       return context.body(result.body, result.status as 200 | 400, { "content-type": result.contentType });
     };
     app.all(path, handlePaymentCallback);
-    app.all(`${path}/*`, handlePaymentCallback);
   }
   registerMediaRoutes(app);
   vike(app, [betterAuthSessionMiddleware, betterAuthHandler, telefuncHandler]);

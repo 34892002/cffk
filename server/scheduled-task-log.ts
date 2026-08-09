@@ -13,6 +13,7 @@ type CompleteScheduledTaskRunInput = {
   compensationExhausted: number | null;
   pushRetryAttempted: number | null;
   pushRetrySent: number | null;
+  pushRetryExhausted: number | null;
   error: string | null;
   completedAt: Date;
 };
@@ -41,6 +42,7 @@ export async function startScheduledMaintenanceRun(database: D1Database, started
     compensationExhausted: null,
     pushRetryAttempted: null,
     pushRetrySent: null,
+    pushRetryExhausted: null,
     error: null,
     startedAt,
     completedAt: null,
@@ -63,6 +65,7 @@ export async function recordScheduledMaintenanceRunFailure(database: D1Database,
     compensationExhausted: null,
     pushRetryAttempted: null,
     pushRetrySent: null,
+    pushRetryExhausted: null,
     error: errorMessage(cause),
     completedAt,
   });

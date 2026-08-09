@@ -33,6 +33,10 @@ export async function writeMediaCache(cache: Cache, request: Request, response: 
   try { await cache.put(request, response.clone()); } catch { /* Cache 不可用时仍返回源站内容。 */ }
 }
 
+export async function deleteMediaCache(cache: Cache, request: Request) {
+  try { await cache.delete(request); } catch { /* Cache cleanup does not roll back a completed deletion. */ }
+}
+
 export function parseStoredS3Config(configJson: string) {
   return parseS3Config(configJson);
 }

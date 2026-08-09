@@ -1,4 +1,4 @@
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, lte, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { adminBootstrap, emailTemplate, order, orderDelivery, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry, siteSetting, user } from "@/database/drizzle/schema";
 import { parseEmailProviderConfig, parseEmailTemplateConfig } from "@/lib/config-schemas";
@@ -20,6 +20,7 @@ type CloudflareEmailBinding = {
 };
 
 const DEFAULT_API_TIMEOUT_MS = 15_000;
+const PUSH_PROCESSING_LEASE_MS = 10 * 60 * 1000;
 
 function isEmail(value: string | null | undefined) {
   return /^\S+@\S+\.\S+$/.test(value?.trim() ?? "");
@@ -211,15 +212,25 @@ export async function dispatchPush(database: D1Database, runtime: Runtime, input
 
 export async function retryDuePushes(database: D1Database, runtime: Runtime, now = new Date(), limit = 50) {
   const db = createDrizzleDb(database);
+  const exhaustedTimeouts = await db.select({ id: pushRetry.id, pushLogId: pushRetry.pushLogId, attemptCount: pushRetry.attemptCount }).from(pushRetry)
+    .where(and(eq(pushRetry.status, "PROCESSING"), lte(pushRetry.nextAttemptAt, now), sql`${pushRetry.attemptCount} >= ${pushRetry.maxAttempts}`));
+  for (const item of exhaustedTimeouts) {
+    const [updated] = await db.update(pushRetry).set({ status: "EXHAUSTED", lastError: "PUSH_RETRY_PROCESSING_TIMEOUT", updatedAt: now })
+      .where(and(eq(pushRetry.id, item.id), eq(pushRetry.status, "PROCESSING"), eq(pushRetry.attemptCount, item.attemptCount), lte(pushRetry.nextAttemptAt, now)))
+      .returning({ id: pushRetry.id });
+    if (updated) await writeResult(database, item.pushLogId, "EXHAUSTED", item.attemptCount, { error: "PUSH_RETRY_PROCESSING_TIMEOUT" });
+  }
+  await database.prepare("UPDATE pushRetry SET status = 'PENDING', lastError = 'PUSH_RETRY_PROCESSING_TIMEOUT', updatedAt = ? WHERE status = 'PROCESSING' AND nextAttemptAt <= ? AND attemptCount < maxAttempts").bind(now.getTime(), now.getTime()).run();
   const pending = await db.select().from(pushRetry)
     .where(and(eq(pushRetry.status, "PENDING"), lte(pushRetry.nextAttemptAt, now)))
     .limit(Math.min(100, Math.max(1, limit)));
   let attempted = 0;
   let sent = 0;
+  let exhaustedCount = exhaustedTimeouts.length;
 
   for (const item of pending) {
     const nextAttemptCount = item.attemptCount + 1;
-    const [claimed] = await db.update(pushRetry).set({ status: "PROCESSING", attemptCount: nextAttemptCount, updatedAt: now })
+    const [claimed] = await db.update(pushRetry).set({ status: "PROCESSING", attemptCount: nextAttemptCount, nextAttemptAt: new Date(now.getTime() + PUSH_PROCESSING_LEASE_MS), updatedAt: now })
       .where(and(eq(pushRetry.id, item.id), eq(pushRetry.status, "PENDING"), eq(pushRetry.attemptCount, item.attemptCount)))
       .returning({ id: pushRetry.id });
     if (!claimed) continue;
@@ -229,11 +240,28 @@ export async function retryDuePushes(database: D1Database, runtime: Runtime, now
     if (!payload || nextAttemptCount > item.maxAttempts) {
       await db.update(pushRetry).set({ status: "EXHAUSTED", lastError: "PUSH_RETRY_PAYLOAD_INVALID", updatedAt: now }).where(eq(pushRetry.id, item.id));
       await writeResult(database, item.pushLogId, "EXHAUSTED", nextAttemptCount, { error: "PUSH_RETRY_PAYLOAD_INVALID" });
+      exhaustedCount += 1;
       continue;
     }
 
     await db.update(pushLog).set({ status: "PROCESSING", attemptCount: nextAttemptCount, updatedAt: now }).where(eq(pushLog.id, item.pushLogId));
-    const result = await sendEmail(database, runtime, payload.input, payload.recipient, item.pushLogId, nextAttemptCount);
+    let result: PushDispatchResult;
+    try {
+      result = await sendEmail(database, runtime, payload.input, payload.recipient, item.pushLogId, nextAttemptCount);
+    } catch (cause) {
+      const reason = cause instanceof Error ? cause.message : "EMAIL_SEND_RETRYABLE";
+      const exhausted = nextAttemptCount >= item.maxAttempts;
+      const updatedAt = new Date();
+      await db.update(pushRetry).set({
+        status: exhausted ? "EXHAUSTED" : "PENDING",
+        nextAttemptAt: exhausted ? new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000) : new Date(now.getTime() + pushRetryDelayMs(nextAttemptCount)),
+        lastError: sanitizeDatabaseLogText(reason),
+        updatedAt,
+      }).where(and(eq(pushRetry.id, item.id), eq(pushRetry.status, "PROCESSING"), eq(pushRetry.attemptCount, nextAttemptCount)));
+      await writeResult(database, item.pushLogId, exhausted ? "EXHAUSTED" : "FAILED", nextAttemptCount, { error: reason });
+      if (exhausted) exhaustedCount += 1;
+      continue;
+    }
     if (result.status === "SUCCESS") {
       await db.delete(pushRetry).where(eq(pushRetry.id, item.id));
       sent += 1;
@@ -244,18 +272,20 @@ export async function retryDuePushes(database: D1Database, runtime: Runtime, now
     if (!isRetryableError(reason)) {
       await db.update(pushRetry).set({ status: "EXHAUSTED", lastError: sanitizeDatabaseLogText(reason), updatedAt: new Date() }).where(eq(pushRetry.id, item.id));
       await writeResult(database, item.pushLogId, "FAILED", nextAttemptCount, { error: reason });
+      exhaustedCount += 1;
       continue;
     }
     if (nextAttemptCount >= item.maxAttempts) {
       await db.update(pushRetry).set({ status: "EXHAUSTED", lastError: sanitizeDatabaseLogText(reason), updatedAt: new Date() }).where(eq(pushRetry.id, item.id));
       await writeResult(database, item.pushLogId, "EXHAUSTED", nextAttemptCount, { error: reason });
+      exhaustedCount += 1;
       continue;
     }
     const updatedAt = new Date();
     await db.update(pushRetry).set({ status: "PENDING", nextAttemptAt: new Date(now.getTime() + pushRetryDelayMs(nextAttemptCount)), lastError: sanitizeDatabaseLogText(reason), updatedAt }).where(eq(pushRetry.id, item.id));
     await db.update(pushLog).set({ status: "PENDING", attemptCount: nextAttemptCount, error: sanitizeDatabaseLogText(reason), updatedAt }).where(eq(pushLog.id, item.pushLogId));
   }
-  return { attempted, sent };
+  return { attempted, sent, exhausted: exhaustedCount };
 }
 
 export function deliveryItemsFromSnapshots(snapshots: string[]) {

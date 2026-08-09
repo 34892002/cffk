@@ -109,7 +109,7 @@ import { Field as VeeField, useForm } from "vee-validate";
 import { toTypedSchema } from "@vee-validate/zod";
 import { z } from "zod";
 import { toast } from "vue-sonner";
-import { mediaApiError, mediaApiUserError } from "@/lib/media-api";
+import { deleteMedia, mediaApiUserError, mediaApiError } from "@/lib/media-api";
 import { runTelefunc } from "@/lib/telefunc-client";
 import type { MediaConfigInput } from "@/server/media/types";
 import { onGetMedia, onGetMediaConfig, onSaveMediaConfig, onTestMediaStorage } from "@/server/media/admin.telefunc";
@@ -131,7 +131,7 @@ async function optimizeFile(file: File) { if (!webpEnabled.value || !["image/jpe
 async function upload() { if (!selectedFile.value || !canUpload.value) return; uploading.value = true; progress.value = 0; const file = await optimizeFile(selectedFile.value); const xhr = new XMLHttpRequest(); xhr.open("POST", "/api/media/upload"); xhr.upload.onprogress = (event) => { if (event.lengthComputable) progress.value = Math.round(event.loaded / event.total * 100); }; xhr.onload = async () => { uploading.value = false; if (xhr.status >= 200 && xhr.status < 300) { toast.success("文件上传成功。"); selectedFile.value = null; void loadAll(); } else { const response = new Response(xhr.responseText, { status: xhr.status, headers: { "content-type": xhr.getResponseHeader("content-type") ?? "text/plain" } }); toast.error(mediaApiUserError(await mediaApiError(response))); } }; xhr.onerror = () => { uploading.value = false; toast.error("接口异常，请稍后重试。"); }; const form = new FormData(); form.append("file", file); xhr.send(form); }
 const saveConfig = handleSubmit(async (input) => { saving.value = true; try { await runTelefunc(() => onSaveMediaConfig(input), { successMessage: "媒体存储配置已保存。" }); configOpen.value = false; await loadAll(); } catch { /* runTelefunc 已显示脱敏错误。 */ } finally { saving.value = false; } });
 async function testConfig() { try { await runTelefunc(() => onTestMediaStorage(values as MediaConfigInput), { successMessage: "存储连接测试成功。" }); } catch { /* runTelefunc 已显示脱敏错误。 */ } }
-async function remove() { if (!toDelete.value) return; deleting.value = true; try { const response = await fetch(`/api/media/${toDelete.value.id}`, { method: "DELETE" }); if (!response.ok) throw await mediaApiError(response); toast.success("媒体文件已删除。"); toDelete.value = null; await loadAll(); } catch (cause) { toast.error(mediaApiUserError(cause)); } finally { deleting.value = false; } }
+async function remove() { if (!toDelete.value) return; deleting.value = true; try { await deleteMedia(toDelete.value.id); toast.success("媒体文件已删除。"); toDelete.value = null; await loadAll(); } catch (cause) { toast.error(mediaApiUserError(cause)); } finally { deleting.value = false; } }
 async function copy(url: string) { await navigator.clipboard.writeText(url); toast.success("URL 已复制。"); }
 function formatSize(value: number) { return value < 1048576 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1048576).toFixed(2)} MB`; }
 function formatDate(value: Date | string) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)); }
