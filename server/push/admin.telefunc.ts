@@ -1,7 +1,9 @@
 import { and, count, desc, eq, gte, like, lte } from "drizzle-orm";
 import { emailTemplate, order, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { formatDateInTimezone } from "@/lib/site-timezone";
 import { parseEmailProviderConfig } from "@/lib/config-schemas";
+import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
 
 export type PushScene = "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED";
@@ -86,16 +88,17 @@ export async function onSavePushConfig(input: SaveInput) {
 
 export async function onRetryPushLog(id: number) {
   if (!Number.isInteger(id) || id <= 0) appError("PUSH_LOG_NOT_RETRYABLE");
-  const { db, adminUserId } = requireAdmin();
+  const { database, db, adminUserId } = requireAdmin();
   const [log] = await db.select().from(pushLog).where(eq(pushLog.id, id)).limit(1);
   if (!log || log.channel !== "EMAIL" || (log.status !== "FAILED" && log.status !== "EXHAUSTED") || !log.channelConfigId) appError("PUSH_LOG_NOT_RETRYABLE");
   const now = new Date();
+  const settings = log.orderId ? null : await getSiteSettings(database);
   const payload = JSON.stringify({
     input: {
       scene: log.scene,
       messageType: log.messageType,
       ...(log.orderId ? { orderId: log.orderId } : {}),
-      variables: log.orderId ? {} : { siteName: "CFFK", sentAt: new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "medium", timeZone: "Asia/Shanghai" }).format(now), customContent: "这是一封重试测试邮件。" },
+      variables: log.orderId ? {} : { siteName: settings!.siteName, sentAt: formatDateInTimezone(now, settings!.timezone, { dateStyle: "medium", timeStyle: "medium" }), customContent: "这是一封重试测试邮件。" },
       source: `admin:retry:${adminUserId}:${id}`,
       providerConfigId: log.channelConfigId,
     },

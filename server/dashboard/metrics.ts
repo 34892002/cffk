@@ -1,6 +1,8 @@
 import { desc, eq, gte, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, order, product } from "@/database/drizzle/schema";
+import { getSiteSettings } from "@/server/site/public-settings";
+import { startOfDayInTimezone } from "@/lib/site-timezone";
 
 export type DashboardData = {
   metrics: {
@@ -25,8 +27,8 @@ export type DashboardData = {
 
 export async function getDashboardData(database: D1Database): Promise<DashboardData> {
   const db = createDrizzleDb(database);
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  const settings = await getSiteSettings(database);
+  const startOfToday = startOfDayInTimezone(new Date(), settings.timezone);
 
   const [orders, products, cards, recentOrders] = await Promise.all([
     db.select({

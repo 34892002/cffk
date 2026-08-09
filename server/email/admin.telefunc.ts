@@ -2,9 +2,11 @@ import { and, asc, count, eq, inArray, ne } from "drizzle-orm";
 
 import { emailTemplate, pushChannelConfig, pushLog } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { formatDateInTimezone } from "@/lib/site-timezone";
 import { parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { getEmailTemplateDefinition } from "@/server/email/template-definitions";
 import { dispatchPush } from "@/server/push/service";
+import { getSiteSettings } from "@/server/site/public-settings";
 import {
   emailProviderDefinitions,
   maskedEmailProviderConfig,
@@ -139,7 +141,8 @@ export async function onSendTestEmail(input: { to: string; customContent?: strin
   const recipient = input.to.trim();
   if (!/^\S+@\S+\.\S+$/.test(recipient)) appError("EMAIL_RECIPIENT_INVALID");
 
-  const results = await dispatchPush(database, runtime, { scene: "TEST", messageType: "ADMIN", recipient: { type: "ADMIN", address: recipient }, source: `admin:test:${adminUserId}:${crypto.randomUUID()}`, providerConfigId: input.providerConfigId, variables: { siteName: "CFFK", sentAt: new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "medium", timeZone: "Asia/Shanghai" }).format(new Date()), customContent: input.customContent?.trim() || "这是一封测试邮件。" } });
+  const settings = await getSiteSettings(database);
+  const results = await dispatchPush(database, runtime, { scene: "TEST", messageType: "ADMIN", recipient: { type: "ADMIN", address: recipient }, source: `admin:test:${adminUserId}:${crypto.randomUUID()}`, providerConfigId: input.providerConfigId, variables: { siteName: settings.siteName, sentAt: formatDateInTimezone(new Date(), settings.timezone, { dateStyle: "medium", timeStyle: "medium" }), customContent: input.customContent?.trim() || "这是一封测试邮件。" } });
   const result = results[0];
   if (!result) appError("EMAIL_SEND_FAILED");
   testDeliveryError(result);

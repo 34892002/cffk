@@ -31,8 +31,10 @@ import { Button } from "@/components/ui/button";
 import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetScheduledTaskRuns } from "@/server/scheduled-task.admin.telefunc";
+import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 
 type ScheduledTaskRun = Awaited<ReturnType<typeof onGetScheduledTaskRuns>>["runs"][number];
+const timezone = useSiteTimezone();
 const columns: AdminTableColumn<ScheduledTaskRun>[] = [
   { key: "startedAt", label: "开始时间" },
   { key: "completedAt", label: "完成时间" },
@@ -68,7 +70,7 @@ function changePage(value: number) { page.value = value; void loadRuns(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadRuns(); }
 function formatDate(value: unknown) {
   const date = value instanceof Date ? value : new Date(typeof value === "string" || typeof value === "number" ? value : Number.NaN);
-  return Number.isNaN(date.getTime()) ? "-" : new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "medium", timeZone: "Asia/Shanghai" }).format(date);
+  return Number.isNaN(date.getTime()) ? "-" : formatDateInTimezone(date, timezone.value, { dateStyle: "short", timeStyle: "medium" });
 }
 function compensationSummary(run: ScheduledTaskRun) {
   if (run.compensationRetried === null) return "-";

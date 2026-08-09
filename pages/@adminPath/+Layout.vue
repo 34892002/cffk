@@ -25,12 +25,18 @@ import AdminSidebar from "@/components/AdminSidebar.vue";
 import { Separator } from "@/components/ui/separator";
 import { getAdminBreadcrumb } from "@/lib/admin-navigation";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { computed } from "vue";
+import { computed, onMounted, provide, ref } from "vue";
 import { usePageContext } from "vike-vue/usePageContext";
+import { SITE_TIMEZONE_KEY } from "@/lib/site-timezone";
+import { onGetSiteSettings } from "@/server/site/admin.telefunc";
+import { runTelefunc } from "@/lib/telefunc-client";
 
 const pageContext = usePageContext();
 const basePath = computed(() => `/${pageContext.routeParams.adminPath}`);
 const isLoginPage = computed(() => pageContext.urlPathname.replace(/\/$/, "") === basePath.value);
 const routeMeta = computed(() => getAdminBreadcrumb(pageContext.urlPathname, basePath.value));
+const timezone = ref("Asia/Shanghai");
+provide(SITE_TIMEZONE_KEY, timezone);
+onMounted(() => { void runTelefunc(() => onGetSiteSettings(), { notifyError: false }).then((settings) => { timezone.value = settings.timezone; }).catch(() => undefined); });
 
 </script>

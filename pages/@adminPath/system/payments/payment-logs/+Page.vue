@@ -15,14 +15,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { runTelefunc } from "@/lib/telefunc-client";
+import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 import { onGetPaymentLogs, onGetPaymentProviders } from "@/server/payment/admin.telefunc";
 import type { PaymentProviderKind } from "@/server/payment/registry";
 
 type PaymentLog = Awaited<ReturnType<typeof onGetPaymentLogs>>["rows"][number];
+const timezone = useSiteTimezone();
 type Provider = Awaited<ReturnType<typeof onGetPaymentProviders>>[number];
 const logColumns: AdminTableColumn<PaymentLog>[] = [{ key: "createdAt", label: "时间" }, { key: "provider", label: "渠道" }, { key: "orderNo", label: "订单" }, { key: "eventType", label: "事件" }, { key: "verifyStatus", label: "验证" }, { key: "message", label: "结果" }];
 const providers = ref<Provider[]>([]); const logs = ref<PaymentLog[]>([]); const logProvider = ref<"ALL" | PaymentProviderKind>("ALL"); const logPage = ref(1); const logPageSize = ref(20); const logTotal = ref(0); const loading = ref(false);
-function formatDate(value: unknown) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(typeof value === "string" || typeof value === "number" || value instanceof Date ? value : 0)); }
+function formatDate(value: unknown) { return formatDateInTimezone(typeof value === "string" || typeof value === "number" || value instanceof Date ? value : 0, timezone.value); }
 async function loadLogs() { loading.value = true; try { const [providerRows, result] = await Promise.all([runTelefunc(() => onGetPaymentProviders()), runTelefunc(() => onGetPaymentLogs({ provider: logProvider.value === "ALL" ? undefined : logProvider.value, page: logPage.value, pageSize: logPageSize.value }))]); providers.value = providerRows; logs.value = result.rows; logTotal.value = result.total; } catch { /* runTelefunc owns feedback */ } finally { loading.value = false; } }
 function resetAndLoad() { logPage.value = 1; void loadLogs(); }
 watch([logPage, logPageSize], ([page, pageSize], [previousPage, previousPageSize]) => { if (page !== previousPage || pageSize !== previousPageSize) void loadLogs(); });

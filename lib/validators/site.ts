@@ -1,3 +1,5 @@
+import { normalizeSiteTimezone } from "@/lib/site-timezone";
+
 const URL_PROTOCOLS = new Set(["http:", "https:"]);
 
 function optionalText(value: unknown, field: string, maxLength: number) {
@@ -41,9 +43,9 @@ export function validateSiteSettingsInput(input: SiteSettingsInput) {
   if (!siteName) throw new Error("SITE_NAME_REQUIRED");
   if (siteName.length > 120) throw new Error("SITE_NAME_TOO_LONG");
 
-  const timezone = String(input.timezone ?? "").trim();
+  let timezone: string;
   try {
-    new Intl.DateTimeFormat("zh-CN", { timeZone: timezone }).format();
+    timezone = normalizeSiteTimezone(String(input.timezone ?? ""));
   } catch {
     throw new Error("SITE_TIMEZONE_INVALID");
   }

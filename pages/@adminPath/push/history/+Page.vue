@@ -44,8 +44,10 @@ import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetPushLogs, onRetryPushLog } from "@/server/push/admin.telefunc";
+import { dateTimeInTimezone, formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 
 type PushLog = Awaited<ReturnType<typeof onGetPushLogs>>["logs"][number];
+const timezone = useSiteTimezone();
 const columns: AdminTableColumn<PushLog>[] = [
   { key: "createdAt", label: "时间" }, { key: "channel", label: "渠道" }, { key: "messageType", label: "类型" }, { key: "scene", label: "场景" }, { key: "orderNo", label: "订单号" }, { key: "provider", label: "Provider" },
   { key: "recipient", label: "收件人" }, { key: "subject", label: "主题" }, { key: "status", label: "状态" }, { key: "result", label: "结果" },
@@ -69,7 +71,7 @@ async function loadLogs() {
   loading.value = true;
   error.value = null;
   try {
-    const result = await runTelefunc(() => onGetPushLogs({ page: page.value, pageSize: pageSize.value, ...(channel.value !== "ALL" ? { channel: channel.value } : {}), ...(messageType.value !== "ALL" ? { messageType: messageType.value } : {}), ...(scene.value !== "ALL" ? { scene: scene.value } : {}), ...(status.value !== "ALL" ? { status: status.value } : {}), ...(orderNo.value.trim() ? { orderNo: orderNo.value.trim() } : {}), ...(from.value ? { from: new Date(from.value).toISOString() } : {}), ...(to.value ? { to: new Date(to.value).toISOString() } : {}) }), { notifyError: false });
+    const result = await runTelefunc(() => onGetPushLogs({ page: page.value, pageSize: pageSize.value, ...(channel.value !== "ALL" ? { channel: channel.value } : {}), ...(messageType.value !== "ALL" ? { messageType: messageType.value } : {}), ...(scene.value !== "ALL" ? { scene: scene.value } : {}), ...(status.value !== "ALL" ? { status: status.value } : {}), ...(orderNo.value.trim() ? { orderNo: orderNo.value.trim() } : {}), ...(from.value ? { from: dateTimeInTimezone(from.value, timezone.value).toISOString() } : {}), ...(to.value ? { to: dateTimeInTimezone(to.value, timezone.value).toISOString() } : {}) }), { notifyError: false });
     logs.value = result.logs;
     total.value = result.total;
     page.value = result.page;
@@ -82,7 +84,7 @@ async function retryLog(id: number) {
 function resetAndLoad() { page.value = 1; void loadLogs(); }
 function changePage(value: number) { page.value = value; void loadLogs(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadLogs(); }
-function formatDate(value: Date | string | number) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "medium", timeZone: "Asia/Shanghai" }).format(new Date(value)); }
+function formatDate(value: Date | string | number) { return formatDateInTimezone(value, timezone.value, { dateStyle: "short", timeStyle: "medium" }); }
 function channelLabel(value: PushLog["channel"]) { return { EMAIL: "电子邮件", WECHAT: "微信", TELEGRAM: "Telegram" }[value]; }
 function sceneLabel(value: PushLog["scene"]) { return { TEST: "测试", ORDER_PAID: "支付成功", DELIVERY_SUCCESS: "发货成功", DELIVERY_FAILED: "发货失败" }[value]; }
 function statusLabel(value: PushLog["status"]) { return { PENDING: "等待发送", PROCESSING: "发送中", SUCCESS: "成功", FAILED: "失败", SKIPPED: "已跳过", EXHAUSTED: "重试耗尽" }[value]; }

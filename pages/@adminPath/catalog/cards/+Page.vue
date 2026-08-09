@@ -15,6 +15,7 @@ import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { runTelefunc } from "@/lib/telefunc-client";
+import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 import {
   onCreateCard,
   onDeleteCard,
@@ -61,10 +62,9 @@ const clearDialogOpen = ref(false);
 const cardToDelete = ref<CardRow | null>(null);
 
 const total = computed(() => data.total);
+const timezone = useSiteTimezone();
 const selectedProductName = computed(() => data.products.find((item) => item.id === filters.productId)?.name ?? "");
-const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
-  dateStyle: "short", timeStyle: "medium", timeZone: "Asia/Shanghai",
-});
+const dateFormatter = { format: (value: Date | string | number) => formatDateInTimezone(value, timezone.value, { dateStyle: "short", timeStyle: "medium" }) };
 
 onMounted(loadCards);
 

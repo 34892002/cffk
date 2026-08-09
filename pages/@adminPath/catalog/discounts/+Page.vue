@@ -53,6 +53,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { PlusIcon, RefreshCwIcon } from "@lucide/vue";
+import { formatDateInTimezone, formatDateTimeInputInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetDiscountCodes, onSaveDiscountCode, onSetDiscountCodeStatus } from "@/server/discount/admin.telefunc";
 
@@ -75,6 +76,7 @@ const filteredDiscounts = computed(() => {
   const value = query.value.trim().toLowerCase();
   return discounts.value.filter((item) => (!value || item.code.toLowerCase().includes(value)) && (statusFilter.value === "ALL" || item.isActive === (statusFilter.value === "ACTIVE")));
 });
+const timezone = useSiteTimezone();
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredDiscounts.value.length / pageSize.value)));
 const paginatedDiscounts = computed(() => filteredDiscounts.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value));
 function emptyForm(): Form { return { code: "", type: "FIXED", value: 1, minAmount: 0, maxUses: 0, productIds: "", expiresAt: "", isActive: true }; }
@@ -88,8 +90,8 @@ async function setStatus(id: number, isActive: boolean) { error.value = null; tr
 function editDiscount(item: Discount) { Object.assign(form, { id: item.id, code: item.code, type: item.type, value: item.value, minAmount: item.minAmount ?? 0, maxUses: item.maxUses ?? 0, productIds: item.productIds ?? "", expiresAt: item.expiresAt ? toLocalDateTime(item.expiresAt) : "", isActive: item.isActive }); dialogOpen.value = true; }
 function ruleLabel(item: Discount) { return item.type === "FIXED" ? `减免 ${formatAmount(item.value)}` : `减免 ${item.value}%`; }
 function formatAmount(value: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(value / 100); }
-function formatDate(value: Date | string | number) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(value)); }
-function toLocalDateTime(value: Date | string | number) { const date = new Date(value); const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
+function formatDate(value: Date | string | number) { return formatDateInTimezone(value, timezone.value); }
+function toLocalDateTime(value: Date | string | number) { return formatDateTimeInputInTimezone(value, timezone.value); }
 
 onMounted(loadDiscounts);
 </script>

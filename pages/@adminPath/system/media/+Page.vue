@@ -110,6 +110,7 @@ import { toTypedSchema } from "@vee-validate/zod";
 import { z } from "zod";
 import { toast } from "vue-sonner";
 import { deleteMedia, mediaApiUserError, mediaApiError } from "@/lib/media-api";
+import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 import { runTelefunc } from "@/lib/telefunc-client";
 import type { MediaConfigInput } from "@/server/media/types";
 import { onGetMedia, onGetMediaConfig, onSaveMediaConfig, onTestMediaStorage } from "@/server/media/admin.telefunc";
@@ -120,6 +121,7 @@ const data = reactive<Awaited<ReturnType<typeof onGetMedia>>>({ items: [], total
 const config = reactive<Awaited<ReturnType<typeof onGetMediaConfig>>>({ configured: false, values: null, credentialStatus: { accessKeyConfigured: false, secretKeyConfigured: false }, updatedAt: null });
 const loading = ref(false), configOpen = ref(false), uploading = ref(false), saving = ref(false), deleting = ref(false), progress = ref(0), selectedFile = ref<File | null>(null), keyword = ref(""), mimeType = ref("all"), preview = ref<Row | null>(null), toDelete = ref<Row | null>(null), dragging = ref(false), webpSupported = ref(false), webpEnabled = ref(false);
 const canUpload = computed(() => config.configured && config.credentialStatus.accessKeyConfigured && config.credentialStatus.secretKeyConfigured);
+const timezone = useSiteTimezone();
 const { handleSubmit, resetForm, values } = useForm({ validationSchema: toTypedSchema(z.object({ endpoint: z.string().url(), bucket: z.string().min(1), accessKeyId: z.string().optional(), secretAccessKey: z.string().optional(), region: z.string().min(1), pathPrefix: z.string().min(1), cacheControl: z.string().min(1), forcePathStyle: z.boolean() })), initialValues: { endpoint: "", bucket: "", accessKeyId: "", secretAccessKey: "", region: "auto", pathPrefix: "media", cacheControl: "public, max-age=31536000, s-maxage=31536000, immutable", forcePathStyle: false } });
 async function loadAll() { loading.value = true; try { const [c, list] = await Promise.all([runTelefunc(() => onGetMediaConfig(), { notifyError: false }), runTelefunc(() => onGetMedia({ keyword: keyword.value || undefined, mimeType: mimeType.value === "all" ? undefined : mimeType.value as "image/" | "application/pdf", page: data.page, pageSize: data.pageSize }), { notifyError: false })]); Object.assign(config, c); Object.assign(data, list); if (c.values) resetForm({ values: { ...c.values, accessKeyId: "", secretAccessKey: "" } }); } catch { /* runTelefunc 已显示脱敏错误。 */ } finally { loading.value = false; } }
 function search() { data.page = 1; void loadAll(); }
@@ -134,6 +136,6 @@ async function testConfig() { try { await runTelefunc(() => onTestMediaStorage(v
 async function remove() { if (!toDelete.value) return; deleting.value = true; try { await deleteMedia(toDelete.value.id); toast.success("媒体文件已删除。"); toDelete.value = null; await loadAll(); } catch (cause) { toast.error(mediaApiUserError(cause)); } finally { deleting.value = false; } }
 async function copy(url: string) { await navigator.clipboard.writeText(url); toast.success("URL 已复制。"); }
 function formatSize(value: number) { return value < 1048576 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1048576).toFixed(2)} MB`; }
-function formatDate(value: Date | string) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)); }
+function formatDate(value: Date | string) { return formatDateInTimezone(value, timezone.value); }
 onMounted(() => { const canvas = document.createElement("canvas"); webpSupported.value = canvas.toDataURL("image/webp").startsWith("data:image/webp"); webpEnabled.value = webpSupported.value; void loadAll(); });
 </script>

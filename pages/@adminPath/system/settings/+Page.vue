@@ -50,17 +50,20 @@
                 <VeeField v-slot="{ componentField, errors }" name="timezone">
                   <Field :data-invalid="errors.length > 0">
                     <FieldLabel for="site-timezone">站点时区</FieldLabel>
-                    <Select v-bind="componentField">
-                      <SelectTrigger id="site-timezone" :aria-invalid="errors.length > 0"><SelectValue placeholder="选择站点时区" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Asia/Shanghai">亚洲/上海（UTC+8）</SelectItem>
-                        <SelectItem value="Asia/Tokyo">亚洲/东京（UTC+9）</SelectItem>
-                        <SelectItem value="Asia/Singapore">亚洲/新加坡（UTC+8）</SelectItem>
-                        <SelectItem value="UTC">协调世界时（UTC）</SelectItem>
-                        <SelectItem value="America/Los_Angeles">美国/洛杉矶</SelectItem>
-                        <SelectItem value="America/New_York">美国/纽约</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Combobox :model-value="componentField.modelValue" open-on-focus open-on-click @update:model-value="componentField['onUpdate:modelValue']">
+                      <ComboboxAnchor class="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs">
+                        <ComboboxInput id="site-timezone" :display-value="timezoneDisplayValue" placeholder="搜索标准时区" :aria-invalid="errors.length > 0" />
+                        <ComboboxTrigger class="ml-auto"><ChevronsUpDownIcon class="size-4 shrink-0 opacity-50" /></ComboboxTrigger>
+                      </ComboboxAnchor>
+                      <ComboboxList class="w-(--reka-combobox-trigger-width)">
+                        <ComboboxViewport class="max-h-72 overflow-y-scroll">
+                          <ComboboxEmpty>未找到匹配的标准时区。</ComboboxEmpty>
+                          <ComboboxGroup>
+                            <ComboboxItem v-for="item in timezones" :key="item.value" :value="item.value" :text-value="item.value">{{ item.label }}</ComboboxItem>
+                          </ComboboxGroup>
+                        </ComboboxViewport>
+                      </ComboboxList>
+                    </Combobox>
                     <FieldDescription>用于订单、日志和定时任务中的日期时间展示。</FieldDescription>
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
@@ -191,8 +194,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+import { Combobox, ComboboxAnchor, ComboboxEmpty, ComboboxGroup, ComboboxInput, ComboboxItem, ComboboxList, ComboboxTrigger, ComboboxViewport } from "@/components/ui/combobox";
+import { ChevronsUpDownIcon } from "@lucide/vue";
 import { Textarea } from "@/components/ui/textarea";
+import { SITE_TIMEZONES } from "@/lib/site-timezone";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetSiteSettings, onSaveSiteSettings } from "@/server/site/admin.telefunc";
 
@@ -211,7 +217,7 @@ const formSchema = toTypedSchema(z.object({
   siteName: z.string().trim().min(1, "请输入站点名称。").max(120, "站点名称不能超过 120 个字符。"),
   siteSubtitle: z.string().trim().max(300, "副标题不能超过 300 个字符。"),
   siteUrl: optionalUrl,
-  timezone: z.enum(["Asia/Shanghai", "Asia/Tokyo", "Asia/Singapore", "UTC", "America/Los_Angeles", "America/New_York"]),
+  timezone: z.string().trim().min(1, "请选择站点时区。").max(64, "站点时区不能超过 64 个字符。"),
   logoIcon: optionalUrl,
   logo: optionalUrl,
   notice: z.string().trim().max(2_000, "首页公告不能超过 2,000 个字符。"),
@@ -234,8 +240,10 @@ type FormValues = {
   orderNotice: string;
   headCode: string;
   footerCode: string;
-  timezone: "Asia/Shanghai" | "Asia/Tokyo" | "Asia/Singapore" | "UTC" | "America/Los_Angeles" | "America/New_York";
+  timezone: string;
 };
+
+const timezones = SITE_TIMEZONES.map((value) => ({ value, label: value }));
 
 const initialValues: FormValues = {
   siteName: "CFFK发卡",
@@ -257,6 +265,12 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const mediaPickerTarget = ref<"logo" | "logoIcon" | null>(null);
 
+function timezoneDisplayValue(value: unknown) {
+  const timezone = String(value ?? "");
+  return timezones.find((item) => item.value === timezone)?.label ?? timezone;
+}
+
+
 function setSelectedImage(url: string) {
   if (mediaPickerTarget.value === "logo") setFieldValue("logo", url);
   if (mediaPickerTarget.value === "logoIcon") setFieldValue("logoIcon", url);
@@ -264,9 +278,7 @@ function setSelectedImage(url: string) {
 }
 
 function toFormValues(settings: Awaited<ReturnType<typeof onGetSiteSettings>>): FormValues {
-  const timezone = initialValues.timezone;
-  const supportedTimezones = ["Asia/Shanghai", "Asia/Tokyo", "Asia/Singapore", "UTC", "America/Los_Angeles", "America/New_York"] as const;
-  const isSupportedTimezone = (value: string): value is FormValues["timezone"] => supportedTimezones.includes(value as FormValues["timezone"]);
+  const timezone = SITE_TIMEZONES.includes(settings.timezone as typeof SITE_TIMEZONES[number]) ? settings.timezone : initialValues.timezone;
 
   return {
     siteName: settings.siteName,
@@ -280,7 +292,7 @@ function toFormValues(settings: Awaited<ReturnType<typeof onGetSiteSettings>>): 
     orderNotice: settings.orderNotice ?? "",
     headCode: settings.headCode ?? "",
     footerCode: settings.footerCode ?? "",
-    timezone: isSupportedTimezone(settings.timezone) ? settings.timezone : timezone,
+    timezone,
   };
 }
 

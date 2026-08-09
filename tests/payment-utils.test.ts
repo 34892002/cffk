@@ -7,6 +7,26 @@ import { sanitizeDatabaseLogJson, sanitizeDatabaseLogText } from "../server/data
 import { sanitizePaymentLogPayload } from "../server/payment/log-service.ts";
 import { cloudflareEmailError, deliveryItemsFromSnapshots, orderQueryUrl } from "../server/push/service.ts";
 import { getEmailTemplateDefinition } from "../server/email/template-definitions.ts";
+import { SITE_TIMEZONES, dateBoundaryInTimezone, dateTimeInTimezone, formatDateInTimezone, formatDateTimeInputInTimezone, normalizeSiteTimezone, startOfDayInTimezone } from "../lib/site-timezone.ts";
+
+test("site timezones accept only standard IANA values", () => {
+  assert.ok(SITE_TIMEZONES.length >= 400);
+  assert.equal(SITE_TIMEZONES.filter((timezone) => timezone === "UTC").length, 1);
+  assert.equal(SITE_TIMEZONES.some((timezone) => timezone.startsWith("Etc/")), false);
+  assert.equal(normalizeSiteTimezone("Asia/Shanghai"), "Asia/Shanghai");
+  assert.equal(normalizeSiteTimezone("Asia/Kathmandu"), "Asia/Kathmandu");
+  assert.equal(normalizeSiteTimezone("UTC"), "UTC");
+  for (const value of ["UTC+05:30", "Etc/GMT+12", "Not/A_Zone"]) assert.throws(() => normalizeSiteTimezone(value));
+});
+
+test("site timezone boundaries preserve non-whole-hour IANA zones and DST", () => {
+  assert.equal(dateBoundaryInTimezone("2026-01-02", "Asia/Kathmandu").toISOString(), "2026-01-01T18:15:00.000Z");
+  assert.equal(dateTimeInTimezone("2026-01-02T00:15", "America/St_Johns").toISOString(), "2026-01-02T03:45:00.000Z");
+  assert.equal(startOfDayInTimezone(new Date("2026-07-01T12:00:00.000Z"), "America/New_York").toISOString(), "2026-07-01T04:00:00.000Z");
+  assert.equal(startOfDayInTimezone(new Date("2026-01-01T12:00:00.000Z"), "America/New_York").toISOString(), "2026-01-01T05:00:00.000Z");
+  assert.equal(formatDateTimeInputInTimezone("2026-01-01T18:15:00.000Z", "Asia/Kathmandu"), "2026-01-02T00:00");
+  assert.match(formatDateInTimezone("2026-01-01T18:15:00.000Z", "Asia/Kathmandu", { dateStyle: "short", timeStyle: "short" }), /2026/);
+});
 
 test("Cloudflare Email Sending errors map to retryable and fixed internal codes", () => {
   assert.equal(cloudflareEmailError({ code: "E_RATE_LIMIT_EXCEEDED", message: "rate limited" }), "EMAIL_CLOUDFLARE_RATE_LIMITED");

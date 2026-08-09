@@ -45,9 +45,11 @@ import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCwIcon } from "@lucide/vue";
 import { userErrorMessage, runTelefunc } from "@/lib/telefunc-client";
+import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 import { onCloseAdminOrder, onGetAdminOrderDetail, onGetAdminOrders, onRecordManualDelivery, onRetryAutomaticDelivery } from "@/server/order/admin.telefunc";
 
 type Order = Awaited<ReturnType<typeof onGetAdminOrders>>["orders"][number];
+const timezone = useSiteTimezone();
 type Detail = Awaited<ReturnType<typeof onGetAdminOrderDetail>>;
 const columns: AdminTableColumn<Order>[] = [
   { key: "orderNo", label: "订单" }, { key: "productName", label: "商品" }, { key: "quantity", label: "数量" }, { key: "contactValue", label: "联系方式" }, { key: "amount", label: "金额" }, { key: "payment", label: "支付" }, { key: "delivery", label: "交付" }, { key: "createdAt", label: "创建时间" },
@@ -66,7 +68,7 @@ function resetAndLoad() { page.value = 1; void loadOrders(); }
 function changePage(value: number) { page.value = value; void loadOrders(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadOrders(); }
 function formatAmount(value: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(value / 100); }
-function formatDate(value: Date | string | number) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(value)); }
+function formatDate(value: Date | string | number) { return formatDateInTimezone(value, timezone.value); }
 function paymentLabel(value: Order["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[value]; }
 function deliveryLabel(value: Order["deliveryStatus"]) { return { NOT_DELIVERED: "未交付", DELIVERED: "已交付", FAILED: "交付失败" }[value]; }
 onMounted(loadOrders);

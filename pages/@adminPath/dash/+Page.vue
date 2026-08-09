@@ -58,8 +58,10 @@ import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Data } from "./+data.server";
+import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 
 const data = useData<Data>();
+const timezone = useSiteTimezone();
 const metrics = computed(() => [
   { label: "订单总数", value: data.metrics.totalOrders, description: "全部订单" },
   { label: "已支付订单", value: data.metrics.paidOrders, description: "支付状态为已支付" },
@@ -73,7 +75,7 @@ function formatAmount(amount: number) {
 }
 
 function formatDate(value: Date) {
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  return formatDateInTimezone(value, timezone.value);
 }
 
 function statusLabel(status: Data["recentOrders"][number]["status"]) {

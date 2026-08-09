@@ -2,6 +2,8 @@ import { and, asc, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import type { createDrizzleDb } from "@/database/drizzle";
 import { requireAdmin } from "@/server/telefunc-context";
 import { card, product } from "@/database/drizzle/schema";
+import { getSiteSettings } from "@/server/site/public-settings";
+import { dateBoundaryInTimezone } from "@/lib/site-timezone";
 
 
 type CardStatus = "UNUSED" | "LOCKED" | "SOLD" | "DISABLED";
@@ -30,12 +32,8 @@ function previewCard(content: string) {
   return content.length <= 8 ? content : `${content.slice(0, 4)}****${content.slice(-4)}`;
 }
 
-function parseDateBoundary(value: string, isEnd: boolean) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("CARD_DATE_INVALID");
-  const date = new Date(`${value}T00:00:00.000+08:00`);
-  if (Number.isNaN(date.getTime())) throw new Error("CARD_DATE_INVALID");
-  if (isEnd) date.setUTCDate(date.getUTCDate() + 1);
-  return date;
+function parseDateBoundary(value: string, timezone: string, isEnd: boolean) {
+  return dateBoundaryInTimezone(value, timezone, isEnd);
 }
 
 async function assertCardProduct(db: ReturnType<typeof createDrizzleDb>, productId: number) {
@@ -50,7 +48,8 @@ async function assertCardProduct(db: ReturnType<typeof createDrizzleDb>, product
 
 
 export async function onGetCardAdminData(input: CardAdminQuery = {}) {
-  const { db } = getAdminDb();
+  const { database, db } = requireAdmin();
+  const timezone = (await getSiteSettings(database)).timezone;
   const page = Math.max(1, Math.floor(input.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(input.pageSize ?? 20)));
   const batchNo = input.batchNo?.trim();
@@ -58,8 +57,8 @@ export async function onGetCardAdminData(input: CardAdminQuery = {}) {
     input.productId ? eq(card.productId, input.productId) : undefined,
     input.status ? eq(card.status, input.status) : undefined,
     batchNo ? like(card.batchNo, `%${batchNo}%`) : undefined,
-    input.startDate ? gte(card.createdAt, parseDateBoundary(input.startDate, false)) : undefined,
-    input.endDate ? lt(card.createdAt, parseDateBoundary(input.endDate, true)) : undefined,
+    input.startDate ? gte(card.createdAt, parseDateBoundary(input.startDate, timezone, false)) : undefined,
+    input.endDate ? lt(card.createdAt, parseDateBoundary(input.endDate, timezone, true)) : undefined,
   ].filter((condition): condition is NonNullable<typeof condition> => Boolean(condition));
   const where = conditions.length ? and(...conditions) : undefined;
 

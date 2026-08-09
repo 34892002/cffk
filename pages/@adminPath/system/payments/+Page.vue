@@ -45,10 +45,12 @@ import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/co
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { runTelefunc } from "@/lib/telefunc-client";
+import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
 import { onGetPaymentProviders, onSavePaymentProvider, onValidatePaymentProviderConfig } from "@/server/payment/admin.telefunc";
 import type { PaymentProviderKind } from "@/server/payment/registry";
 
 type Provider = Awaited<ReturnType<typeof onGetPaymentProviders>>[number];
+const timezone = useSiteTimezone();
 type ProviderField = Provider["fields"][number];
 const columns: AdminTableColumn<Provider>[] = [{ key: "provider", label: "渠道" }, { key: "name", label: "名称" }, { key: "modes", label: "子渠道" }, { key: "configStatus", label: "配置状态" }, { key: "isEnabled", label: "状态" }, { key: "updatedAt", label: "更新时间" }];
 const pageContext = usePageContext();
@@ -63,7 +65,7 @@ function openEditor(provider: Provider) { editing.value = provider; form.name = 
 function paymentProviderPayload() { if (!editing.value) return null; const secretUpdates: Record<string, { action: "keepExisting" } | { action: "value"; value: string } | { action: "clear" }> = {}; const values = { ...form.values }; for (const field of editing.value.fields as ProviderField[]) if (field.secret) { const value = values[field.key]; secretUpdates[field.key] = form.clearSecrets[field.key] ? { action: "clear" } : value ? { action: "value", value: String(value) } : { action: "keepExisting" }; delete values[field.key]; } return { provider: editing.value.provider as PaymentProviderKind, values, secretUpdates }; }
 function validateRequiredFields() { if (!editing.value) return false; const errors: Record<string, string> = {}; for (const field of editing.value.fields as ProviderField[]) { if (!field.required || field.key === "notifyUrl" || field.key === "returnUrl") continue; const value = form.values[field.key]; const hasValue = field.secret ? !form.clearSecrets[field.key] && (form.secrets[field.key]?.configured || (typeof value === "string" && value.trim().length > 0)) : Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 : value !== undefined && value !== null; if (!hasValue) errors[field.key] = `请填写${field.label}。`; } fieldErrors.value = errors; const messages = Object.values(errors); if (messages.length) toast.error(`支付配置未完成：${messages.join(" ")}`); return messages.length === 0; }
 async function testProvider() { if (!validateRequiredFields()) return; const payload = paymentProviderPayload(); if (!payload) return; saving.value = true; try { await runTelefunc(() => onValidatePaymentProviderConfig(payload), { successMessage: "支付配置校验通过。" }); } catch { /* runTelefunc owns feedback */ } finally { saving.value = false; } }
-function formatDate(value: unknown) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(typeof value === "string" || typeof value === "number" || value instanceof Date ? value : 0)); }
+function formatDate(value: unknown) { return formatDateInTimezone(typeof value === "string" || typeof value === "number" || value instanceof Date ? value : 0, timezone.value); }
 async function saveProvider() { if (!editing.value || !validateRequiredFields()) return; const payload = paymentProviderPayload(); if (!payload) return; saving.value = true; try { await runTelefunc(() => onSavePaymentProvider({ ...payload, name: form.name, isEnabled: form.isEnabled }), { successMessage: "支付渠道配置已保存。" }); dialogOpen.value = false; await loadProviders(); } catch { /* runTelefunc owns feedback */ } finally { saving.value = false; } }
 onMounted(() => { void loadProviders(); });
 </script>
