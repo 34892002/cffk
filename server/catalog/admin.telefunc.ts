@@ -2,6 +2,7 @@ import { and, asc, count, eq, like, or } from "drizzle-orm";
 import { pinyin } from "pinyin-pro";
 import { requireAdmin } from "@/server/telefunc-context";
 import { appError } from "@/lib/app-error";
+import { formatCentsAsYuan, parseAmountToCents } from "@/lib/payment-utils";
 import { sanitizeProductDescription } from "./product-description";
 import { card, category, product } from "@/database/drizzle/schema";
 
@@ -107,7 +108,7 @@ export async function onGetCatalogAdminData(input: ProductListQuery = {}) {
     db.select({ id: product.id, categoryId: product.categoryId, name: product.name, slug: product.slug, price: product.price, status: product.status, deliveryType: product.deliveryType, physicalStock: product.physicalStock, minBuy: product.minBuy, maxBuy: product.maxBuy, sort: product.sort, categoryName: category.name }).from(product).leftJoin(category, eq(product.categoryId, category.id)).where(where).orderBy(asc(product.sort), asc(product.id)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ value: count() }).from(product).where(where),
   ]);
-  return { categories, items, total: totalRows[0]?.value ?? 0, page, pageSize };
+  return { categories, items: items.map((item) => ({ ...item, price: formatCentsAsYuan(item.price) })), total: totalRows[0]?.value ?? 0, page, pageSize };
 }
 
 export async function onGetProductAdminDetail(input: { id: number }) {
@@ -122,7 +123,7 @@ export async function onGetProductAdminDetail(input: { id: number }) {
         .where(and(eq(card.productId, record.id), eq(card.status, "UNUSED")))
     : [];
   return {
-    product: record,
+    product: { ...record, price: formatCentsAsYuan(record.price) },
     cardInventory: record.deliveryType === "CARD_AUTO"
       ? { available: inventory?.available ?? 0 }
       : null,
@@ -192,7 +193,7 @@ export async function onSaveProduct(input: {
   manualDeliveryHint?: string;
   purchaseNote?: string;
 
-  price: number;
+  price: string;
   status: ProductStatus;
   deliveryType: DeliveryType;
   physicalStock: number | null;
@@ -223,12 +224,12 @@ export async function onSaveProduct(input: {
     slug: resolveSlug(input.slug, name),
     subtitle: optionalText(input.subtitle, 300, "PRODUCT_SUBTITLE_INVALID"),
     coverImage: resolveCoverImage(input.coverImage),
-    description: sanitizeProductDescription(input.description ?? ""),
+    description: sanitizeProductDescription(requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG")) ?? (appError("PRODUCT_DESCRIPTION_REQUIRED"), null),
     fixedDeliveryContent: input.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null,
     manualDeliveryHint: (input.deliveryType === "MANUAL" || input.deliveryType === "EXPRESS") ? optionalText(input.manualDeliveryHint, 2_000, "PRODUCT_MANUAL_DELIVERY_HINT_INVALID") : null,
     purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"),
 
-    price: Number.isSafeInteger(input.price) && input.price >= 0 ? input.price : (appError("PRODUCT_PRICE_INVALID"), 0),
+    price: parseAmountToCents(input.price) ?? (appError("PRODUCT_PRICE_INVALID"), 0),
     status: input.status,
     deliveryType: input.deliveryType,
     stockMode: input.deliveryType === "CARD_AUTO" ? "FINITE" as const : "UNLIMITED" as const,

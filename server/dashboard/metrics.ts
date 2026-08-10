@@ -2,13 +2,14 @@ import { desc, eq, gte, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, order, product } from "@/database/drizzle/schema";
 import { getSiteSettings } from "@/server/site/public-settings";
+import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { startOfDayInTimezone } from "@/lib/site-timezone";
 
 export type DashboardData = {
   metrics: {
     totalOrders: number;
     paidOrders: number;
-    paidAmount: number;
+    paidAmount: string;
     activeProducts: number;
     availableCards: number;
   };
@@ -16,7 +17,7 @@ export type DashboardData = {
     id: number;
     orderNo: string;
     productName: string;
-    amount: number;
+    amount: string;
     quantity: number;
     status: "PENDING" | "PAID" | "DELIVERED" | "CLOSED" | "FAILED";
     paymentStatus: "UNPAID" | "PAID" | "FAILED";
@@ -60,10 +61,10 @@ export async function getDashboardData(database: D1Database): Promise<DashboardD
     metrics: {
       totalOrders: orders[0]?.totalOrders ?? 0,
       paidOrders: orders[0]?.paidOrders ?? 0,
-      paidAmount: orders[0]?.paidAmount ?? 0,
+      paidAmount: formatCentsAsYuan(orders[0]?.paidAmount ?? 0),
       activeProducts: products[0]?.activeProducts ?? 0,
       availableCards: cards[0]?.count ?? 0,
     },
-    recentOrders,
+    recentOrders: recentOrders.map((record) => ({ ...record, amount: formatCentsAsYuan(record.amount) })),
   };
 }

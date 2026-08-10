@@ -4,6 +4,7 @@ import { reportUnexpectedServerError } from "@/server/error-handling";
 import { discountCode, order, orderCloseCompensation, orderDelivery, product } from "@/database/drizzle/schema";
 import { finalizeReservedCards, getCardsForOrderDelivery, releaseReservedCards, reserveCardsForOrder } from "@/server/inventory/allocator";
 import { canConfirmPayment } from "../../lib/order-state";
+import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { PaymentLogService } from "@/server/payment/log-service";
 import type { PaymentProviderKind } from "@/server/payment/registry";
 
@@ -297,7 +298,7 @@ export type QueriedOrder = {
   deliveryStatus: "NOT_DELIVERED" | "DELIVERED" | "FAILED";
   productName: string;
   quantity: number;
-  amount: number;
+  amount: string;
   createdAt: Date;
   deliveries: string[];
 };
@@ -338,7 +339,7 @@ export async function getOrderForQuery(database: D1Database, orderNo: string, qu
     deliveryStatus: record.deliveryStatus,
     productName: record.productName,
     quantity: record.quantity,
-    amount: record.amount,
+    amount: formatCentsAsYuan(record.amount),
     createdAt: record.createdAt,
     deliveries: deliveries.flatMap((item) => {
       try {

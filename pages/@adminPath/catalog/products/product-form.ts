@@ -1,6 +1,6 @@
 import { pinyin } from "pinyin-pro";
 import { z } from "zod";
-import { formatCentsAsYuan, parseAmountToCents } from "@/lib/payment-utils";
+
 import type { onGetProductAdminDetail } from "@/server/catalog/admin.telefunc";
 
 export const deliveryTypes = ["CARD_AUTO", "FIXED_CARD", "MANUAL", "EXPRESS"] as const;
@@ -13,7 +13,7 @@ export const productFormSchema = z.object({
   slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug 只能包含小写英文、数字和连字符"),
   subtitle: z.string().max(300, "副标题不能超过 300 个字符"),
   coverImage: z.string(),
-  description: z.string(),
+  description: z.string().trim().min(1, "商品详情不能为空"),
   fixedDeliveryContent: z.string(),
   manualDeliveryHint: z.string(),
   purchaseNote: z.string(),
@@ -42,11 +42,9 @@ export function defaultProductForm(categoryId: number | null = null): ProductFor
 }
 
 export function productDetailToForm(item: ProductDetail["product"]): ProductForm {
-  return { id: item.id, categoryId: item.categoryId ?? 0, name: item.name, slug: item.slug, subtitle: item.subtitle ?? "", coverImage: item.coverImage ?? "", description: item.description ?? "", fixedDeliveryContent: item.fixedDeliveryContent ?? "", manualDeliveryHint: item.manualDeliveryHint ?? "", purchaseNote: item.purchaseNote ?? "", price: formatCentsAsYuan(item.price), status: item.status, deliveryType: item.deliveryType, physicalStock: item.physicalStock, minBuy: item.minBuy, maxBuy: item.maxBuy, sort: item.sort };
+  return { id: item.id, categoryId: item.categoryId ?? 0, name: item.name, slug: item.slug, subtitle: item.subtitle ?? "", coverImage: item.coverImage ?? "", description: item.description ?? "", fixedDeliveryContent: item.fixedDeliveryContent ?? "", manualDeliveryHint: item.manualDeliveryHint ?? "", purchaseNote: item.purchaseNote ?? "", price: item.price, status: item.status, deliveryType: item.deliveryType, physicalStock: item.physicalStock, minBuy: item.minBuy, maxBuy: item.maxBuy, sort: item.sort };
 }
 
 export function formToSaveInput(form: ProductForm) {
-  const price = parseAmountToCents(form.price);
-  if (price === null) throw new TypeError("Price must be a valid yuan amount");
-  return { ...form, price, categoryId: form.categoryId || null, physicalStock: form.deliveryType === "MANUAL" || form.deliveryType === "EXPRESS" ? form.physicalStock : null };
+  return { ...form, categoryId: form.categoryId || null, physicalStock: form.deliveryType === "MANUAL" || form.deliveryType === "EXPRESS" ? form.physicalStock : null };
 }

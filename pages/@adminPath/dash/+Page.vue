@@ -35,7 +35,7 @@
                 <TableCell class="font-mono text-xs">{{ item.orderNo }}</TableCell>
                 <TableCell class="font-medium">{{ item.productName }}</TableCell>
                 <TableCell class="tabular-nums">{{ item.quantity }}</TableCell>
-                <TableCell class="tabular-nums">{{ formatAmount(item.amount) }}</TableCell>
+                <TableCell class="tabular-nums">¥{{ item.amount }}</TableCell>
                 <TableCell><Badge :variant="statusVariant(item.status)">{{ statusLabel(item.status) }}</Badge></TableCell>
                 <TableCell class="whitespace-nowrap text-muted-foreground">{{ formatDate(item.createdAt) }}</TableCell>
               </TableRow>
@@ -65,14 +65,11 @@ const timezone = useSiteTimezone();
 const metrics = computed(() => [
   { label: "订单总数", value: data.metrics.totalOrders, description: "全部订单" },
   { label: "已支付订单", value: data.metrics.paidOrders, description: "支付状态为已支付" },
-  { label: "已支付金额", value: formatAmount(data.metrics.paidAmount), description: "累计实收金额" },
+  { label: "已支付金额", value: `¥${data.metrics.paidAmount}`, description: "累计实收金额" },
   { label: "上架商品", value: data.metrics.activeProducts, description: "当前可公开展示" },
   { label: "可用卡密", value: data.metrics.availableCards, description: "未使用自动发货库存" },
 ]);
 
-function formatAmount(amount: number) {
-  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100);
-}
 
 function formatDate(value: Date) {
   return formatDateInTimezone(value, timezone.value);

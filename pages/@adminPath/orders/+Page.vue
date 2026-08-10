@@ -19,7 +19,7 @@
       <template #cell-productName="{ value }"><span class="font-medium">{{ value }}</span></template>
       <template #cell-quantity="{ value }"><span>{{ value }}</span></template>
       <template #cell-contactValue="{ value }"><span class="text-sm text-muted-foreground">{{ value || "-" }}</span></template>
-      <template #cell-amount="{ row }">{{ formatAmount(row.amount) }}</template>
+      <template #cell-amount="{ row }">¥{{ row.amount }}</template>
       <template #cell-payment="{ row }"><Badge :variant="row.paymentStatus === 'PAID' ? 'secondary' : 'outline'">{{ paymentLabel(row.paymentStatus) }}</Badge></template>
       <template #cell-delivery="{ row }"><Badge :variant="row.deliveryStatus === 'FAILED' ? 'destructive' : row.deliveryStatus === 'DELIVERED' ? 'secondary' : 'outline'">{{ deliveryLabel(row.deliveryStatus) }}</Badge></template>
       <template #cell-createdAt="{ row }"><span class="whitespace-nowrap text-xs">{{ formatDate(row.createdAt) }}</span></template>
@@ -72,7 +72,7 @@ function resetAndLoad() { page.value = 1; void loadOrders(); }
 function resetFilters() { Object.assign(filters, { query: "", status: "", deliveryStatus: "", startDate: "", endDate: "" }); resetAndLoad(); }
 function changePage(value: number) { page.value = value; void loadOrders(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadOrders(); }
-function formatAmount(value: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(value / 100); }
+
 function formatDate(value: Date | string | number) { return formatDateInTimezone(value, timezone.value); }
 function paymentLabel(value: Order["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[value]; }
 function deliveryLabel(value: Order["deliveryStatus"]) { return { NOT_DELIVERED: "未交付", DELIVERED: "已交付", FAILED: "交付失败" }[value]; }

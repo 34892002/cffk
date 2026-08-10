@@ -68,7 +68,7 @@
               <p v-if="product.subtitle" class="mt-1 line-clamp-1 text-sm text-muted-foreground">{{ product.subtitle }}</p>
               <div class="mt-auto flex items-end justify-between gap-3 pt-4">
                 <span :class="stockClass(product)" class="text-xs">{{ stockLabel(product) }}</span>
-                <span class="shrink-0 text-xl font-semibold tabular-nums">{{ formatAmount(product.price) }}</span>
+                <span class="shrink-0 text-xl font-semibold tabular-nums">¥{{ product.price }}</span>
               </div>
             </div>
           </a>
@@ -124,9 +124,6 @@ const supportHref = computed(() => {
   return contact.includes(":") ? contact : `mailto:${contact}`;
 });
 
-function formatAmount(amount: number) {
-  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100);
-}
 
 
 function stockLabel(product: Product) {

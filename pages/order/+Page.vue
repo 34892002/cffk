@@ -40,7 +40,7 @@
           </div>
         </CardHeader>
         <CardContent class="grid gap-4 text-sm">
-          <div class="grid gap-2 border-y py-4"><div class="flex justify-between gap-4"><span class="text-muted-foreground">数量</span><span>{{ result.quantity }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">金额</span><span>{{ formatAmount(result.amount) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">支付状态</span><span>{{ paymentStatusLabel(result.paymentStatus) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">交付状态</span><span>{{ deliveryStatusLabel(result.deliveryStatus) }}</span></div></div>
+          <div class="grid gap-2 border-y py-4"><div class="flex justify-between gap-4"><span class="text-muted-foreground">数量</span><span>{{ result.quantity }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">金额</span><span>¥{{ result.amount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">支付状态</span><span>{{ paymentStatusLabel(result.paymentStatus) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">交付状态</span><span>{{ deliveryStatusLabel(result.deliveryStatus) }}</span></div></div>
           <div v-if="result.deliveries.length"><p class="font-medium">交付内容</p><pre class="overflow-x-auto whitespace-pre-wrap rounded-md border bg-muted/50 p-3 font-mono text-xs leading-6">{{ result.deliveries.join("\n") }}</pre></div>
           <p v-else-if="result.paymentStatus === 'PAID'" class="text-muted-foreground">订单已支付，正在等待交付处理。</p>
         </CardContent>
@@ -88,7 +88,6 @@ async function onSubmit() {
   }
 }
 
-function formatAmount(amount: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100); }
 function statusLabel(status: PublicOrder["status"]) { return { PENDING: "待支付", PAID: "已支付", DELIVERED: "已交付", CLOSED: "已关闭", FAILED: "失败" }[status]; }
 function paymentStatusLabel(status: PublicOrder["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[status]; }
 function deliveryStatusLabel(status: PublicOrder["deliveryStatus"]) { return { NOT_DELIVERED: "未交付", DELIVERED: "已交付", FAILED: "交付失败" }[status]; }

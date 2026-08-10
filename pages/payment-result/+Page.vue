@@ -11,7 +11,7 @@
           <Alert v-if="!order" variant="destructive"><AlertTitle>请查询订单</AlertTitle><AlertDescription>{{ missingMessage }}</AlertDescription></Alert>
           <template v-else>
             <div class="flex items-center justify-between gap-4 rounded-md border p-4"><span>订单状态</span><Badge :variant="statusVariant(order.status)">{{ statusLabel(order.status) }}</Badge></div>
-            <div class="grid gap-3 border-y py-4"><div class="flex justify-between gap-4"><span class="text-muted-foreground">订单号</span><span class="font-mono text-xs">{{ order.orderNo }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">金额</span><span>{{ formatAmount(order.amount) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">支付状态</span><span>{{ paymentStatusLabel(order.paymentStatus) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">交付状态</span><span>{{ deliveryStatusLabel(order.deliveryStatus) }}</span></div></div>
+            <div class="grid gap-3 border-y py-4"><div class="flex justify-between gap-4"><span class="text-muted-foreground">订单号</span><span class="font-mono text-xs">{{ order.orderNo }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">金额</span><span>¥{{ order.amount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">支付状态</span><span>{{ paymentStatusLabel(order.paymentStatus) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">交付状态</span><span>{{ deliveryStatusLabel(order.deliveryStatus) }}</span></div></div>
             <div v-if="order.deliveries.length"><p class="font-medium">交付内容</p><pre class="overflow-x-auto whitespace-pre-wrap rounded-md border bg-muted/50 p-3 font-mono text-xs leading-6">{{ order.deliveries.join('\n') }}</pre></div>
             <p v-else class="text-muted-foreground">支付通知可能仍在处理中，页面会自动查询订单状态。</p>
           </template>
@@ -50,7 +50,7 @@ async function refreshOrder() {
 }
 onMounted(() => { if (order.value?.paymentStatus === "UNPAID") timer = setInterval(() => { void refreshOrder(); }, 5000); });
 onBeforeUnmount(() => { if (timer) clearInterval(timer); });
-function formatAmount(amount: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100); }
+
 function statusLabel(status: QueriedOrder["status"]) { return { PENDING: "待支付", PAID: "已支付", DELIVERED: "已交付", CLOSED: "已关闭", FAILED: "失败" }[status]; }
 function paymentStatusLabel(status: QueriedOrder["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[status]; }
 function deliveryStatusLabel(status: QueriedOrder["deliveryStatus"]) { return { NOT_DELIVERED: "未交付", DELIVERED: "已交付", FAILED: "交付失败" }[status]; }

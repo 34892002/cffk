@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, category, product } from "@/database/drizzle/schema";
+import { formatCentsAsYuan } from "@/lib/payment-utils";
 
 export type PublicCatalog = {
   categories: Array<{
@@ -17,7 +18,7 @@ export type PublicCatalog = {
     slug: string;
     subtitle: string | null;
     coverImage: string | null;
-    price: number;
+    price: string;
     deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS";
     stockMode: "FINITE" | "UNLIMITED";
     physicalStock: number | null;
@@ -69,7 +70,7 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
   const availableStock = item.deliveryType === "CARD_AUTO"
     ? await countAvailableCardStock(db, item.id)
     : item.physicalStock;
-  return { ...item, availableStock };
+  return { ...item, price: formatCentsAsYuan(item.price), availableStock };
 }
 
 async function countAvailableCardStock(db: ReturnType<typeof createDrizzleDb>, productId: number) {
@@ -137,6 +138,7 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
     categories: categories.filter((item) => categoryNameById.has(item.id)),
     products: products.map((item) => ({
       ...item,
+      price: formatCentsAsYuan(item.price),
       availableStock: item.deliveryType === "CARD_AUTO" ? cardStockByProductId.get(item.id) ?? 0 : item.physicalStock,
       categoryName: item.categoryId === null ? null : categoryNameById.get(item.categoryId) ?? null,
     })), 

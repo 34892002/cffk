@@ -446,7 +446,33 @@ Hono、Telefunc 与 Vike SSR / `+data.server.ts` 的未预期异常必须进入�
 
 预期业务错误码不是未预期异常：它们仍按 `lib/error-messages.ts` 映射并显示给用户，无需伪装为内部错误。
 
-### 5.5 HTTP API 客户端与 500 错误
+### 5.5 Workers 日志采样与线上 500 排查
+
+`wrangler.jsonc` 的 `observability.head_sampling_rate` 是**请求级 head-based sampling**，不是错误日志专用采样：
+
+- 取值范围为 `0` 到 `1`；`0.1` 代表约 10% 的进入 Worker 的请求会被记录，`1` 代表全部请求。未配置时 Cloudflare 默认 `1`。
+- 被选中的请求会收集该请求上下文中的 invocation log、`console.*` 日志、错误和未捕获异常；未被选中的请求不会因其恰好返回 `500` 而自动补采样。
+- 调整采样率前必须先评估请求量、日志量和成本；不能因一次故障就把它误改成“错误采样率”。需要逐请求排查的低流量环境可配置 `1`，当前生产默认保留 `0.1`。
+
+排查线上 `500` 时，Cloudflare 的 `GET <URL>` invocation log 只能说明请求和响应状态，不能说明 JavaScript 或 D1 异常根因。必须按 `requestId`、URL 和时间范围查询同一请求上下文中的 `Unhandled server error` 结构化日志，并读取其中的 `scope`、`error.message`、`error.stack` 与 `details`。若该请求未被采样，重新请求直到命中日志，或在短时间、低流量的排查窗口将采样率改为 `1` 并重新部署；排查结束后按流量策略恢复。
+
+### 5.6 部署构建、迁移与验收
+
+本项目是 Vike/Vite Worker：`wrangler deploy` 只上传已经生成的部署产物；它不会代替 `bun run build` 构建应用源码。`vike build` 会生成供 Wrangler 使用的部署配置和产物，因此手动部署必须走项目脚本：
+
+- `bun run deploy`：依次执行远程 D1 迁移、远程种子、构建、`wrangler deploy`。仅用于需要初始化种子数据的新环境；已有生产环境不应无确认地重复写入种子。
+- `bun run up`：依次执行远程 D1 迁移、构建、`wrangler deploy`，用于已有环境的常规发布。
+- 不要以裸 `wrangler deploy` 代替上述脚本，也不要假设旧的 `dist` 可以代表当前源码。
+
+README 中的 **Deploy to Cloudflare** 按钮使用 Workers Builds：Cloudflare 克隆仓库、读取 Wrangler 配置并自动创建所需绑定资源，然后构建并部署。它会从 `package.json` 识别并在配置页预填 `build`、`deploy` 脚本；部署者可以修改或接受这些命令。因此不能假定该按钮固定执行 `bun run deploy`，也不能假定它忽略构建。使用该按钮前必须在配置页核对实际 build/deploy 命令；D1 迁移必须由已确认的 deploy 脚本执行，并使用绑定名 `DB`，不能只依赖 Worker 发布自动完成迁移。
+
+每次线上发布后必须：
+
+1. 在发布输出中确认实际执行的构建与部署命令、Worker 名称和版本。
+2. 访问公开 URL，至少验证首页、一个真实商品详情页和一个下单路径；不能只验证本地 `localhost`。
+3. 若出现 `500`，按上一节获取同一 `requestId` 的 `Unhandled server error`，根据原始堆栈修复后重新发布；禁止以查询降级、字段默认值或吞掉异常替代根因修复。
+
+### 5.7 HTTP API 客户端与 500 错误
 
 Hono HTTP 接口在 `server/hono.ts` 统一处理未捕获异常：
 

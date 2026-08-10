@@ -1,6 +1,7 @@
 import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import { order, orderDelivery, paymentLog, product } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { dateBoundaryInTimezone } from "@/lib/site-timezone";
 import { notifyOrderDeliveryFailure, notifyOrderEmailEvents } from "@/server/email/order-events";
 import { getSiteSettings } from "@/server/site/public-settings";
@@ -29,7 +30,7 @@ export async function onGetAdminOrders(input?: { query?: string; status?: OrderS
     db.select({ id: order.id, orderNo: order.orderNo, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, contactType: order.contactType, contactValue: order.contactValue, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, status: order.status, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, createdAt: order.createdAt, paidAt: order.paidAt, deliveredAt: order.deliveredAt }).from(order).where(where).orderBy(desc(order.createdAt), desc(order.id)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ value: count() }).from(order).where(where),
   ]);
-  return { orders, total: totalRows[0]?.value ?? 0, page, pageSize };
+  return { orders: orders.map((record) => ({ ...record, amount: formatCentsAsYuan(record.amount) })), total: totalRows[0]?.value ?? 0, page, pageSize };
 }
 
 export async function onGetAdminOrderDetail(input: { orderId: number }) {
@@ -40,7 +41,7 @@ export async function onGetAdminOrderDetail(input: { orderId: number }) {
     db.select().from(orderDelivery).where(eq(orderDelivery.orderId, record.id)).orderBy(desc(orderDelivery.createdAt)),
     db.select({ id: paymentLog.id, eventType: paymentLog.eventType, verifyStatus: paymentLog.verifyStatus, message: paymentLog.message, createdAt: paymentLog.createdAt }).from(paymentLog).where(eq(paymentLog.orderId, record.id)).orderBy(desc(paymentLog.createdAt)),
   ]);
-  return { order: record, deliveries, payments };
+  return { order: { ...record, amount: formatCentsAsYuan(record.amount) }, deliveries, payments };
 }
 
 export async function onCloseAdminOrder(input: { orderId: number }) {

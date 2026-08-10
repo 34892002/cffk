@@ -8,11 +8,11 @@
         <!-- eslint-disable vue/no-v-html -->
         <div v-if="data.description" class="product-rich-content mt-8 border-t pt-8 text-sm leading-7" v-html="data.description" />
         <!-- eslint-enable vue/no-v-html -->
-        <div v-if="data.purchaseNote || data.manualDeliveryHint" class="mt-6 grid gap-3 rounded-md border bg-muted/30 p-4 text-sm"><p v-if="data.purchaseNote" class="whitespace-pre-wrap"><span class="font-medium">购买说明：</span>{{ data.purchaseNote }}</p><p v-if="data.manualDeliveryHint" class="whitespace-pre-wrap"><span class="font-medium">发货提示：</span>{{ data.manualDeliveryHint }}</p></div>
+        <div class="mt-6 grid gap-3 rounded-md border bg-muted/30 p-4 text-sm"><p class="whitespace-pre-wrap"><span class="font-medium">购买说明：</span>{{ purchaseNote }}</p><p v-if="deliveryHint" class="whitespace-pre-wrap"><span class="font-medium">发货提示：</span>{{ deliveryHint }}</p></div>
       </article>
       <aside class="h-fit lg:sticky lg:top-6">
         <Card>
-          <CardHeader><CardDescription>当前价格</CardDescription><CardTitle class="text-3xl">{{ formatAmount(data.price) }}</CardTitle></CardHeader><form class="grid gap-6" @submit.prevent="onSubmit">
+          <CardHeader><CardDescription>当前价格</CardDescription><CardTitle class="text-3xl">¥{{ data.price }}</CardTitle></CardHeader><form class="grid gap-6" @submit.prevent="onSubmit">
             <CardContent class="grid gap-4">
               <label class="grid gap-2 text-sm font-medium">联系方式<span class="text-destructive">*</span><Input v-model="contactValue" required /></label>
               <label class="grid gap-2 text-sm font-medium">购买数量<Input v-model.number="quantity" type="number" :min="data.minBuy" :max="data.maxBuy" required /></label>
@@ -48,7 +48,13 @@ import type { Data } from "./+data.server";
 const data = useData<Data>();
 type PaymentMethod = { key: string; provider: PaymentProviderKind; channel?: PaymentChannel; name: string };
 const methods = computed<PaymentMethod[]>(() => data.paymentProviders.flatMap((provider): PaymentMethod[] => provider.channels.length ? provider.channels.map((channel) => ({ key: `${provider.provider}:${channel}`, provider: provider.provider, channel, name: provider.name })) : [{ key: `${provider.provider}:`, provider: provider.provider, name: provider.name }]));
+const purchaseNote = computed(() => data.purchaseNote || "下单后将生成待支付订单，支付成功后会给您的联系邮箱发送通知，请注意查看。");
+const deliveryHint = computed(() => {
+  if (data.deliveryType === "MANUAL") return data.manualDeliveryHint || "支付后，客服将尽快为您处理订单，请耐心等待。";
+  if (data.deliveryType === "EXPRESS") return data.manualDeliveryHint || "请填写收货信息，支付后管理员将安排快递发货。";
+  return null;
+});
 const selectedMethod = ref(methods.value[0]?.key ?? ""); const quantity = ref(data.minBuy); const contactValue = ref(""); const receiverInfo = ref(""); const discountCode = ref(""); const buyerNote = ref(""); const error = ref<string | null>(null); const loading = ref(false); type CheckoutSuccess = Awaited<ReturnType<typeof onCreatePayment>>; const success = ref<CheckoutSuccess | null>(null);
-async function onSubmit() { error.value = null; loading.value = true; try { const method = methods.value.find((item) => item.key === selectedMethod.value); if (!method && data.price > 0) throw new Error("PAYMENT_PROVIDER_NOT_AVAILABLE"); success.value = await runTelefunc(() => onCreatePayment({ productId: data.id, quantity: quantity.value, paymentProvider: method?.provider ?? "ALIPAY", paymentChannel: method?.channel, contactType: "EMAIL", contactValue: contactValue.value, receiverInfo: receiverInfo.value, discountCode: discountCode.value, buyerNote: buyerNote.value }), { notifyError: false }); } catch (cause) { error.value = userErrorMessage(cause); } finally { loading.value = false; } }
-function formatAmount(amount: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100); } function channelLabel(channel: string) { return ({ web: "网页/H5", wap: "H5", face_to_face: "当面付", alipay: "支付宝", wxpay: "微信" } as Record<string, string>)[channel] ?? channel; }
+async function onSubmit() { error.value = null; loading.value = true; try { const method = methods.value.find((item) => item.key === selectedMethod.value); if (!method && data.price !== "0.00") throw new Error("PAYMENT_PROVIDER_NOT_AVAILABLE"); success.value = await runTelefunc(() => onCreatePayment({ productId: data.id, quantity: quantity.value, paymentProvider: method?.provider ?? "ALIPAY", paymentChannel: method?.channel, contactType: "EMAIL", contactValue: contactValue.value, receiverInfo: receiverInfo.value, discountCode: discountCode.value, buyerNote: buyerNote.value }), { notifyError: false }); } catch (cause) { error.value = userErrorMessage(cause); } finally { loading.value = false; } }
+function channelLabel(channel: string) { return ({ web: "网页/H5", wap: "H5", face_to_face: "当面付", alipay: "支付宝", wxpay: "微信" } as Record<string, string>)[channel] ?? channel; }
 </script>

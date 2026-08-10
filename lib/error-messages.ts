@@ -54,6 +54,7 @@ export const errorMessages: Record<string, string> = {
   MIN_BUY_INVALID: "最小购买数量无效。",
   MAX_BUY_INVALID: "最大购买数量无效。",
   FIXED_DELIVERY_CONTENT_REQUIRED: "固定卡密商品必须填写发货内容。",
+  PRODUCT_DESCRIPTION_REQUIRED: "商品详情不能为空。",
   PRODUCT_DESCRIPTION_TOO_LONG: "商品详情内容过长，请删减后重试。",
   PRODUCT_DESCRIPTION_INVALID: "商品详情包含不支持的内容。",
   PRODUCT_CATEGORY_REQUIRED: "请选择商品分类。",
