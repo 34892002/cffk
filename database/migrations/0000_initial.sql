@@ -218,8 +218,6 @@ CREATE TABLE `product` (
 	`minBuy` integer DEFAULT 1 NOT NULL,
 	`maxBuy` integer DEFAULT 1 NOT NULL,
 	`sort` integer DEFAULT 0 NOT NULL,
-	`isVisibleStock` integer DEFAULT true NOT NULL,
-	`isContactRequired` integer DEFAULT true NOT NULL,
 	`purchaseNote` text,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL,
@@ -361,6 +359,18 @@ CREATE TABLE `siteSetting` (
 	`updatedAt` integer NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE `twoFactor` (
+	`id` text PRIMARY KEY NOT NULL,
+	`userId` text NOT NULL,
+	`secret` text NOT NULL,
+	`backupCodes` text NOT NULL,
+	`verified` integer DEFAULT false NOT NULL,
+	`failedVerificationCount` integer DEFAULT 0 NOT NULL,
+	`lockedUntil` integer,
+	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `twoFactor_userId_unique` ON `twoFactor` (`userId`);--> statement-breakpoint
 CREATE TABLE `user` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -369,6 +379,7 @@ CREATE TABLE `user` (
 	`displayUsername` text,
 	`emailVerified` integer DEFAULT false NOT NULL,
 	`image` text,
+	`twoFactorEnabled` integer DEFAULT false NOT NULL,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL
 );

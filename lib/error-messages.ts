@@ -109,6 +109,8 @@ export const errorMessages: Record<string, string> = {
   PUSH_POLICY_CHANNEL_FORBIDDEN: "客户消息只能选择电子邮件渠道。",
   PUSH_POLICY_CHANNEL_UNAVAILABLE: "所选推送渠道尚未接入。",
   PUSH_LOG_NOT_RETRYABLE: "该推送记录当前不能重新发送。",
+  PUSH_LOG_DATE_INVALID: "日期范围无效，请重新选择日期。",
+  PUSH_LOG_FILTER_INVALID: "筛选条件无效，请刷新后重试。",
 
   S3_CONFIG_REQUIRED: "请填写 S3 存储配置。",
   S3_CONFIG_INVALID: "S3 配置无效，请检查 endpoint、bucket、region 与路径设置。",

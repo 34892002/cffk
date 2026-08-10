@@ -132,8 +132,7 @@ export const product = sqliteTable(
     minBuy: integer("minBuy").notNull().default(1),
     maxBuy: integer("maxBuy").notNull().default(1),
     sort: integer("sort").notNull().default(0),
-    isVisibleStock: integer("isVisibleStock", { mode: "boolean" }).notNull().default(true),
-    isContactRequired: integer("isContactRequired", { mode: "boolean" }).notNull().default(true),
+
     purchaseNote: text("purchaseNote"),
     createdAt,
     updatedAt,

@@ -7,11 +7,12 @@ export const PRODUCT_DESCRIPTION_LIMITS = {
   attribute: 500,
 } as const;
 
-const allowedTags = new Set(["p", "br", "h2", "h3", "strong", "em", "blockquote", "ul", "ol", "li", "a", "img", "hr"]);
+const allowedTags = new Set(["p", "br", "h1", "h2", "h3", "strong", "em", "blockquote", "ul", "ol", "li", "a", "img", "hr", "span"]);
 const voidTags = new Set(["br", "img", "hr"]);
 const dangerousBlocks = /<(script|style|iframe|object|embed|form)(?:\s[^>]*)?>[\s\S]*?<\/\1\s*>/gi;
 const tagPattern = /<!--[\s\S]*?-->|<\/?[a-z][^>]*>/gi;
 const attributePattern = /\s+([:\w-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/gi;
+
 
 function safeUrl(value: string, image: boolean) {
   const url = value.trim();
@@ -25,6 +26,19 @@ function safeUrl(value: string, image: boolean) {
     if (["http:", "https:", "mailto:"].includes(parsed.protocol) && (url.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(url))) return url;
   } catch { /* invalid URL */ }
   return null;
+}
+
+function sanitizeInlineStyle(value: string) {
+  const declarations = value.split(";").map((item) => item.trim()).filter(Boolean);
+  const safe: string[] = [];
+  for (const declaration of declarations) {
+    const match = declaration.match(/^(color|background-color)\s*:\s*(#[0-9a-f]{6}|rgba\((?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]),(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]),(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]),(?:0|1|0?\.\d+|1\.0+)\))$/i);
+    if (!match) continue;
+    const property = match[1].toLowerCase();
+    const color = match[2].toLowerCase();
+    safe.push(`${property}:${color}`);
+  }
+  return safe.join(";");
 }
 
 function attributes(tag: string, name: string) {
@@ -43,6 +57,10 @@ function attributes(tag: string, name: string) {
     if (name === "img" && (key === "src" || key === "alt" || key === "title")) {
       const normalized = key === "src" ? safeUrl(value, true) : value.trim();
       if (normalized) result.push(` ${key}="${escapeAttribute(normalized)}"`);
+    }
+    if (name === "span" && key === "style") {
+      const normalized = sanitizeInlineStyle(value);
+      if (normalized) result.push(` style="${normalized}"`);
     }
   }
   if (name === "img" && !result.some((value) => value.startsWith(" src="))) return "";
@@ -68,5 +86,5 @@ export function sanitizeProductDescription(html: string): string | null {
     return `<${name}${attributes(raw, name)}>`;
   }).trim();
   if (output.length > PRODUCT_DESCRIPTION_LIMITS.cleanHtml) appError("PRODUCT_DESCRIPTION_TOO_LONG");
-  return output.replace(/<((?:p|h2|h3|blockquote|ul|ol|li|a|strong|em|img|hr|br)(?:\s[^>]*)?)>\s*<\/\1>/gi, "") || null;
+  return output.replace(/<((?:p|h1|h2|h3|blockquote|ul|ol|li|a|strong|em|img|hr|br|span)(?:\s[^>]*)?)>\s*<\/\1>/gi, "") || null;
 }

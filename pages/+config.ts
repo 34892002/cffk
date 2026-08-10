@@ -5,7 +5,7 @@ import vikeVue from "vike-vue/config";
 // https://vike.dev/config
 
 const config: Config = {
-  title: "CFFK发卡",
+  title: "CFFK-Shop",
   description: "",
 
   passToClient: ["user", "isAdmin", "site"],

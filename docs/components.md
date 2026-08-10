@@ -14,7 +14,7 @@
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog.vue";
 ```
 
-媒体库图片选择对话框，统一从媒体库读取 JPEG、PNG、GIF 和 WebP 图片，并向调用页面返回媒体代理 URL。组件只负责展示和选择，不负责业务鉴权或直接处理上传；页面应通过 `v-model:open` 控制显示，并在 `select` 事件中保存返回值。调用方仍可保留手工 URL 输入，以兼容外部公开图片地址。
+媒体库图片选择对话框，统一从媒体库读取 JPEG、PNG、GIF 和 WebP 图片，也支持直接输入外部公开图片 URL。组件只负责展示和选择，不负责业务鉴权或直接处理上传；页面应通过 `v-model:open` 控制显示，并在 `select` 事件中保存返回值。调用方的服务端入口仍负责验证外部 URL。
 
 ```vue
 <MediaPickerDialog v-model:open="pickerOpen" @select="form.logo = $event" />
@@ -22,8 +22,14 @@ import MediaPickerDialog from "@/components/admin/MediaPickerDialog.vue";
 
 - `open`：是否打开对话框。
 - `update:open`：打开状态变化事件。
-- `select`：选中图片时返回规范化媒体 URL。
+- `select`：选中媒体时返回媒体代理 URL，或返回填写的外部公开图片 URL。
 
+
+### `ProductRichTextEditor`
+
+商品详情页使用的富文本编辑器，支持正文、二三级标题、粗体、斜体、引用、列表、链接、分割线、媒体库图片、外部公开图片、文字颜色、文本高亮、撤销重做和 HTML 源码编辑。编辑器通过 `v-model` 输出 HTML；保存时服务端会再次清洗，不应将浏览器端输出视为可信内容。
+
+预设色块统一收在单一边框中；文字颜色和高亮均可切换为六位 HEX（`#RRGGBB`）或紧凑 RGBA（`r,g,b,a`）输入。服务端只保留 `color` 与 `background-color` 的这两种合法颜色格式，其他标签、属性、CSS、危险链接和不安全图片协议都会被移除。
 
 ### `AdminDataTable`
 
@@ -84,6 +90,53 @@ const columns: AdminTableColumn<Row>[] = [
 | `pagination` | 表格下方分页区 |
 
 一项业务字段对应一列；状态、金额、日期、截断文本等格式化才使用 `cell-{key}`，不要将多个不相关字段堆进一个单元格。列表接口只返回展示所需字段，卡密全文、密码、token、密钥等不要发送到前端。
+
+### `ButtonGroup`
+
+导入：
+
+```ts
+import { ButtonGroup } from "@/components/ui/button-group";
+```
+
+将同一语义下的相邻操作按钮组合为连续控件，例如列表的刷新、快速添加和新增操作。`ButtonGroup` 只负责布局；子项继续使用 `Button` 并保留各自的 `variant`、`size`、禁用状态与事件。
+
+```vue
+<ButtonGroup>
+  <Button variant="outline" size="sm">刷新</Button>
+  <Button variant="outline" size="sm">快速添加</Button>
+  <Button size="sm">添加商品</Button>
+</ButtonGroup>
+```
+
+- `orientation`：可选 `horizontal`（默认）或 `vertical`。
+- 仅用于功能相关且应被视作同一组的连续操作；无关操作保持独立间距。
+
+### `DateRangePicker`
+
+导入：
+
+```ts
+import { DateRangePicker, type DateRangeValue } from "@/components/ui/date-range-picker";
+```
+
+列表中的日期范围筛选控件，基于 `Popover` 和 `RangeCalendar`，一次选择开始与结束日期。页面负责将日期范围转换为接口查询参数及处理时区边界。
+
+```vue
+<script setup lang="ts">
+import { ref } from "vue";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+
+const dateRange = ref({ start: "", end: "" });
+</script>
+
+<template>
+  <DateRangePicker v-model="dateRange" />
+</template>
+```
+
+- `v-model`：`{ start: string; end: string }`，两个值均为 `YYYY-MM-DD`，为空表示未筛选。
+- 日期范围应使用一个 `DateRangePicker`，不得在同一语义范围内并列两个独立 `DatePicker`。
 
 ### `Switch`
 

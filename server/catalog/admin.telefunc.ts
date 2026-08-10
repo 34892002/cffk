@@ -63,10 +63,6 @@ function resolveCoverImage(value: unknown) {
   appError("PRODUCT_COVER_IMAGE_INVALID");
 }
 
-function booleanValue(value: unknown, code: string) {
-  if (typeof value !== "boolean") appError(code);
-  return value;
-}
 
 async function resolveProductCategoryId(
   db: ReturnType<typeof getAdminDb>["db"],
@@ -195,8 +191,7 @@ export async function onSaveProduct(input: {
   fixedDeliveryContent?: string;
   manualDeliveryHint?: string;
   purchaseNote?: string;
-  isVisibleStock: boolean;
-  isContactRequired: boolean;
+
   price: number;
   status: ProductStatus;
   deliveryType: DeliveryType;
@@ -232,8 +227,7 @@ export async function onSaveProduct(input: {
     fixedDeliveryContent: input.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null,
     manualDeliveryHint: (input.deliveryType === "MANUAL" || input.deliveryType === "EXPRESS") ? optionalText(input.manualDeliveryHint, 2_000, "PRODUCT_MANUAL_DELIVERY_HINT_INVALID") : null,
     purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"),
-    isVisibleStock: booleanValue(input.isVisibleStock, "PRODUCT_VISIBLE_STOCK_INVALID"),
-    isContactRequired: booleanValue(input.isContactRequired, "PRODUCT_CONTACT_REQUIRED_INVALID"),
+
     price: Number.isSafeInteger(input.price) && input.price >= 0 ? input.price : (appError("PRODUCT_PRICE_INVALID"), 0),
     status: input.status,
     deliveryType: input.deliveryType,

@@ -5,6 +5,11 @@ export function parseAmountToCents(value: string): number | null {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
+export function formatCentsAsYuan(value: number): string {
+  if (!Number.isSafeInteger(value) || value < 0) throw new TypeError("Amount must be a non-negative integer in cents");
+  return (value / 100).toFixed(2);
+}
+
 export function canonicalizeAlipayParameters(parameters: Record<string, string>, excludeSignType = false) {
   return Object.entries(parameters)
     .filter(([key, value]) => key !== "sign" && (!excludeSignType || key !== "sign_type") && value !== "")

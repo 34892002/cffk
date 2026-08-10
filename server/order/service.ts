@@ -114,7 +114,7 @@ export async function createOrder(database: D1Database, input: CreateOrderInput)
   const quantity = Math.max(item.minBuy, Math.min(item.maxBuy, requestedQuantity));
   if (item.deliveryType === "FIXED_CARD" && !item.fixedDeliveryContent?.trim()) fail("PRODUCT_FIXED_CONTENT_MISSING");
   if (item.deliveryType === "EXPRESS" && !receiverInfo) fail("RECEIVER_INFO_REQUIRED");
-  if (item.isContactRequired && !contactValue) fail("CONTACT_VALUE_REQUIRED");
+  if (!contactValue) fail("CONTACT_VALUE_REQUIRED");
 
   const originalAmount = item.price * quantity;
   let discountId: number | null = null;

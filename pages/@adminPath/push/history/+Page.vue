@@ -4,16 +4,16 @@
     <Alert v-if="error" variant="destructive"><AlertTitle>无法读取发送日志</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
     <AdminDataTable :columns="columns" :rows="logs" row-key="id" empty-text="没有符合条件的推送记录。">
       <template #toolbar>
-        <div class="flex flex-1 flex-wrap items-center gap-2">
-          <Select v-model="channel" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按渠道筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部渠道</SelectItem><SelectItem value="EMAIL">电子邮件</SelectItem><SelectItem value="WECHAT">微信</SelectItem><SelectItem value="TELEGRAM">Telegram</SelectItem></SelectContent></Select>
-          <Select v-model="messageType" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按消息类型筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部类型</SelectItem><SelectItem value="NORMAL">客户消息</SelectItem><SelectItem value="ADMIN">管理消息</SelectItem></SelectContent></Select>
-          <Select v-model="scene" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按场景筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部场景</SelectItem><SelectItem value="ORDER_PAID">支付成功</SelectItem><SelectItem value="DELIVERY_SUCCESS">发货成功</SelectItem><SelectItem value="DELIVERY_FAILED">发货失败</SelectItem></SelectContent></Select>
-          <Select v-model="status" @update:model-value="resetAndLoad"><SelectTrigger size="sm" class="min-w-28" aria-label="按状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部状态</SelectItem><SelectItem value="PENDING">等待发送</SelectItem><SelectItem value="SUCCESS">成功</SelectItem><SelectItem value="FAILED">失败</SelectItem><SelectItem value="SKIPPED">已跳过</SelectItem><SelectItem value="EXHAUSTED">重试耗尽</SelectItem></SelectContent></Select>
-          <Input v-model="orderNo" class="h-8 w-48" placeholder="订单号" @change="resetAndLoad" />
-          <Input v-model="from" class="h-8 w-44" type="datetime-local" aria-label="开始时间" @change="resetAndLoad" />
-          <Input v-model="to" class="h-8 w-44" type="datetime-local" aria-label="结束时间" @change="resetAndLoad" />
+        <div class="flex flex-1 flex-wrap items-center gap-3">
+          <Input v-model="orderNo" class="h-8 w-52 shrink-0" placeholder="订单号" @keyup.enter="search" />
+          <Select v-model="channel"><SelectTrigger size="sm" class="w-28 shrink-0" aria-label="按渠道筛选"><SelectValue placeholder="全部渠道" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部渠道</SelectItem><SelectItem value="EMAIL">电子邮件</SelectItem><SelectItem value="WECHAT">微信</SelectItem><SelectItem value="TELEGRAM">Telegram</SelectItem></SelectContent></Select>
+          <Select v-model="messageType"><SelectTrigger size="sm" class="w-28 shrink-0" aria-label="按消息类型筛选"><SelectValue placeholder="全部类型" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部类型</SelectItem><SelectItem value="NORMAL">客户消息</SelectItem><SelectItem value="ADMIN">管理消息</SelectItem></SelectContent></Select>
+          <Select v-model="scene"><SelectTrigger size="sm" class="w-28 shrink-0" aria-label="按场景筛选"><SelectValue placeholder="全部场景" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部场景</SelectItem><SelectItem value="ORDER_PAID">支付成功</SelectItem><SelectItem value="DELIVERY_SUCCESS">发货成功</SelectItem><SelectItem value="DELIVERY_FAILED">发货失败</SelectItem></SelectContent></Select>
+          <Select v-model="status"><SelectTrigger size="sm" class="w-28 shrink-0" aria-label="按状态筛选"><SelectValue placeholder="全部状态" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部状态</SelectItem><SelectItem value="PENDING">等待发送</SelectItem><SelectItem value="PROCESSING">发送中</SelectItem><SelectItem value="SUCCESS">成功</SelectItem><SelectItem value="FAILED">失败</SelectItem><SelectItem value="SKIPPED">已跳过</SelectItem><SelectItem value="EXHAUSTED">重试耗尽</SelectItem></SelectContent></Select>
+          <div class="w-64 shrink-0"><DateRangePicker v-model="dateRange" /></div>
+          <div class="flex gap-2"><Button size="sm" :disabled="loading" @click="search">查询</Button><Button variant="outline" size="sm" :disabled="loading" @click="resetFilters">重置</Button></div>
         </div>
-        <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadLogs"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
+        <div class="flex shrink-0"><Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadLogs"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button></div>
       </template>
       <template #cell-createdAt="{ row }"><span class="whitespace-nowrap text-xs">{{ formatDate(row.createdAt) }}</span></template>
       <template #cell-channel="{ row }"><Badge variant="outline">{{ channelLabel(row.channel) }}</Badge></template>
@@ -39,12 +39,14 @@ import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+
 import { Input } from "@/components/ui/input";
 import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetPushLogs, onRetryPushLog } from "@/server/push/admin.telefunc";
-import { dateTimeInTimezone, formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
+import { dateBoundaryInTimezone, formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 type PushLog = Awaited<ReturnType<typeof onGetPushLogs>>["logs"][number];
 const timezone = useSiteTimezone();
@@ -56,14 +58,13 @@ const logs = ref<PushLog[]>([]);
 const channel = ref<"ALL" | "EMAIL" | "WECHAT" | "TELEGRAM">("ALL");
 const messageType = ref<"ALL" | "NORMAL" | "ADMIN">("ALL");
 const scene = ref<"ALL" | "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED">("ALL");
-const status = ref<"ALL" | "PENDING" | "SUCCESS" | "FAILED" | "SKIPPED" | "EXHAUSTED">("ALL");
+const status = ref<"ALL" | "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED" | "SKIPPED" | "EXHAUSTED">("ALL");
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
 
 const orderNo = ref("");
-const from = ref("");
-const to = ref("");
+const dateRange = ref({ start: "", end: "" });
 const loading = ref(false);
 const error = ref<string | null>(null);
 const retryingId = ref<number | null>(null);
@@ -71,7 +72,7 @@ async function loadLogs() {
   loading.value = true;
   error.value = null;
   try {
-    const result = await runTelefunc(() => onGetPushLogs({ page: page.value, pageSize: pageSize.value, ...(channel.value !== "ALL" ? { channel: channel.value } : {}), ...(messageType.value !== "ALL" ? { messageType: messageType.value } : {}), ...(scene.value !== "ALL" ? { scene: scene.value } : {}), ...(status.value !== "ALL" ? { status: status.value } : {}), ...(orderNo.value.trim() ? { orderNo: orderNo.value.trim() } : {}), ...(from.value ? { from: dateTimeInTimezone(from.value, timezone.value).toISOString() } : {}), ...(to.value ? { to: dateTimeInTimezone(to.value, timezone.value).toISOString() } : {}) }), { notifyError: false });
+    const result = await runTelefunc(() => onGetPushLogs({ page: page.value, pageSize: pageSize.value, ...(channel.value !== "ALL" ? { channel: channel.value } : {}), ...(messageType.value !== "ALL" ? { messageType: messageType.value } : {}), ...(scene.value !== "ALL" ? { scene: scene.value } : {}), ...(status.value !== "ALL" ? { status: status.value } : {}), ...(orderNo.value.trim() ? { orderNo: orderNo.value.trim() } : {}), ...(dateRange.value.start ? { from: dateBoundaryInTimezone(dateRange.value.start, timezone.value).toISOString() } : {}), ...(dateRange.value.end ? { to: dateBoundaryInTimezone(dateRange.value.end, timezone.value, true).toISOString() } : {}) }), { notifyError: false });
     logs.value = result.logs;
     total.value = result.total;
     page.value = result.page;
@@ -81,7 +82,8 @@ async function retryLog(id: number) {
   retryingId.value = id;
   try { await runTelefunc(() => onRetryPushLog(id), { successMessage: "已加入重试队列。" }); await loadLogs(); } finally { retryingId.value = null; }
 }
-function resetAndLoad() { page.value = 1; void loadLogs(); }
+function search() { page.value = 1; void loadLogs(); }
+function resetFilters() { channel.value = "ALL"; messageType.value = "ALL"; scene.value = "ALL"; status.value = "ALL"; orderNo.value = ""; dateRange.value = { start: "", end: "" }; search(); }
 function changePage(value: number) { page.value = value; void loadLogs(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadLogs(); }
 function formatDate(value: Date | string | number) { return formatDateInTimezone(value, timezone.value, { dateStyle: "short", timeStyle: "medium" }); }

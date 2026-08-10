@@ -5,9 +5,15 @@
         <DialogTitle>选择媒体图片</DialogTitle>
         <DialogDescription>仅显示媒体库中的图片；也可以继续手工填写 URL。</DialogDescription>
       </DialogHeader>
-      <div class="flex gap-2 border-b px-6 py-4">
-        <Input v-model="keyword" placeholder="搜索文件名" @keyup.enter="loadMedia" />
-        <Button variant="outline" :disabled="loading" @click="loadMedia">搜索</Button>
+      <div class="grid gap-3 border-b px-6 py-4">
+        <div class="flex gap-2">
+          <Input v-model="keyword" placeholder="搜索文件名" @keyup.enter="loadMedia" />
+          <Button variant="outline" :disabled="loading" @click="loadMedia">搜索</Button>
+        </div>
+        <div class="flex gap-2">
+          <Input v-model="externalUrl" placeholder="https://example.com/image.jpg" aria-label="外部图片地址" @keyup.enter="selectExternalUrl" />
+          <Button :disabled="!externalUrl.trim()" @click="selectExternalUrl">插入</Button>
+        </div>
       </div>
       <div class="min-h-0 overflow-y-auto px-6 py-5">
         <div v-if="!items.length && !loading" class="py-10 text-center text-sm text-muted-foreground">暂无图片媒体。</div>
@@ -34,6 +40,7 @@ type Props = { open: boolean };
 const props = defineProps<Props>();
 const emit = defineEmits<{ "update:open": [value: boolean]; select: [url: string] }>();
 const keyword = ref("");
+const externalUrl = ref("");
 const loading = ref(false);
 const items = ref<Awaited<ReturnType<typeof onGetMedia>>["items"]>([]);
 
@@ -46,4 +53,5 @@ async function loadMedia() {
   } catch { /* runTelefunc 已显示脱敏错误。 */ } finally { loading.value = false; }
 }
 function select(url: string) { emit("select", url); emit("update:open", false); }
+function selectExternalUrl() { const url = externalUrl.value.trim(); if (url) select(url); }
 </script>

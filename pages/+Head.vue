@@ -34,7 +34,7 @@ const isPrivatePage = computed(() => {
 const siteUrl = computed(() => normalizeOrigin(pageContext.site?.siteUrl) || normalizeOrigin(pageContext.urlParsed?.origin));
 const iconUrl = computed(() => pageContext.site?.logoIcon || pageContext.site?.logo || defaultLogoUrl);
 const seo = computed(() => {
-  const siteName = pageContext.site?.name || "CFFK发卡";
+  const siteName = pageContext.site?.name || "CFFK-Shop";
   const product = pageContext.data;
   const isProductPage = Boolean(product?.name && (pageContext.urlPathname || "").startsWith("/product/"));
   const title = isProductPage ? `${product?.name} - ${siteName}` : siteName;

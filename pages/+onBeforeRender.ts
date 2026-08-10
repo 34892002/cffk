@@ -9,7 +9,7 @@ export async function onBeforeRender(_pageContext: PageContextServer) {
     return {
       pageContext: {
         site: {
-          name: "CFFK发卡",
+          name: "CFFK-Shop",
           subtitle: null,
           siteUrl: null,
           logo: null,

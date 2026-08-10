@@ -22,7 +22,7 @@ export type PublicCatalog = {
     stockMode: "FINITE" | "UNLIMITED";
     physicalStock: number | null;
     availableStock: number | null;
-    isVisibleStock: boolean;
+
     minBuy: number;
     maxBuy: number;
   }>;
@@ -32,7 +32,7 @@ export type PublicProductDetail = PublicCatalog["products"][number] & {
   description: string | null;
   purchaseNote: string | null;
   manualDeliveryHint: string | null;
-  isContactRequired: boolean;
+
 };
 
 export async function getPublicProductDetail(database: D1Database, slug: string): Promise<PublicProductDetail | null> {
@@ -55,8 +55,7 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
       deliveryType: product.deliveryType,
       stockMode: product.stockMode,
       physicalStock: product.physicalStock,
-      isVisibleStock: product.isVisibleStock,
-      isContactRequired: product.isContactRequired,
+
       minBuy: product.minBuy,
       maxBuy: product.maxBuy,
       categoryName: category.name,
@@ -106,7 +105,7 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
         deliveryType: product.deliveryType,
         stockMode: product.stockMode,
         physicalStock: product.physicalStock,
-        isVisibleStock: product.isVisibleStock,
+
         minBuy: product.minBuy,
         maxBuy: product.maxBuy,
       })

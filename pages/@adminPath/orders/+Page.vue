@@ -7,9 +7,11 @@
       <template #toolbar>
         <div class="flex flex-wrap items-center gap-2">
           <Input v-model="filters.query" class="h-8 w-56" placeholder="按订单号搜索" @keyup.enter="resetAndLoad" />
-          <Select :model-value="filters.status || 'ALL'" @update:model-value="filters.status = $event === 'ALL' ? '' : $event as Order['status']; resetAndLoad()"><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部订单状态</SelectItem><SelectItem value="PENDING">待支付</SelectItem><SelectItem value="PAID">已支付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="CLOSED">已关闭</SelectItem><SelectItem value="FAILED">失败</SelectItem></SelectContent></Select>
-          <Select :model-value="filters.deliveryStatus || 'ALL'" @update:model-value="filters.deliveryStatus = $event === 'ALL' ? '' : $event as Order['deliveryStatus']; resetAndLoad()"><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">全部交付状态</SelectItem><SelectItem value="NOT_DELIVERED">未交付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="FAILED">交付失败</SelectItem></SelectContent></Select>
-          <Button variant="outline" size="sm" @click="resetAndLoad">查询</Button>
+          <Select :model-value="filters.status || 'ALL'" @update:model-value="filters.status = $event === 'ALL' ? '' : $event as Order['status']"><SelectTrigger size="sm" class="w-36 shrink-0"><SelectValue placeholder="全部订单状态" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部订单状态</SelectItem><SelectItem value="PENDING">待支付</SelectItem><SelectItem value="PAID">已支付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="CLOSED">已关闭</SelectItem><SelectItem value="FAILED">失败</SelectItem></SelectContent></Select>
+          <Select :model-value="filters.deliveryStatus || 'ALL'" @update:model-value="filters.deliveryStatus = $event === 'ALL' ? '' : $event as Order['deliveryStatus']"><SelectTrigger size="sm" class="w-36 shrink-0"><SelectValue placeholder="全部交付状态" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部交付状态</SelectItem><SelectItem value="NOT_DELIVERED">未交付</SelectItem><SelectItem value="DELIVERED">已交付</SelectItem><SelectItem value="FAILED">交付失败</SelectItem></SelectContent></Select>
+          <div class="w-64 shrink-0"><DateRangePicker v-model="dateRange" /></div>
+          <Button size="sm" @click="resetAndLoad">查询</Button>
+          <Button variant="outline" size="sm" @click="resetFilters">重置</Button>
         </div>
         <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadOrders"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
       </template>
@@ -32,13 +34,14 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import AdminDataTable, { type AdminTableColumn } from "@/components/admin/AdminDataTable.vue";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import Pagination from "@/components/ui/pagination/Pagination.vue";
@@ -55,8 +58,9 @@ const columns: AdminTableColumn<Order>[] = [
   { key: "orderNo", label: "订单" }, { key: "productName", label: "商品" }, { key: "quantity", label: "数量" }, { key: "contactValue", label: "联系方式" }, { key: "amount", label: "金额" }, { key: "payment", label: "支付" }, { key: "delivery", label: "交付" }, { key: "createdAt", label: "创建时间" },
 ];
 const orders = ref<Order[]>([]); const detail = ref<Detail | null>(null); const loading = ref(false); const delivering = ref(false); const error = ref<string | null>(null); const page = ref(1); const pageSize = ref(20); const total = ref(0); const deliveryOrderId = ref<number | null>(null); const deliveryContent = ref("");
-const filters = reactive<{ query: string; status: "" | Order["status"]; deliveryStatus: "" | Order["deliveryStatus"] }>({ query: "", status: "", deliveryStatus: "" });
-async function loadOrders() { loading.value = true; error.value = null; try { const result = await runTelefunc(() => onGetAdminOrders({ page: page.value, pageSize: pageSize.value, ...(filters.query ? { query: filters.query } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.deliveryStatus ? { deliveryStatus: filters.deliveryStatus } : {}) }), { notifyError: false }); orders.value = result.orders; total.value = result.total; page.value = result.page; } catch (cause) { error.value = userErrorMessage(cause, "读取订单失败，请稍后重试。"); } finally { loading.value = false; } }
+const filters = reactive<{ query: string; status: "" | Order["status"]; deliveryStatus: "" | Order["deliveryStatus"]; startDate: string; endDate: string }>({ query: "", status: "", deliveryStatus: "", startDate: "", endDate: "" });
+const dateRange = computed({ get: () => ({ start: filters.startDate, end: filters.endDate }), set: (value: { start: string; end: string }) => { filters.startDate = value.start; filters.endDate = value.end; } });
+async function loadOrders() { loading.value = true; error.value = null; try { const result = await runTelefunc(() => onGetAdminOrders({ page: page.value, pageSize: pageSize.value, ...(filters.query ? { query: filters.query } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.deliveryStatus ? { deliveryStatus: filters.deliveryStatus } : {}), ...(filters.startDate ? { startDate: filters.startDate } : {}), ...(filters.endDate ? { endDate: filters.endDate } : {}) }), { notifyError: false }); orders.value = result.orders; total.value = result.total; page.value = result.page; } catch (cause) { error.value = userErrorMessage(cause, "读取订单失败，请稍后重试。"); } finally { loading.value = false; } }
 async function showDetail(orderId: number) { try { detail.value = await runTelefunc(() => onGetAdminOrderDetail({ orderId }), { notifyError: false }); } catch (cause) { error.value = userErrorMessage(cause); } }
 async function closeOrder(orderId: number) { try { await runTelefunc(() => onCloseAdminOrder({ orderId }), { successMessage: "订单已关闭，已释放预占资源。" }); await loadOrders(); if (detail.value?.order.id === orderId) await showDetail(orderId); } catch (cause) { error.value = userErrorMessage(cause, "该订单当前不能关闭。"); } }
 function openDelivery(orderId: number) { deliveryOrderId.value = orderId; deliveryContent.value = ""; }
@@ -65,6 +69,7 @@ async function completeDelivery() { if (!deliveryOrderId.value) return; deliveri
 async function markDeliveryFailed() { if (!deliveryOrderId.value) return; delivering.value = true; try { await runTelefunc(() => onRecordManualDelivery({ orderId: deliveryOrderId.value!, content: deliveryContent.value, failed: true }), { successMessage: "已标记交付失败。" }); closeDelivery(); await loadOrders(); } catch (cause) { error.value = userErrorMessage(cause, "无法更新交付状态。"); } finally { delivering.value = false; } }
 async function retryAutomatic() { if (!deliveryOrderId.value) return; delivering.value = true; try { await runTelefunc(() => onRetryAutomaticDelivery({ orderId: deliveryOrderId.value! }), { successMessage: "自动交付已完成。" }); closeDelivery(); await loadOrders(); } catch (cause) { error.value = userErrorMessage(cause, "自动交付尚未完成，请检查订单和卡密库存。"); } finally { delivering.value = false; } }
 function resetAndLoad() { page.value = 1; void loadOrders(); }
+function resetFilters() { Object.assign(filters, { query: "", status: "", deliveryStatus: "", startDate: "", endDate: "" }); resetAndLoad(); }
 function changePage(value: number) { page.value = value; void loadOrders(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadOrders(); }
 function formatAmount(value: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(value / 100); }

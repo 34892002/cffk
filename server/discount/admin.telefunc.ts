@@ -1,4 +1,5 @@
 import { asc, eq } from "drizzle-orm";
+import { discountAmountsToCents, discountAmountsToYuan } from "@/lib/discount-amounts";
 import { dateTimeInTimezone } from "@/lib/site-timezone";
 import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
@@ -18,16 +19,20 @@ function productIds(value?: string) { const ids = (value ?? "").split(",").map((
 
 export async function onGetDiscountCodes() {
   const { db } = getAdminDb();
-  return db.select().from(discountCode).orderBy(asc(discountCode.createdAt), asc(discountCode.id));
+  const records = await db.select().from(discountCode).orderBy(asc(discountCode.createdAt), asc(discountCode.id));
+  return records.map((record) => ({ ...record, ...discountAmountsToYuan(record.type, record.value, record.minAmount) }));
 }
 
-export async function onSaveDiscountCode(input: { id?: number; code: string; type: DiscountType; value: number; minAmount?: number | null; maxUses?: number | null; productIds?: string; expiresAt?: string | null; isActive: boolean }) {
+export async function onSaveDiscountCode(input: { id?: number; code: string; type: DiscountType; value: string; minAmount?: string | null; maxUses?: number | null; productIds?: string; expiresAt?: string | null; isActive: boolean }) {
   const { database, db } = requireAdmin();
   const normalizedCode = code(input.code);
   const type: DiscountType = input.type === "PERCENT" ? "PERCENT" : "FIXED";
-  const value = integer(input.value, "DISCOUNT_VALUE", 1);
+  const amounts = discountAmountsToCents(type, input.value, input.minAmount);
+  const value = amounts.value;
+  if (value === null || value < 1) throw new Error("DISCOUNT_VALUE_INVALID");
   if (type === "PERCENT" && value > 100) throw new Error("DISCOUNT_PERCENT_INVALID");
-  const minAmount = input.minAmount === null || input.minAmount === undefined || input.minAmount === 0 ? null : integer(input.minAmount, "DISCOUNT_MIN_AMOUNT", 1);
+  const minAmount = amounts.minAmount;
+  if (minAmount === null && input.minAmount && input.minAmount !== "0" && input.minAmount !== "0.00") throw new Error("DISCOUNT_MIN_AMOUNT_INVALID");
   const maxUses = input.maxUses === null || input.maxUses === undefined || input.maxUses === 0 ? null : integer(input.maxUses, "DISCOUNT_MAX_USES", 1);
   let expiresAt: Date | null = null;
   if (input.expiresAt?.trim()) {

@@ -7,14 +7,9 @@
       <AlertDescription>{{ error }}</AlertDescription>
     </Alert>
 
-    <Card>
-      <CardHeader>
-        <CardTitle>站点设置</CardTitle>
-        <CardDescription>维护公开商城展示的站点名称、公告、联系方式和下单提示。</CardDescription>
-      </CardHeader>
-
-      <form id="site-settings-form" novalidate @submit="saveSettings">
-        <CardContent>
+    <div>
+      <form id="site-settings-form" class="border-t" novalidate @submit="saveSettings">
+        <div class="px-6 py-6">
           <FieldGroup class="gap-5">
             <FieldSet class="gap-4">
               <FieldLegend>基础信息</FieldLegend>
@@ -22,7 +17,7 @@
                 <VeeField v-slot="{ componentField, errors }" name="siteName" :validate-on-input="true">
                   <Field :data-invalid="errors.length > 0">
                     <FieldLabel for="site-name">站点名称</FieldLabel>
-                    <Input id="site-name" v-bind="componentField" autocomplete="organization" placeholder="例如：CFFK发卡" :aria-invalid="errors.length > 0" />
+                    <Input id="site-name" v-bind="componentField" autocomplete="organization" placeholder="例如：CFFK-Shop" :aria-invalid="errors.length > 0" />
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
                 </VeeField>
@@ -168,13 +163,13 @@
               </div>
             </FieldSet>
           </FieldGroup>
-        </CardContent>
+        </div>
 
-        <CardFooter class="flex justify-end border-t">
+        <div class="flex justify-end border-t px-6 py-4">
           <Button type="submit" :disabled="loading">{{ loading ? "保存中..." : "保存设置" }}</Button>
-        </CardFooter>
+        </div>
       </form>
-    </Card>
+    </div>
     <MediaPickerDialog :open="mediaPickerTarget !== null" @update:open="(open) => { if (!open) mediaPickerTarget = null; }" @select="setSelectedImage" />
   </section>
 </template>
@@ -190,7 +185,7 @@ import { z } from "zod";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+
 
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -246,7 +241,7 @@ type FormValues = {
 const timezones = SITE_TIMEZONES.map((value) => ({ value, label: value }));
 
 const initialValues: FormValues = {
-  siteName: "CFFK发卡",
+  siteName: "CFFK-Shop",
   siteUrl: "",
   siteSubtitle: "",
   logo: "",

@@ -3,7 +3,7 @@
     <header class="fixed inset-x-0 top-0 z-50 border-b bg-background/95 backdrop-blur">
       <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-4 px-5">
         <a href="/" class="flex min-w-0 items-center gap-2 font-semibold">
-          <img :src="brandLogoUrl" :alt="`${site.name} Logo`" class="size-8 shrink-0 rounded-md object-contain" />
+          <img :src="brandLogoUrl" :alt="`${site.name} Logo`" class="size-9 shrink-0 rounded-md object-contain" />
           <span class="truncate">{{ site.name }}</span>
         </a>
         <nav class="flex shrink-0 items-center gap-2" aria-label="主导航">
@@ -67,8 +67,7 @@
               <h3 class="line-clamp-2 text-base font-semibold tracking-normal">{{ product.name }}</h3>
               <p v-if="product.subtitle" class="mt-1 line-clamp-1 text-sm text-muted-foreground">{{ product.subtitle }}</p>
               <div class="mt-auto flex items-end justify-between gap-3 pt-4">
-                <span v-if="product.isVisibleStock" :class="stockClass(product)" class="text-xs">{{ stockLabel(product) }}</span>
-                <span v-else class="text-xs text-muted-foreground">{{ deliveryLabel(product.deliveryType) }}</span>
+                <span :class="stockClass(product)" class="text-xs">{{ stockLabel(product) }}</span>
                 <span class="shrink-0 text-xl font-semibold tabular-nums">{{ formatAmount(product.price) }}</span>
               </div>
             </div>
@@ -129,14 +128,6 @@ function formatAmount(amount: number) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount / 100);
 }
 
-function deliveryLabel(deliveryType: Product["deliveryType"]) {
-  return {
-    CARD_AUTO: "自动发货",
-    FIXED_CARD: "固定内容发货",
-    MANUAL: "人工发货",
-    EXPRESS: "物流发货",
-  }[deliveryType];
-}
 
 function stockLabel(product: Product) {
   if (product.deliveryType === "CARD_AUTO") {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canonicalizeAlipayParameters, parseAmountToCents } from "../lib/payment-utils.ts";
+import { canonicalizeAlipayParameters, formatCentsAsYuan, parseAmountToCents } from "../lib/payment-utils.ts";
 import { pushRetryDelayMs, renderPushTemplate } from "../lib/push-utils.ts";
 import { canConfirmPayment, paymentConfirmationOutcome } from "../lib/order-state.ts";
 import { sanitizeDatabaseLogJson, sanitizeDatabaseLogText } from "../server/database-log-sanitizer.ts";
@@ -41,6 +41,13 @@ test("parseAmountToCents accepts exact yuan values with up to two decimals", () 
   assert.equal(parseAmountToCents("1.2"), 120);
   assert.equal(parseAmountToCents("1.23"), 123);
   assert.equal(parseAmountToCents("100000000000"), 10000000000000);
+});
+
+test("formatCentsAsYuan returns a fixed two-decimal yuan string", () => {
+  assert.equal(formatCentsAsYuan(0), "0.00");
+  assert.equal(formatCentsAsYuan(1), "0.01");
+  assert.equal(formatCentsAsYuan(1230), "12.30");
+  assert.throws(() => formatCentsAsYuan(-1));
 });
 
 test("parseAmountToCents rejects malformed and unsafe values", () => {

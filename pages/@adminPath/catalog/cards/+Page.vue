@@ -9,7 +9,7 @@ import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Input } from "@/components/ui/input";
 import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -62,6 +62,7 @@ const clearDialogOpen = ref(false);
 const cardToDelete = ref<CardRow | null>(null);
 
 const total = computed(() => data.total);
+const dateRange = computed({ get: () => ({ start: filters.startDate, end: filters.endDate }), set: (value: { start: string; end: string }) => { filters.startDate = value.start; filters.endDate = value.end; } });
 const timezone = useSiteTimezone();
 const selectedProductName = computed(() => data.products.find((item) => item.id === filters.productId)?.name ?? "");
 const dateFormatter = { format: (value: Date | string | number) => formatDateInTimezone(value, timezone.value, { dateStyle: "short", timeStyle: "medium" }) };
@@ -227,24 +228,23 @@ function formatDate(value: Date) {
           <div><CardTitle>库存列表</CardTitle><CardDescription class="mt-1">按商品、状态、批次及创建时间查找卡密。</CardDescription></div>
           <div class="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" :disabled="loading" @click="loadCards"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
-            <Button variant="destructive" size="sm" @click="requestClearUnused"><Trash2Icon />清空未售库存</Button>
+            <Button variant="outline" size="sm" class="border-destructive/30 text-destructive hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive" @click="requestClearUnused"><Trash2Icon />清空未售库存</Button>
             <Button variant="outline" size="sm" @click="addDialogOpen = true"><PlusIcon />新增卡密</Button>
             <Button size="sm" @click="importDialogOpen = true"><UploadIcon />批量导入</Button>
           </div>
         </div>
         <div class="flex w-full flex-wrap items-center gap-3 lg:w-[70%]">
-          <Select class="min-w-52 flex-[1.4_1_13rem]" :model-value="filters.productId === undefined ? 'all' : String(filters.productId)" @update:model-value="filters.productId = $event === 'all' ? undefined : Number($event)">
-            <SelectTrigger><SelectValue placeholder="选择商品" /></SelectTrigger>
+          <Select :model-value="filters.productId === undefined ? 'all' : String(filters.productId)" @update:model-value="filters.productId = $event === 'all' ? undefined : Number($event)">
+            <SelectTrigger size="sm" class="w-52 shrink-0"><SelectValue placeholder="选择商品" /></SelectTrigger>
             <SelectContent><SelectItem value="all">全部商品</SelectItem><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent>
           </Select>
-          <Select class="min-w-32 flex-[0.75_1_8rem]" :model-value="filters.status ?? 'all'" @update:model-value="filters.status = $event === 'all' ? undefined : $event as CardStatus">
-            <SelectTrigger><SelectValue placeholder="选择状态" /></SelectTrigger>
+          <Select :model-value="filters.status ?? 'all'" @update:model-value="filters.status = $event === 'all' ? undefined : $event as CardStatus">
+            <SelectTrigger size="sm" class="w-32 shrink-0"><SelectValue placeholder="选择状态" /></SelectTrigger>
             <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="UNUSED">未售出</SelectItem><SelectItem value="LOCKED">已预占</SelectItem><SelectItem value="SOLD">已售出</SelectItem><SelectItem value="DISABLED">已禁用</SelectItem></SelectContent>
           </Select>
-          <Input v-model="filters.batchNo" class="min-w-40 flex-[1_1_10rem]" placeholder="批次号" @keyup.enter="search" />
-          <div class="w-36 shrink-0"><DatePicker v-model="filters.startDate" placeholder="开始日期" aria-label="选择开始日期" /></div>
-          <div class="w-36 shrink-0"><DatePicker v-model="filters.endDate" placeholder="结束日期" aria-label="选择结束日期" /></div>
-          <div class="flex gap-2"><Button size="sm" @click="search">搜索</Button><Button variant="outline" size="sm" @click="resetFilters">重置</Button></div>
+          <Input v-model="filters.batchNo" class="h-8 w-40 shrink-0" placeholder="批次号" @keyup.enter="search" />
+          <div class="w-64 shrink-0"><DateRangePicker v-model="dateRange" /></div>
+          <div class="flex gap-2"><Button size="sm" @click="search">查询</Button><Button variant="outline" size="sm" @click="resetFilters">重置</Button></div>
         </div>
       </CardHeader>
       <CardContent class="pt-6">

@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1786258564680,
+      "when": 1786350425525,
       "tag": "0000_initial",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1786265112524,
-      "tag": "0001_abnormal_the_call",
       "breakpoints": true
     }
   ]

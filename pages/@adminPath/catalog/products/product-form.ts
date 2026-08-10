@@ -1,5 +1,6 @@
 import { pinyin } from "pinyin-pro";
 import { z } from "zod";
+import { formatCentsAsYuan, parseAmountToCents } from "@/lib/payment-utils";
 import type { onGetProductAdminDetail } from "@/server/catalog/admin.telefunc";
 
 export const deliveryTypes = ["CARD_AUTO", "FIXED_CARD", "MANUAL", "EXPRESS"] as const;
@@ -16,8 +17,7 @@ export const productFormSchema = z.object({
   fixedDeliveryContent: z.string(),
   manualDeliveryHint: z.string(),
   purchaseNote: z.string(),
-  isVisibleStock: z.boolean(),
-  isContactRequired: z.boolean(),
+
   price: z.string().regex(/^\d+(?:\.\d{1,2})?$/, "请输入有效金额"),
   status: z.enum(productStatuses),
   deliveryType: z.enum(deliveryTypes),
@@ -38,14 +38,15 @@ export function slugifyProductName(value: string) {
 }
 
 export function defaultProductForm(categoryId: number | null = null): ProductForm {
-  return { categoryId: categoryId ?? 0, name: "", slug: "", subtitle: "", coverImage: "", description: "", fixedDeliveryContent: "", manualDeliveryHint: "", purchaseNote: "", isVisibleStock: true, isContactRequired: true, price: "0.00", status: "DRAFT", deliveryType: "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1, sort: 0 };
+  return { categoryId: categoryId ?? 0, name: "", slug: "", subtitle: "", coverImage: "", description: "", fixedDeliveryContent: "", manualDeliveryHint: "", purchaseNote: "", price: "0.00", status: "DRAFT", deliveryType: "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1, sort: 0 };
 }
 
 export function productDetailToForm(item: ProductDetail["product"]): ProductForm {
-  return { id: item.id, categoryId: item.categoryId ?? 0, name: item.name, slug: item.slug, subtitle: item.subtitle ?? "", coverImage: item.coverImage ?? "", description: item.description ?? "", fixedDeliveryContent: item.fixedDeliveryContent ?? "", manualDeliveryHint: item.manualDeliveryHint ?? "", purchaseNote: item.purchaseNote ?? "", isVisibleStock: item.isVisibleStock, isContactRequired: item.isContactRequired, price: (item.price / 100).toFixed(2), status: item.status, deliveryType: item.deliveryType, physicalStock: item.physicalStock, minBuy: item.minBuy, maxBuy: item.maxBuy, sort: item.sort };
+  return { id: item.id, categoryId: item.categoryId ?? 0, name: item.name, slug: item.slug, subtitle: item.subtitle ?? "", coverImage: item.coverImage ?? "", description: item.description ?? "", fixedDeliveryContent: item.fixedDeliveryContent ?? "", manualDeliveryHint: item.manualDeliveryHint ?? "", purchaseNote: item.purchaseNote ?? "", price: formatCentsAsYuan(item.price), status: item.status, deliveryType: item.deliveryType, physicalStock: item.physicalStock, minBuy: item.minBuy, maxBuy: item.maxBuy, sort: item.sort };
 }
 
-export function formToSaveInput(form: ProductForm, forceDraft = false) {
-  const price = Math.round(Number(form.price) * 100);
-  return { ...form, price, status: forceDraft ? "DRAFT" as const : form.status, categoryId: form.categoryId || null, physicalStock: form.deliveryType === "MANUAL" || form.deliveryType === "EXPRESS" ? form.physicalStock : null };
+export function formToSaveInput(form: ProductForm) {
+  const price = parseAmountToCents(form.price);
+  if (price === null) throw new TypeError("Price must be a valid yuan amount");
+  return { ...form, price, categoryId: form.categoryId || null, physicalStock: form.deliveryType === "MANUAL" || form.deliveryType === "EXPRESS" ? form.physicalStock : null };
 }

@@ -26,7 +26,7 @@ const settingsCache = new WeakMap<D1Database, CacheEntry>();
 
 const defaultSettings: SiteSettingRecord = {
   id: 1,
-  siteName: "CFFK发卡",
+  siteName: "CFFK-Shop",
   siteUrl: null,
   siteSubtitle: null,
   logo: null,

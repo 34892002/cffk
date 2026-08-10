@@ -12,11 +12,13 @@
     <AdminDataTable :columns="columns" :rows="paginatedCategories" row-key="id">
       <template #toolbar>
         <div class="flex flex-wrap items-center gap-2">
-          <Input v-model="query" class="h-8 w-60" placeholder="搜索分类名称或 Slug" />
-          <Select v-model="statusFilter">
-            <SelectTrigger size="sm" class="min-w-28" aria-label="按状态筛选"><SelectValue /></SelectTrigger>
+          <Input v-model="draftQuery" class="h-8 w-60" placeholder="搜索分类名称或 Slug" @keyup.enter="search" />
+          <Select v-model="draftStatusFilter">
+            <SelectTrigger size="sm" class="w-28 shrink-0" aria-label="按状态筛选"><SelectValue placeholder="全部状态" /></SelectTrigger>
             <SelectContent><SelectItem value="ALL">全部状态</SelectItem><SelectItem value="ACTIVE">启用</SelectItem><SelectItem value="DISABLED">停用</SelectItem></SelectContent>
           </Select>
+          <Button size="sm" @click="search">查询</Button>
+          <Button variant="outline" size="sm" @click="resetFilters">重置</Button>
         </div>
         <div class="flex items-center gap-2">
           <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadCategories">
@@ -90,6 +92,8 @@ const columns: AdminTableColumn<Category>[] = [
   { key: "status", label: "状态" },
 ];
 const categories = ref<Category[]>([]);
+const draftQuery = ref("");
+const draftStatusFilter = ref<"ALL" | "ACTIVE" | "DISABLED">("ALL");
 const query = ref("");
 const statusFilter = ref<"ALL" | "ACTIVE" | "DISABLED">("ALL");
 const currentPage = ref(1);
@@ -114,8 +118,8 @@ const paginatedCategories = computed(() => {
 });
 
 onMounted(loadCategories);
-watch(query, () => { currentPage.value = 1; });
-watch(statusFilter, () => { currentPage.value = 1; });
+function search() { query.value = draftQuery.value; statusFilter.value = draftStatusFilter.value; currentPage.value = 1; }
+function resetFilters() { draftQuery.value = ""; draftStatusFilter.value = "ALL"; search(); }
 watch(pageSize, () => { currentPage.value = 1; });
 watch(totalPages, (pages) => { if (currentPage.value > pages) currentPage.value = pages; });
 async function loadCategories() { loading.value = true; error.value = null; try { categories.value = (await runTelefunc(() => onGetCatalogAdminData(), { notifyError: false })).categories; } catch (cause) { error.value = userErrorMessage(cause); } finally { loading.value = false; } }

@@ -47,6 +47,18 @@ export const adminPages = {
     pageTitle: "商品管理",
     description: "管理商品价格、分类、上下架状态和购买限制。",
   },
+  productNew: {
+    title: "添加商品",
+    path: "/catalog/products/new",
+    pageTitle: "添加商品",
+    description: "完整配置商品信息、发货规则和发布状态。",
+  },
+  productEdit: {
+    title: "编辑商品",
+    path: "/catalog/products/:id",
+    pageTitle: "编辑商品",
+    description: "编辑商品信息、发货规则和发布状态。",
+  },
   cards: {
     title: "卡密管理",
     path: "/catalog/cards",
@@ -57,7 +69,7 @@ export const adminPages = {
     title: "折扣码管理",
     path: "/catalog/discounts",
     pageTitle: "优惠码管理",
-    description: "创建优惠规则、限制使用次数和适用商品。金额以分保存。",
+    description: "创建优惠规则、限制使用次数和适用商品。", 
   },
   orders: {
     title: "订单管理",
@@ -139,10 +151,10 @@ export const adminPages = {
   },
 
   tasks: {
-    title: "任务",
+    title: "定时任务",
     path: "/system/tasks",
-    pageTitle: "系统任务",
-    description: "系统任务功能尚未启用，后台不会展示模拟任务数据。",
+    pageTitle: "定时任务",
+    description: "由 Cloudflare Cron 自动执行，后台仅展示最近运行记录。",
   },
 } as const satisfies Record<string, AdminPageMeta>;
 
@@ -180,7 +192,8 @@ const allAdminPages = Object.values(adminPages) as readonly AdminPageMeta[];
 
 export function getAdminPageMeta(pathname: string, basePath: string) {
   const routePath = pathname.slice(basePath.length).replace(/\/$/, "") || "/";
-  return allAdminPages.find((page) => page.path === routePath);
+  return allAdminPages.find((page) => page.path === routePath)
+    ?? (routePath.startsWith("/catalog/products/") ? adminPages.productEdit : undefined);
 }
 
 export function isAdminNavigationItemActive(pathname: string, basePath: string, item: AdminNavigationItem) {

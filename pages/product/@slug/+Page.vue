@@ -14,7 +14,7 @@
         <Card>
           <CardHeader><CardDescription>当前价格</CardDescription><CardTitle class="text-3xl">{{ formatAmount(data.price) }}</CardTitle></CardHeader><form class="grid gap-6" @submit.prevent="onSubmit">
             <CardContent class="grid gap-4">
-              <label class="grid gap-2 text-sm font-medium">联系方式<span v-if="data.isContactRequired" class="text-destructive">*</span><Input v-model="contactValue" :required="data.isContactRequired" /></label>
+              <label class="grid gap-2 text-sm font-medium">联系方式<span class="text-destructive">*</span><Input v-model="contactValue" required /></label>
               <label class="grid gap-2 text-sm font-medium">购买数量<Input v-model.number="quantity" type="number" :min="data.minBuy" :max="data.maxBuy" required /></label>
               <label v-if="data.deliveryType === 'EXPRESS'" class="grid gap-2 text-sm font-medium">收件信息<Textarea v-model="receiverInfo" required rows="3" /></label>
               <label v-if="methods.length" class="grid gap-2 text-sm font-medium">支付方式<Select v-model="selectedMethod"><SelectTrigger><SelectValue placeholder="选择支付方式" /></SelectTrigger><SelectContent><SelectItem v-for="item in methods" :key="item.key" :value="item.key">{{ item.name }}{{ item.channel ? `（${channelLabel(item.channel)}）` : "" }}</SelectItem></SelectContent></Select></label>

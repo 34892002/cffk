@@ -7,7 +7,7 @@ INSERT INTO `siteSetting` (
   `id`, `siteName`, `siteSubtitle`, `notice`, `timezone`, `createdAt`, `updatedAt`
 ) VALUES (
   1,
-  'CFFK',
+  'CFFK-Shop',
   '全球部署 一触即达',
   '为数字虚拟商品 量身打造的自动寄售平台',
   'Asia/Shanghai',

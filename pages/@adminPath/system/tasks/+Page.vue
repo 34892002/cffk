@@ -4,8 +4,9 @@
     <Alert v-if="error" variant="destructive"><AlertTitle>无法读取任务日志</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
     <AdminDataTable :columns="columns" :rows="runs" row-key="id" :show-actions="false" empty-text="尚未记录 Cron 任务运行。">
       <template #toolbar>
-        <div class="text-sm text-muted-foreground">Cloudflare Cron 每 5 分钟运行一次订单关闭与推送重试维护。</div>
-        <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadRuns"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
+        <div class="flex w-full justify-end">
+          <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadRuns"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
+        </div>
       </template>
       <template #cell-startedAt="{ value }"><span class="whitespace-nowrap text-xs">{{ formatDate(value) }}</span></template>
       <template #cell-completedAt="{ value }"><span class="whitespace-nowrap text-xs">{{ value ? formatDate(value) : "-" }}</span></template>

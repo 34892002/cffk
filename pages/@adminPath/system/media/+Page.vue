@@ -30,7 +30,7 @@
     </Card>
 
     <AdminDataTable :columns="columns" :rows="data.items" row-key="id" empty-text="暂无媒体文件。">
-      <template #toolbar><div class="flex flex-wrap gap-3"><Input v-model="keyword" class="min-w-56 flex-1" placeholder="搜索文件名" @keyup.enter="search" /><Select v-model="mimeType"><SelectTrigger class="w-40"><SelectValue placeholder="全部类型" /></SelectTrigger><SelectContent><SelectItem value="all">全部类型</SelectItem><SelectItem value="image/">图片</SelectItem><SelectItem value="application/pdf">PDF</SelectItem></SelectContent></Select><Button variant="outline" @click="search">搜索</Button></div></template>
+      <template #toolbar><div class="flex flex-wrap items-center gap-2"><Input v-model="draftKeyword" class="h-8 w-56 shrink-0" placeholder="搜索文件名" @keyup.enter="search" /><Select v-model="draftMimeType"><SelectTrigger size="sm" class="w-40 shrink-0"><SelectValue placeholder="全部类型" /></SelectTrigger><SelectContent><SelectItem value="all">全部类型</SelectItem><SelectItem value="image/">图片</SelectItem><SelectItem value="application/pdf">PDF</SelectItem></SelectContent></Select><Button size="sm" @click="search">查询</Button><Button variant="outline" size="sm" @click="resetFilters">重置</Button></div></template>
       <template #cell-preview="{ row }"><Button variant="ghost" size="sm" @click="preview = row">预览</Button></template>
       <template #cell-originalName="{ row }"><span class="block max-w-64 truncate">{{ row.originalName }}</span></template>
       <template #cell-fileSize="{ row }">{{ formatSize(row.fileSize) }}</template>
@@ -119,12 +119,13 @@ type Row = Awaited<ReturnType<typeof onGetMedia>>["items"][number];
 const columns: AdminTableColumn<Row>[] = [{ key: "preview", label: "预览" }, { key: "originalName", label: "文件名" }, { key: "mimeType", label: "类型" }, { key: "fileSize", label: "大小" }, { key: "uploadedAt", label: "上传时间" }];
 const data = reactive<Awaited<ReturnType<typeof onGetMedia>>>({ items: [], total: 0, page: 1, pageSize: 20 });
 const config = reactive<Awaited<ReturnType<typeof onGetMediaConfig>>>({ configured: false, values: null, credentialStatus: { accessKeyConfigured: false, secretKeyConfigured: false }, updatedAt: null });
-const loading = ref(false), configOpen = ref(false), uploading = ref(false), saving = ref(false), deleting = ref(false), progress = ref(0), selectedFile = ref<File | null>(null), keyword = ref(""), mimeType = ref("all"), preview = ref<Row | null>(null), toDelete = ref<Row | null>(null), dragging = ref(false), webpSupported = ref(false), webpEnabled = ref(false);
+const loading = ref(false), configOpen = ref(false), uploading = ref(false), saving = ref(false), deleting = ref(false), progress = ref(0), selectedFile = ref<File | null>(null), draftKeyword = ref(""), draftMimeType = ref("all"), keyword = ref(""), mimeType = ref("all"), preview = ref<Row | null>(null), toDelete = ref<Row | null>(null), dragging = ref(false), webpSupported = ref(false), webpEnabled = ref(false);
 const canUpload = computed(() => config.configured && config.credentialStatus.accessKeyConfigured && config.credentialStatus.secretKeyConfigured);
 const timezone = useSiteTimezone();
 const { handleSubmit, resetForm, values } = useForm({ validationSchema: toTypedSchema(z.object({ endpoint: z.string().url(), bucket: z.string().min(1), accessKeyId: z.string().optional(), secretAccessKey: z.string().optional(), region: z.string().min(1), pathPrefix: z.string().min(1), cacheControl: z.string().min(1), forcePathStyle: z.boolean() })), initialValues: { endpoint: "", bucket: "", accessKeyId: "", secretAccessKey: "", region: "auto", pathPrefix: "media", cacheControl: "public, max-age=31536000, s-maxage=31536000, immutable", forcePathStyle: false } });
 async function loadAll() { loading.value = true; try { const [c, list] = await Promise.all([runTelefunc(() => onGetMediaConfig(), { notifyError: false }), runTelefunc(() => onGetMedia({ keyword: keyword.value || undefined, mimeType: mimeType.value === "all" ? undefined : mimeType.value as "image/" | "application/pdf", page: data.page, pageSize: data.pageSize }), { notifyError: false })]); Object.assign(config, c); Object.assign(data, list); if (c.values) resetForm({ values: { ...c.values, accessKeyId: "", secretAccessKey: "" } }); } catch { /* runTelefunc 已显示脱敏错误。 */ } finally { loading.value = false; } }
-function search() { data.page = 1; void loadAll(); }
+function search() { keyword.value = draftKeyword.value; mimeType.value = draftMimeType.value; data.page = 1; void loadAll(); }
+function resetFilters() { draftKeyword.value = ""; draftMimeType.value = "all"; search(); }
 function goPage(page: number) { data.page = page; void loadAll(); }
 function setFile(file: File | null) { selectedFile.value = file; }
 function selectFile(event: Event) { setFile((event.target as HTMLInputElement).files?.[0] ?? null); }

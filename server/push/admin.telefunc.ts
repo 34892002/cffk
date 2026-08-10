@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, like, lte } from "drizzle-orm";
+import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import { emailTemplate, order, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { formatDateInTimezone } from "@/lib/site-timezone";
@@ -13,6 +13,11 @@ export type PushStatus = "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED" | "SKIP
 type Policy = { messageType: PushMessageType; scene: PushScene; channels: PushChannel[]; isEnabled: boolean };
 type SaveInput = { isEnabled: boolean; policies: Policy[] };
 
+
+const pushChannels = new Set<PushChannel>(["EMAIL", "WECHAT", "TELEGRAM"]);
+const pushMessageTypes = new Set<PushMessageType>(["NORMAL", "ADMIN"]);
+const pushScenes = new Set<PushScene>(["ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"]);
+const pushStatuses = new Set<PushStatus>(["PENDING", "PROCESSING", "SUCCESS", "FAILED", "SKIPPED", "EXHAUSTED"]);
 
 const defaultPolicies: Policy[] = [
   { messageType: "NORMAL", scene: "ORDER_PAID", channels: ["EMAIL"], isEnabled: true },
@@ -123,7 +128,17 @@ export async function onGetPushLogs(input?: { page?: number; pageSize?: number; 
   const page = Math.max(1, Math.floor(input?.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(input?.pageSize ?? 20)));
   const orderNo = input?.orderNo?.trim().slice(0, 128);
-  const conditions = [...(input?.status ? [eq(pushLog.status, input.status)] : []), ...(input?.channel ? [eq(pushLog.channel, input.channel)] : []), ...(input?.messageType ? [eq(pushLog.messageType, input.messageType)] : []), ...(input?.scene ? [eq(pushLog.scene, input.scene)] : []), ...(typeof input?.orderId === "number" ? [eq(pushLog.orderId, input.orderId)] : []), ...(orderNo ? [like(order.orderNo, `%${orderNo}%`)] : []), ...(input?.from ? [gte(pushLog.createdAt, new Date(input.from))] : []), ...(input?.to ? [lte(pushLog.createdAt, new Date(input.to))] : [])];
+  if (input?.channel && !pushChannels.has(input.channel)) appError("PUSH_LOG_FILTER_INVALID");
+  if (input?.messageType && !pushMessageTypes.has(input.messageType)) appError("PUSH_LOG_FILTER_INVALID");
+  if (input?.scene && !pushScenes.has(input.scene)) appError("PUSH_LOG_FILTER_INVALID");
+  if (input?.status && !pushStatuses.has(input.status)) appError("PUSH_LOG_FILTER_INVALID");
+  if (input?.orderId !== undefined && (!Number.isInteger(input.orderId) || input.orderId < 1)) appError("PUSH_LOG_FILTER_INVALID");
+  const from = input?.from ? new Date(input.from) : null;
+  const to = input?.to ? new Date(input.to) : null;
+  if (from && Number.isNaN(from.getTime())) appError("PUSH_LOG_DATE_INVALID");
+  if (to && Number.isNaN(to.getTime())) appError("PUSH_LOG_DATE_INVALID");
+  if (from && to && from >= to) appError("PUSH_LOG_DATE_INVALID");
+  const conditions = [...(input?.status ? [eq(pushLog.status, input.status)] : []), ...(input?.channel ? [eq(pushLog.channel, input.channel)] : []), ...(input?.messageType ? [eq(pushLog.messageType, input.messageType)] : []), ...(input?.scene ? [eq(pushLog.scene, input.scene)] : []), ...(typeof input?.orderId === "number" ? [eq(pushLog.orderId, input.orderId)] : []), ...(orderNo ? [like(order.orderNo, `%${orderNo}%`)] : []), ...(from ? [gte(pushLog.createdAt, from)] : []), ...(to ? [lt(pushLog.createdAt, to)] : [])];
   const where = conditions.length ? and(...conditions) : undefined;
   const [logs, total] = await Promise.all([
     db.select({ id: pushLog.id, orderId: pushLog.orderId, channelConfigId: pushLog.channelConfigId, idempotencyKey: pushLog.idempotencyKey, messageType: pushLog.messageType, channel: pushLog.channel, provider: pushLog.provider, scene: pushLog.scene, recipient: pushLog.recipient, subject: pushLog.subject, status: pushLog.status, attemptCount: pushLog.attemptCount, messageId: pushLog.messageId, error: pushLog.error, triggeredBy: pushLog.triggeredBy, createdAt: pushLog.createdAt, updatedAt: pushLog.updatedAt, orderNo: order.orderNo }).from(pushLog).leftJoin(order, eq(pushLog.orderId, order.id)).where(where).orderBy(desc(pushLog.createdAt), desc(pushLog.id)).limit(pageSize).offset((page - 1) * pageSize),

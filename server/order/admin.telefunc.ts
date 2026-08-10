@@ -1,7 +1,9 @@
-import { and, count, desc, eq, like } from "drizzle-orm";
+import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import { order, orderDelivery, paymentLog, product } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { dateBoundaryInTimezone } from "@/lib/site-timezone";
 import { notifyOrderDeliveryFailure, notifyOrderEmailEvents } from "@/server/email/order-events";
+import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
 import { closePendingOrder, deliverPaidOrder } from "./service";
 
@@ -9,14 +11,19 @@ type OrderStatus = "PENDING" | "PAID" | "DELIVERED" | "CLOSED" | "FAILED";
 type DeliveryStatus = "NOT_DELIVERED" | "DELIVERED" | "FAILED";
 
 
-export async function onGetAdminOrders(input?: { query?: string; status?: OrderStatus; deliveryStatus?: DeliveryStatus; page?: number; pageSize?: number }) {
-  const { db } = requireAdmin();
+export async function onGetAdminOrders(input?: { query?: string; status?: OrderStatus; deliveryStatus?: DeliveryStatus; startDate?: string; endDate?: string; page?: number; pageSize?: number }) {
+  const { database, db } = requireAdmin();
   const page = Math.max(1, Math.floor(input?.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(input?.pageSize ?? 20)));
   const conditions = [];
   if (input?.query?.trim()) conditions.push(like(order.orderNo, `%${input.query.trim()}%`));
   if (input?.status) conditions.push(eq(order.status, input.status));
   if (input?.deliveryStatus) conditions.push(eq(order.deliveryStatus, input.deliveryStatus));
+  if (input?.startDate || input?.endDate) {
+    const timezone = (await getSiteSettings(database)).timezone;
+    if (input.startDate) conditions.push(gte(order.createdAt, dateBoundaryInTimezone(input.startDate, timezone)));
+    if (input.endDate) conditions.push(lt(order.createdAt, dateBoundaryInTimezone(input.endDate, timezone, true)));
+  }
   const where = conditions.length ? and(...conditions) : undefined;
   const [orders, totalRows] = await Promise.all([
     db.select({ id: order.id, orderNo: order.orderNo, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, contactType: order.contactType, contactValue: order.contactValue, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, status: order.status, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, createdAt: order.createdAt, paidAt: order.paidAt, deliveredAt: order.deliveredAt }).from(order).where(where).orderBy(desc(order.createdAt), desc(order.id)).limit(pageSize).offset((page - 1) * pageSize),

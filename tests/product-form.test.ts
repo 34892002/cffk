@@ -7,16 +7,16 @@ describe("product form", () => {
     expect(form.categoryId).toBe(2);
     expect(formToSaveInput({ ...form, name: "商品", slug: "product", price: "12.30" }).price).toBe(1230);
   });
-  test("forces quick mode to draft", () => {
+  test("preserves the selected product status", () => {
     const form = defaultProductForm(2);
-    expect(formToSaveInput({ ...form, name: "商品", slug: "product", status: "ACTIVE" }, true).status).toBe("DRAFT");
+    expect(formToSaveInput({ ...form, name: "商品", slug: "product", status: "ACTIVE" }).status).toBe("ACTIVE");
   });
   test("normalizes delivery-specific fields before save", () => {
     const saved = formToSaveInput({ ...defaultProductForm(2), name: "商品", slug: "product", deliveryType: "CARD_AUTO", physicalStock: 5, fixedDeliveryContent: "不应随自动卡密保存" });
     expect(saved.physicalStock).toBeNull();
   });
   test("converts management detail cents and null text fields", () => {
-    const form = productDetailToForm({ id: 1, categoryId: 2, name: "商品", slug: "product", subtitle: null, coverImage: null, description: null, fixedDeliveryContent: null, manualDeliveryHint: null, purchaseNote: null, isVisibleStock: true, isContactRequired: false, price: 1234, status: "DRAFT", deliveryType: "CARD_AUTO", stockMode: "FINITE", physicalStock: null, minBuy: 1, maxBuy: 3, sort: 0, createdAt: new Date(), updatedAt: new Date() });
+    const form = productDetailToForm({ id: 1, categoryId: 2, name: "商品", slug: "product", subtitle: null, coverImage: null, description: null, fixedDeliveryContent: null, manualDeliveryHint: null, purchaseNote: null, price: 1234, status: "DRAFT", deliveryType: "CARD_AUTO", stockMode: "FINITE", physicalStock: null, minBuy: 1, maxBuy: 3, sort: 0, createdAt: new Date(), updatedAt: new Date() });
     expect(form.price).toBe("12.34");
     expect(form.subtitle).toBe("");
   });
