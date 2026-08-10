@@ -79,6 +79,4 @@ export function requirePaymentFlowService() {
   return new PaymentFlowService(context.env.DB, context.env);
 }
 
-export async function onCreatePayment(input: PaymentCreateInput) {
-  return requirePaymentFlowService().create(input);
-}
+

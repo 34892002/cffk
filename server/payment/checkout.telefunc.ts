@@ -1,2 +1,8 @@
-export { onCreatePayment } from "./flow-service";
-export type { PaymentCreateInput } from "./types";
+import { requirePaymentFlowService } from "./flow-service";
+import type { PaymentCreateInput } from "./types";
+
+export async function onCreatePayment(input: PaymentCreateInput) {
+  return requirePaymentFlowService().create(input);
+}
+
+export type { PaymentCreateInput };
