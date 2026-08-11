@@ -18,7 +18,7 @@
           </EmptyHeader>
           <EmptyContent><Button as-child><a :href="siteSettingsPath">前往站点配置</a></Button></EmptyContent>
         </Empty>
-        <AdminDataTable v-else :columns="columns" :rows="providers" row-key="provider" empty-text="尚未初始化支付渠道。"><template #cell-provider="{ value }"><span class="font-mono text-xs">{{ value }}</span></template><template #cell-modes="{ value }">{{ value || "默认" }}</template><template #cell-configStatus="{ value }"><Badge :variant="value === 'valid' ? 'secondary' : 'outline'" :class="value === 'valid' ? undefined : 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400'">{{ value === "valid" ? "配置有效" : "配置不完整" }}</Badge></template><template #cell-isEnabled="{ value }"><Badge :variant="value ? 'secondary' : 'outline'">{{ value ? "已启用" : "未启用" }}</Badge></template><template #cell-updatedAt="{ value }"><span class="text-xs">{{ value ? formatDate(value) : "-" }}</span></template><template #actions="{ row }"><Button variant="outline" size="sm" @click="openEditor(row)">配置</Button></template></AdminDataTable>
+        <AdminDataTable v-else :columns="columns" :rows="providers" row-key="provider" empty-text="尚未初始化支付渠道。"><template #cell-provider="{ value }"><span class="font-mono text-xs">{{ value }}</span></template><template #cell-modes="{ value }">{{ value || "默认" }}</template><template #cell-valid="{ value }"><Badge :variant="value ? 'secondary' : 'outline'" :class="value ? undefined : 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400'">{{ value ? "配置有效" : "配置不完整" }}</Badge></template><template #cell-isEnabled="{ value }"><Badge :variant="value ? 'secondary' : 'outline'">{{ value ? "已启用" : "未启用" }}</Badge></template><template #cell-updatedAt="{ value }"><span class="text-xs">{{ value ? formatDate(value) : "-" }}</span></template><template #actions="{ row }"><Button variant="outline" size="sm" @click="openEditor(row)">配置</Button></template></AdminDataTable>
       </CardContent>
     </Card>
 
@@ -52,7 +52,7 @@ import type { PaymentProviderKind } from "@/server/payment/registry";
 type Provider = Awaited<ReturnType<typeof onGetPaymentProviders>>[number];
 const timezone = useSiteTimezone();
 type ProviderField = Provider["fields"][number];
-const columns: AdminTableColumn<Provider>[] = [{ key: "provider", label: "渠道" }, { key: "name", label: "名称" }, { key: "modes", label: "子渠道" }, { key: "configStatus", label: "配置状态" }, { key: "isEnabled", label: "状态" }, { key: "updatedAt", label: "更新时间" }];
+const columns: AdminTableColumn<Provider>[] = [{ key: "provider", label: "渠道" }, { key: "name", label: "名称" }, { key: "modes", label: "子渠道" }, { key: "valid", label: "配置状态" }, { key: "isEnabled", label: "状态" }, { key: "updatedAt", label: "更新时间" }];
 const pageContext = usePageContext();
 const siteSettingsPath = `/${pageContext.routeParams.adminPath}/system/settings`;
 const providers = ref<Provider[]>([]); const loading = ref(false); const loaded = ref(false); const saving = ref(false); const dialogOpen = ref(false); const editing = ref<Provider | null>(null); const fieldErrors = ref<Record<string, string>>({});
