@@ -23,6 +23,20 @@ CREATE TABLE `adminBootstrap` (
 	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE TABLE `automaticDeliveryJob` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer NOT NULL,
+	`status` text DEFAULT 'PENDING' NOT NULL,
+	`leaseUntil` integer,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
+	`lastError` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `automaticDeliveryJob_orderId_unique` ON `automaticDeliveryJob` (`orderId`);--> statement-breakpoint
+CREATE INDEX `automaticDeliveryJob_status_id_idx` ON `automaticDeliveryJob` (`status`,`id`);--> statement-breakpoint
 CREATE TABLE `card` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`productId` integer NOT NULL,
@@ -115,10 +129,14 @@ CREATE TABLE `order` (
 	`receiverInfo` text,
 	`paymentProvider` text NOT NULL,
 	`paymentChannel` text,
-	`paymentOrderNo` text,
+	`deliveryTypeSnapshot` text NOT NULL,
+	`fixedDeliveryContentSnapshot` text,
+	`physicalStockReserved` integer DEFAULT false NOT NULL,
 	`status` text DEFAULT 'PENDING' NOT NULL,
 	`paymentStatus` text DEFAULT 'UNPAID' NOT NULL,
 	`deliveryStatus` text DEFAULT 'NOT_DELIVERED' NOT NULL,
+	`deliveryToken` text,
+	`deliveryLeaseUntil` integer,
 	`discountCodeId` integer,
 	`discountCodeStr` text,
 	`originalAmount` integer,
@@ -137,39 +155,51 @@ CREATE INDEX `order_productId_idx` ON `order` (`productId`);--> statement-breakp
 CREATE INDEX `order_status_createdAt_idx` ON `order` (`status`,`createdAt`);--> statement-breakpoint
 CREATE INDEX `order_paymentStatus_createdAt_idx` ON `order` (`paymentStatus`,`createdAt`);--> statement-breakpoint
 CREATE INDEX `order_deliveryStatus_createdAt_idx` ON `order` (`deliveryStatus`,`createdAt`);--> statement-breakpoint
-CREATE TABLE `orderCloseCompensation` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`orderId` integer NOT NULL,
-	`productId` integer NOT NULL,
-	`quantity` integer NOT NULL,
-	`deliveryType` text NOT NULL,
-	`discountCodeId` integer,
-	`cardsReleased` integer DEFAULT false NOT NULL,
-	`stockRestored` integer DEFAULT false NOT NULL,
-	`discountReleased` integer DEFAULT false NOT NULL,
-	`attempts` integer DEFAULT 0 NOT NULL,
-	`status` text DEFAULT 'PENDING' NOT NULL,
-	`lastError` text,
-	`nextAttemptAt` integer NOT NULL,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `orderCloseCompensation_orderId_unique` ON `orderCloseCompensation` (`orderId`);--> statement-breakpoint
-CREATE INDEX `orderCloseCompensation_nextAttemptAt_idx` ON `orderCloseCompensation` (`nextAttemptAt`);--> statement-breakpoint
 CREATE TABLE `orderDelivery` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`orderId` integer NOT NULL,
 	`deliveryType` text NOT NULL,
-	`contentSnapshot` text NOT NULL,
+	`attemptToken` text NOT NULL,
+	`contentSnapshot` text,
+	`errorCode` text,
 	`status` text DEFAULT 'SUCCESS' NOT NULL,
 	`createdAt` integer NOT NULL,
 	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `orderDelivery_orderId_unique` ON `orderDelivery` (`orderId`);--> statement-breakpoint
+CREATE UNIQUE INDEX `orderDelivery_attemptToken_unique` ON `orderDelivery` (`attemptToken`);--> statement-breakpoint
 CREATE INDEX `orderDelivery_orderId_createdAt_idx` ON `orderDelivery` (`orderId`,`createdAt`);--> statement-breakpoint
+CREATE TABLE `orderEvent` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`eventKey` text NOT NULL,
+	`orderId` integer NOT NULL,
+	`scene` text NOT NULL,
+	`errorMessage` text,
+	`status` text DEFAULT 'PENDING' NOT NULL,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
+	`availableAt` integer NOT NULL,
+	`leaseUntil` integer,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `orderEvent_eventKey_unique` ON `orderEvent` (`eventKey`);--> statement-breakpoint
+CREATE INDEX `orderEvent_status_availableAt_idx` ON `orderEvent` (`status`,`availableAt`);--> statement-breakpoint
+CREATE TABLE `paymentAttempt` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer NOT NULL,
+	`provider` text NOT NULL,
+	`channel` text,
+	`paymentOrderNo` text,
+	`status` text DEFAULT 'CREATING' NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `paymentAttempt_orderId_createdAt_idx` ON `paymentAttempt` (`orderId`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `paymentAttempt_provider_paymentOrderNo_idx` ON `paymentAttempt` (`provider`,`paymentOrderNo`);--> statement-breakpoint
 CREATE TABLE `paymentLog` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`orderId` integer,
@@ -315,9 +345,6 @@ CREATE TABLE `scheduledTaskRun` (
 	`status` text NOT NULL,
 	`scannedOrderCount` integer,
 	`closedOrderCount` integer,
-	`compensationRetried` integer,
-	`compensationFailed` integer,
-	`compensationExhausted` integer,
 	`pushRetryAttempted` integer,
 	`pushRetrySent` integer,
 	`pushRetryExhausted` integer,
@@ -357,6 +384,12 @@ CREATE TABLE `siteSetting` (
 	`timezone` text DEFAULT 'Asia/Shanghai' NOT NULL,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `transactionGuard` (
+	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`value` integer NOT NULL,
+	CONSTRAINT "transactionGuard_value_check" CHECK("transactionGuard"."value" = 1)
 );
 --> statement-breakpoint
 CREATE TABLE `twoFactor` (

@@ -13,7 +13,7 @@
       <template #cell-status="{ row }"><Badge :variant="statusVariant(row.status)">{{ statusLabel(row.status) }}</Badge></template>
       <template #cell-scannedOrderCount="{ value }">{{ value ?? "-" }}</template>
       <template #cell-closedOrderCount="{ value }">{{ value ?? "-" }}</template>
-      <template #cell-compensation="{ row }">{{ compensationSummary(row) }}</template>
+
       <template #cell-pushRetry="{ row }">{{ retrySummary(row) }}</template>
       <template #cell-error="{ value }"><span class="block max-w-96 whitespace-pre-wrap break-all text-xs text-muted-foreground">{{ value || "-" }}</span></template>
       <template #pagination><Pagination :total="total" :page="page" :page-size="pageSize" :page-size-options="[20, 50, 100]" @update:page="changePage" @update:page-size="changePageSize" /></template>
@@ -42,7 +42,7 @@ const columns: AdminTableColumn<ScheduledTaskRun>[] = [
   { key: "status", label: "状态" },
   { key: "scannedOrderCount", label: "扫描订单" },
   { key: "closedOrderCount", label: "实际关闭" },
-  { key: "compensation", label: "资源补偿" },
+
   { key: "pushRetry", label: "推送重试" },
   { key: "error", label: "错误" },
 ];
@@ -73,10 +73,7 @@ function formatDate(value: unknown) {
   const date = value instanceof Date ? value : new Date(typeof value === "string" || typeof value === "number" ? value : Number.NaN);
   return Number.isNaN(date.getTime()) ? "-" : formatDateInTimezone(date, timezone.value, { dateStyle: "short", timeStyle: "medium" });
 }
-function compensationSummary(run: ScheduledTaskRun) {
-  if (run.compensationRetried === null) return "-";
-  return `${run.compensationRetried} 重试 / ${run.compensationFailed ?? 0} 失败${run.compensationExhausted ? ` / ${run.compensationExhausted} 已耗尽` : ""}`;
-}
+
 function retrySummary(run: ScheduledTaskRun) { return run.pushRetryAttempted === null ? "-" : `${run.pushRetrySent ?? 0} 成功 / ${run.pushRetryAttempted} 尝试${run.pushRetryExhausted ? ` / ${run.pushRetryExhausted} 已耗尽` : ""}`; }
 function statusLabel(status: ScheduledTaskRun["status"]) { return { RUNNING: "运行中", SUCCESS: "成功", PARTIAL: "部分失败", FAILED: "失败" }[status]; }
 function statusVariant(status: ScheduledTaskRun["status"]) { return status === "SUCCESS" ? "secondary" : status === "PARTIAL" || status === "FAILED" ? "destructive" : "outline"; }

@@ -172,12 +172,15 @@ export const errorMessages: Record<string, string> = {
   ORDER_DELIVERY_TYPE_INVALID: "该订单不支持此发货操作。",
   FIXED_DELIVERY_CONTENT_MISSING: "订单交付内容不完整，请联系管理员。",
   CARD_DELIVERY_COUNT_MISMATCH: "订单交付库存异常，请稍后重试。",
+  CARD_INVENTORY_SHORTAGE: "可用卡密库存不足，请调整数量后重试。",
   CARD_QUANTITY_INVALID: "购买数量无效。",
 
-  REQUEST_FAILED: "接口异常，请稍后重试。",
-  INTERNAL_ERROR: "接口异常，请稍后重试。",
+  REQUEST_FAILED: "操作暂时无法完成，请稍后再试。",
+  INTERNAL_ERROR: "操作暂时无法完成，请稍后再试。",
 };
 
 export function userErrorMessage(cause: unknown, fallback = errorMessages.REQUEST_FAILED) {
-  return errorMessages[errorCode(cause)] ?? fallback;
+  const code = errorCode(cause);
+  if (code === "REQUEST_FAILED" || code === "INTERNAL_ERROR") return fallback;
+  return errorMessages[code] ?? fallback;
 }

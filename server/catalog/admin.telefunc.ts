@@ -207,8 +207,10 @@ export async function onSaveProduct(input: {
   if (!deliveryTypeSet.has(input.deliveryType)) appError("PRODUCT_DELIVERY_TYPE_INVALID");
   if (!productStatusSet.has(input.status)) appError("PRODUCT_STATUS_INVALID");
   const now = new Date();
-  const minBuy = nonNegativeInteger(input.minBuy, "PRODUCT_BUY_RANGE_INVALID");
-  const maxBuy = nonNegativeInteger(input.maxBuy, "PRODUCT_BUY_RANGE_INVALID");
+  const requestedMinBuy = nonNegativeInteger(input.minBuy, "PRODUCT_BUY_RANGE_INVALID");
+  const requestedMaxBuy = nonNegativeInteger(input.maxBuy, "PRODUCT_BUY_RANGE_INVALID");
+  const minBuy = input.deliveryType === "FIXED_CARD" ? 1 : requestedMinBuy;
+  const maxBuy = input.deliveryType === "FIXED_CARD" ? 1 : requestedMaxBuy;
   if (minBuy < 1 || maxBuy < minBuy) appError("PRODUCT_BUY_RANGE_INVALID");
   const physicalStock = input.deliveryType === "MANUAL" || input.deliveryType === "EXPRESS"
     ? (input.physicalStock === null ? null : nonNegativeInteger(input.physicalStock, "PHYSICAL_STOCK_INVALID"))

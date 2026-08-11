@@ -8,9 +8,7 @@ type CompleteScheduledTaskRunInput = {
   status: Exclude<ScheduledTaskRunStatus, "RUNNING">;
   scannedOrderCount: number | null;
   closedOrderCount: number | null;
-  compensationRetried: number | null;
-  compensationFailed: number | null;
-  compensationExhausted: number | null;
+
   pushRetryAttempted: number | null;
   pushRetrySent: number | null;
   pushRetryExhausted: number | null;
@@ -37,9 +35,6 @@ export async function startScheduledMaintenanceRun(database: D1Database, started
     status: "RUNNING",
     scannedOrderCount: null,
     closedOrderCount: null,
-    compensationRetried: null,
-    compensationFailed: null,
-    compensationExhausted: null,
     pushRetryAttempted: null,
     pushRetrySent: null,
     pushRetryExhausted: null,
@@ -60,9 +55,6 @@ export async function recordScheduledMaintenanceRunFailure(database: D1Database,
     status: "FAILED",
     scannedOrderCount: null,
     closedOrderCount: null,
-    compensationRetried: null,
-    compensationFailed: null,
-    compensationExhausted: null,
     pushRetryAttempted: null,
     pushRetrySent: null,
     pushRetryExhausted: null,

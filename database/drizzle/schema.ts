@@ -1,4 +1,5 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const createdAt = integer("createdAt", { mode: "timestamp_ms" }).notNull();
 const updatedAt = integer("updatedAt", { mode: "timestamp_ms" }).notNull();
@@ -181,10 +182,14 @@ export const order = sqliteTable(
     receiverInfo: text("receiverInfo"),
     paymentProvider: text("paymentProvider").notNull(),
     paymentChannel: text("paymentChannel"),
-    paymentOrderNo: text("paymentOrderNo"),
+    deliveryTypeSnapshot: text("deliveryTypeSnapshot", { enum: ["CARD_AUTO", "FIXED_CARD", "MANUAL", "EXPRESS"] }).notNull(),
+    fixedDeliveryContentSnapshot: text("fixedDeliveryContentSnapshot"),
+    physicalStockReserved: integer("physicalStockReserved", { mode: "boolean" }).notNull().default(false),
     status: text("status", { enum: ["PENDING", "PAID", "DELIVERED", "CLOSED", "FAILED"] }).notNull().default("PENDING"),
     paymentStatus: text("paymentStatus", { enum: ["UNPAID", "PAID", "FAILED"] }).notNull().default("UNPAID"),
-    deliveryStatus: text("deliveryStatus", { enum: ["NOT_DELIVERED", "DELIVERED", "FAILED"] }).notNull().default("NOT_DELIVERED"),
+    deliveryStatus: text("deliveryStatus", { enum: ["NOT_DELIVERED", "DELIVERING", "DELIVERED", "FAILED"] }).notNull().default("NOT_DELIVERED"),
+    deliveryToken: text("deliveryToken"),
+    deliveryLeaseUntil: integer("deliveryLeaseUntil", { mode: "timestamp_ms" }),
     discountCodeId: integer("discountCodeId").references(() => discountCode.id, { onDelete: "set null" }),
     discountCodeStr: text("discountCodeStr"),
     originalAmount: integer("originalAmount"),
@@ -210,7 +215,7 @@ export const card = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     productId: integer("productId").notNull().references(() => product.id),
     content: text("content").notNull(),
-    status: text("status", { enum: ["UNUSED", "LOCKED", "SOLD", "DISABLED"] }).notNull().default("UNUSED"),
+    status: text("status", { enum: ["UNUSED", "SOLD", "DISABLED"] }).notNull().default("UNUSED"),
     batchNo: text("batchNo"),
     orderId: integer("orderId").references(() => order.id, { onDelete: "set null" }),
     soldAt: integer("soldAt", { mode: "timestamp_ms" }),
@@ -226,15 +231,70 @@ export const orderDelivery = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     orderId: integer("orderId").notNull().references(() => order.id),
     deliveryType: text("deliveryType", { enum: ["CARD", "FIXED_CARD", "MANUAL", "EXPRESS"] }).notNull(),
-    contentSnapshot: text("contentSnapshot").notNull(),
+    attemptToken: text("attemptToken").notNull(),
+    contentSnapshot: text("contentSnapshot"),
+    errorCode: text("errorCode"),
     status: text("status", { enum: ["SUCCESS", "FAILED"] }).notNull().default("SUCCESS"),
     createdAt,
   },
   (table) => [
-    uniqueIndex("orderDelivery_orderId_unique").on(table.orderId),
+    uniqueIndex("orderDelivery_attemptToken_unique").on(table.attemptToken),
     index("orderDelivery_orderId_createdAt_idx").on(table.orderId, table.createdAt),
   ],
 );
+
+export const paymentAttempt = sqliteTable(
+  "paymentAttempt",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orderId: integer("orderId").notNull().references(() => order.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    channel: text("channel"),
+    paymentOrderNo: text("paymentOrderNo"),
+    status: text("status", { enum: ["CREATING", "PENDING", "PAID", "FAILED"] }).notNull().default("CREATING"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [index("paymentAttempt_orderId_createdAt_idx").on(table.orderId, table.createdAt), index("paymentAttempt_provider_paymentOrderNo_idx").on(table.provider, table.paymentOrderNo)],
+);
+
+export const automaticDeliveryJob = sqliteTable(
+  "automaticDeliveryJob",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orderId: integer("orderId").notNull().references(() => order.id, { onDelete: "cascade" }),
+    status: text("status", { enum: ["PENDING", "PROCESSING", "SUCCESS", "FAILED"] }).notNull().default("PENDING"),
+    leaseUntil: integer("leaseUntil", { mode: "timestamp_ms" }),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    lastError: text("lastError"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [uniqueIndex("automaticDeliveryJob_orderId_unique").on(table.orderId), index("automaticDeliveryJob_status_id_idx").on(table.status, table.id)],
+);
+
+export const orderEvent = sqliteTable(
+  "orderEvent",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    eventKey: text("eventKey").notNull(),
+    orderId: integer("orderId").notNull().references(() => order.id, { onDelete: "cascade" }),
+    scene: text("scene", { enum: ["ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED", "PAYMENT_EXCEPTION"] }).notNull(),
+    errorMessage: text("errorMessage"),
+    status: text("status", { enum: ["PENDING", "PROCESSING", "PROCESSED"] }).notNull().default("PENDING"),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    availableAt: integer("availableAt", { mode: "timestamp_ms" }).notNull(),
+    leaseUntil: integer("leaseUntil", { mode: "timestamp_ms" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [uniqueIndex("orderEvent_eventKey_unique").on(table.eventKey), index("orderEvent_status_availableAt_idx").on(table.status, table.availableAt)],
+);
+
+export const transactionGuard = sqliteTable("transactionGuard", {
+  id: integer("id").primaryKey().default(1),
+  value: integer("value").notNull(),
+}, (table) => [check("transactionGuard_value_check", sql`${table.value} = 1`)]);
 
 // Provider-specific payment fields are stored in D1 as validated JSON.
 export const paymentProvider = sqliteTable(
@@ -295,7 +355,7 @@ export const emailTemplate = sqliteTable(
   "emailTemplate",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    scene: text("scene", { enum: ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"] }).notNull(),
+    scene: text("scene", { enum: ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED", "PAYMENT_EXCEPTION"] }).notNull(),
     name: text("name").notNull(),
     templateJson: text("templateJson").notNull(),
     createdAt,
@@ -316,7 +376,7 @@ export const pushPolicy = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     messageType: text("messageType", { enum: ["NORMAL", "ADMIN"] }).notNull(),
-    scene: text("scene", { enum: ["ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"] }).notNull(),
+    scene: text("scene", { enum: ["ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED", "PAYMENT_EXCEPTION"] }).notNull(),
     channelsJson: text("channelsJson").notNull().default("[]"),
     isEnabled: integer("isEnabled", { mode: "boolean" }).notNull().default(true),
     createdAt,
@@ -335,7 +395,7 @@ export const pushLog = sqliteTable(
     messageType: text("messageType", { enum: ["NORMAL", "ADMIN"] }).notNull().default("NORMAL"),
     channel: text("channel", { enum: ["EMAIL", "WECHAT", "TELEGRAM"] }).notNull(),
     provider: text("provider").notNull(),
-    scene: text("scene", { enum: ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"] }).notNull(),
+    scene: text("scene", { enum: ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED", "PAYMENT_EXCEPTION"] }).notNull(),
     recipient: text("recipient").notNull(),
     subject: text("subject"),
     status: text("status", { enum: ["PENDING", "PROCESSING", "SUCCESS", "FAILED", "SKIPPED", "EXHAUSTED"] }).notNull(),
@@ -367,28 +427,6 @@ export const pushRetry = sqliteTable(
 );
 
 
-export const orderCloseCompensation = sqliteTable(
-  "orderCloseCompensation",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    orderId: integer("orderId").notNull().references(() => order.id, { onDelete: "cascade" }),
-    productId: integer("productId").notNull(),
-    quantity: integer("quantity").notNull(),
-    deliveryType: text("deliveryType", { enum: ["CARD_AUTO", "MANUAL", "EXPRESS", "FIXED_CARD"] }).notNull(),
-    discountCodeId: integer("discountCodeId"),
-    cardsReleased: integer("cardsReleased", { mode: "boolean" }).notNull().default(false),
-    stockRestored: integer("stockRestored", { mode: "boolean" }).notNull().default(false),
-    discountReleased: integer("discountReleased", { mode: "boolean" }).notNull().default(false),
-    attempts: integer("attempts").notNull().default(0),
-    status: text("status", { enum: ["PENDING", "PROCESSING", "COMPLETED", "EXHAUSTED"] }).notNull().default("PENDING"),
-    lastError: text("lastError"),
-    nextAttemptAt: integer("nextAttemptAt", { mode: "timestamp_ms" }).notNull(),
-    createdAt,
-    updatedAt,
-  },
-  (table) => [uniqueIndex("orderCloseCompensation_orderId_unique").on(table.orderId), index("orderCloseCompensation_nextAttemptAt_idx").on(table.nextAttemptAt)],
-);
-
 export const scheduledTaskRun = sqliteTable(
   "scheduledTaskRun",
   {
@@ -397,9 +435,7 @@ export const scheduledTaskRun = sqliteTable(
     status: text("status", { enum: ["RUNNING", "SUCCESS", "PARTIAL", "FAILED"] }).notNull(),
     scannedOrderCount: integer("scannedOrderCount"),
     closedOrderCount: integer("closedOrderCount"),
-    compensationRetried: integer("compensationRetried"),
-    compensationFailed: integer("compensationFailed"),
-    compensationExhausted: integer("compensationExhausted"),
+
     pushRetryAttempted: integer("pushRetryAttempted"),
     pushRetrySent: integer("pushRetrySent"),
     pushRetryExhausted: integer("pushRetryExhausted"),
@@ -452,6 +488,10 @@ export const schema = {
   order,
   card,
   orderDelivery,
+  paymentAttempt,
+  automaticDeliveryJob,
+  orderEvent,
+  transactionGuard,
   paymentProvider,
   paymentLog,
   pushChannelConfig,
@@ -462,7 +502,7 @@ export const schema = {
   pushLog,
   pushRetry,
   scheduledTaskRun,
-  orderCloseCompensation,
+
 
   s3Config,
   media,

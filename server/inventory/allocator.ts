@@ -1,72 +1,45 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card } from "@/database/drizzle/schema";
+import { appError } from "@/lib/app-error";
 
-export class CardInventoryShortageError extends Error {
-  constructor() {
-    super("CARD_INVENTORY_SHORTAGE");
-  }
-}
-
-export async function reserveCardsForOrder(database: D1Database, orderId: number, productId: number, quantity: number) {
+export async function allocateCardsForPaidOrder(database: D1Database, orderId: number, productId: number, quantity: number) {
   const db = createDrizzleDb(database);
   const count = Math.floor(quantity);
   if (!Number.isInteger(count) || count < 1) throw new Error("CARD_QUANTITY_INVALID");
+
+  // A delivery retry can follow a successful allocation whose snapshot write
+  // did not complete. Reuse only cards already sold to this exact order.
+  const existing = await db
+    .select({ id: card.id, content: card.content })
+    .from(card)
+    .where(and(eq(card.orderId, orderId), eq(card.status, "SOLD")))
+    .orderBy(asc(card.id));
+  if (existing.length === count) return existing;
+  if (existing.length > count) appError("CARD_DELIVERY_COUNT_MISMATCH");
+  const missingCount = count - existing.length;
 
   const candidates = await db
     .select({ id: card.id })
     .from(card)
     .where(and(eq(card.productId, productId), eq(card.status, "UNUSED")))
     .orderBy(asc(card.id))
-    .limit(count);
-
-  if (candidates.length < count) throw new CardInventoryShortageError();
+    .limit(missingCount);
+  if (candidates.length < missingCount) appError("CARD_INVENTORY_SHORTAGE");
 
   const candidateIds = candidates.map((item) => item.id);
-  const reserved = await db
-    .update(card)
-    .set({ status: "LOCKED", orderId, updatedAt: new Date() })
-    .where(and(inArray(card.id, candidateIds), eq(card.status, "UNUSED")))
-    .returning({ id: card.id, content: card.content });
-
-  if (reserved.length === count) return reserved;
-
-  // A concurrent buyer claimed at least one selected card. Release only the
-  // cards this order successfully reserved, then let the caller retry or fail.
-  if (reserved.length) {
-    await db
-      .update(card)
-      .set({ status: "UNUSED", orderId: null, updatedAt: new Date() })
-      .where(and(eq(card.orderId, orderId), eq(card.status, "LOCKED")));
+  const now = Date.now();
+  try {
+    await database.batch([
+      database.prepare(`UPDATE card SET status = 'SOLD', orderId = ?, soldAt = ?, updatedAt = ? WHERE id IN (${candidateIds.map(() => "?").join(",")}) AND status = 'UNUSED'`).bind(orderId, now, now, ...candidateIds),
+      database.prepare("INSERT INTO transactionGuard (id, value) VALUES (1, CASE WHEN changes() = ? THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET value = excluded.value").bind(missingCount),
+    ]);
+  } catch {
+    appError("CARD_INVENTORY_SHORTAGE");
   }
-  throw new CardInventoryShortageError();
-}
-
-export async function getCardsForOrderDelivery(database: D1Database, orderId: number) {
-  const db = createDrizzleDb(database);
-  return db
-    .select({ id: card.id, content: card.content, status: card.status })
-    .from(card)
-    .where(and(eq(card.orderId, orderId), inArray(card.status, ["LOCKED", "SOLD"])))
-    .orderBy(asc(card.id));
-}
-
-export async function finalizeReservedCards(database: D1Database, orderId: number) {
-  const db = createDrizzleDb(database);
-  return db
-    .update(card)
-    .set({ status: "SOLD", soldAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(card.orderId, orderId), eq(card.status, "LOCKED")))
-    .returning({ id: card.id, content: card.content });
-}
-
-export async function releaseReservedCards(database: D1Database, orderId: number) {
-  const db = createDrizzleDb(database);
-  return db
-    .update(card)
-    .set({ status: "UNUSED", orderId: null, updatedAt: new Date() })
-    .where(and(eq(card.orderId, orderId), eq(card.status, "LOCKED")))
-    .returning({ id: card.id });
+  const allocated = await db.select({ id: card.id, content: card.content }).from(card).where(and(eq(card.orderId, orderId), eq(card.status, "SOLD"))).orderBy(asc(card.id));
+  if (allocated.length !== count) appError("CARD_DELIVERY_COUNT_MISMATCH");
+  return allocated;
 }
 
 export async function countAvailableCards(database: D1Database, productId: number) {

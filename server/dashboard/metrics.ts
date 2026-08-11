@@ -21,7 +21,7 @@ export type DashboardData = {
     quantity: number;
     status: "PENDING" | "PAID" | "DELIVERED" | "CLOSED" | "FAILED";
     paymentStatus: "UNPAID" | "PAID" | "FAILED";
-    deliveryStatus: "NOT_DELIVERED" | "DELIVERED" | "FAILED";
+    deliveryStatus: "NOT_DELIVERED" | "DELIVERING" | "DELIVERED" | "FAILED";
     createdAt: Date;
   }>;
 };

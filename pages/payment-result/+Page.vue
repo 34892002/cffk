@@ -53,6 +53,6 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
 
 function statusLabel(status: QueriedOrder["status"]) { return { PENDING: "待支付", PAID: "已支付", DELIVERED: "已交付", CLOSED: "已关闭", FAILED: "失败" }[status]; }
 function paymentStatusLabel(status: QueriedOrder["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[status]; }
-function deliveryStatusLabel(status: QueriedOrder["deliveryStatus"]) { return { NOT_DELIVERED: "未交付", DELIVERED: "已交付", FAILED: "交付失败" }[status]; }
+function deliveryStatusLabel(status: QueriedOrder["deliveryStatus"]) { return { NOT_DELIVERED: "未交付", DELIVERING: "交付中", DELIVERED: "已交付", FAILED: "交付失败" }[status]; }
 function statusVariant(status: QueriedOrder["status"]) { return status === "DELIVERED" || status === "PAID" ? "secondary" : status === "FAILED" ? "destructive" : "outline"; }
 </script>

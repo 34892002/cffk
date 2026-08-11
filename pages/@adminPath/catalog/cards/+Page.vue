@@ -26,7 +26,7 @@ import {
 
 type CardData = Awaited<ReturnType<typeof onGetCardAdminData>>;
 type CardRow = CardData["items"][number];
-type CardStatus = "UNUSED" | "LOCKED" | "SOLD" | "DISABLED";
+type CardStatus = "UNUSED" | "SOLD" | "DISABLED";
 
 const columns: AdminTableColumn<CardRow>[] = [
   { key: "id", label: "ID", class: "font-mono text-xs", headerClass: "w-20" },
@@ -195,7 +195,7 @@ async function clearUnusedCards() {
 }
 
 function statusLabel(status: CardStatus) {
-  return { UNUSED: "未售出", LOCKED: "已预占", SOLD: "已售出", DISABLED: "已禁用" }[status];
+  return { UNUSED: "未售出", SOLD: "已售出", DISABLED: "已禁用" }[status];
 }
 
 function statusVariant(status: CardStatus) {
@@ -240,7 +240,7 @@ function formatDate(value: Date) {
           </Select>
           <Select :model-value="filters.status ?? 'all'" @update:model-value="filters.status = $event === 'all' ? undefined : $event as CardStatus">
             <SelectTrigger size="sm" class="w-32 shrink-0"><SelectValue placeholder="选择状态" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="UNUSED">未售出</SelectItem><SelectItem value="LOCKED">已预占</SelectItem><SelectItem value="SOLD">已售出</SelectItem><SelectItem value="DISABLED">已禁用</SelectItem></SelectContent>
+            <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="UNUSED">未售出</SelectItem><SelectItem value="SOLD">已售出</SelectItem><SelectItem value="DISABLED">已禁用</SelectItem></SelectContent>
           </Select>
           <Input v-model="filters.batchNo" class="h-8 w-40 shrink-0" placeholder="批次号" @keyup.enter="search" />
           <div class="w-64 shrink-0"><DateRangePicker v-model="dateRange" /></div>

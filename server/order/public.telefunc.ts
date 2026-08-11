@@ -9,6 +9,16 @@ type TelefuncContext = {
 
 export type PublicOrder = NonNullable<Awaited<ReturnType<PaymentFlowService["query"]>>>;
 
+export async function onResumeOrderPayment(input: {
+  orderNo: string;
+  queryToken: string;
+}) {
+  const context = getContext<TelefuncContext>();
+  if (!context.env?.DB) throw new Error("DATABASE_UNAVAILABLE");
+
+  return new PaymentFlowService(context.env.DB, context.env).resume(input.orderNo, input.queryToken);
+}
+
 export async function onQueryOrder(input: {
   orderNo: string;
   queryToken: string;

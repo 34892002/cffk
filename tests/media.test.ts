@@ -132,5 +132,5 @@ test("Vike abort control flow is not reported as an unexpected error", () => {
 
 test("media errors remain desensitized", () => {
   assert.equal(errorCode(() => { throw new AppError("MEDIA_TYPE_NOT_ALLOWED"); }), "MEDIA_TYPE_NOT_ALLOWED");
-  assert.equal(userErrorMessage(new Error("S3 signature=secret-value")), "接口异常，请稍后重试。");
+  assert.equal(userErrorMessage(new Error("S3 signature=secret-value")), "操作暂时无法完成，请稍后再试。");
 });

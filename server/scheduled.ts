@@ -1,6 +1,7 @@
 import { reportUnexpectedServerError } from "./error-handling";
 import { retryDuePushes } from "./push/service";
-import { closeExpiredPendingOrders } from "./order/service";
+import { closeExpiredPendingOrders, processPendingAutomaticDeliveries } from "./order/service";
+import { processOrderEvents } from "./email/order-events";
 import { completeScheduledMaintenanceRun, markStaleScheduledTaskRuns, recordScheduledMaintenanceRunFailure, startScheduledMaintenanceRun } from "./scheduled-task-log";
 
 export const ORDER_PAYMENT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -15,24 +16,26 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
   }
   try {
     const cutoff = new Date(now.getTime() - ORDER_PAYMENT_TIMEOUT_MS);
-    const [orderCleanup, pushRetry] = await Promise.allSettled([
+    const [orderCleanup, automaticDelivery] = await Promise.allSettled([
       closeExpiredPendingOrders(database, cutoff),
-      retryDuePushes(database, runtime, now),
+      processPendingAutomaticDeliveries(database),
     ]);
+    const orderEvents = await processOrderEvents(database, runtime, now);
+    const pushRetry = await Promise.allSettled([retryDuePushes(database, runtime, now)]).then(([result]) => result);
 
     if (orderCleanup.status === "rejected") {
       reportUnexpectedServerError("scheduled-order-auto-close", orderCleanup.reason, { cutoff: cutoff.toISOString() });
     }
-    if (pushRetry.status === "rejected") {
-      reportUnexpectedServerError("scheduled-push-retry", pushRetry.reason);
-    }
+    if (automaticDelivery.status === "rejected") reportUnexpectedServerError("scheduled-automatic-delivery", automaticDelivery.reason);
+    if (pushRetry.status === "rejected") reportUnexpectedServerError("scheduled-push-retry", pushRetry.reason);
 
     const orderResult = orderCleanup.status === "fulfilled" ? orderCleanup.value : null;
+    const automaticDeliveryResult = automaticDelivery.status === "fulfilled" ? automaticDelivery.value : null;
     const pushRetryResult = pushRetry.status === "fulfilled" ? pushRetry.value : null;
     const failures = [
       ...(orderCleanup.status === "rejected" ? [`订单自动关闭: ${errorMessage(orderCleanup.reason)}`] : []),
-      ...(orderResult && orderResult.compensationFailed > 0 ? [`资源补偿失败: ${orderResult.compensationFailed}`] : []),
-      ...(orderResult && orderResult.compensationExhausted > 0 ? [`资源补偿重试已耗尽: ${orderResult.compensationExhausted}`] : []),
+
+      ...(automaticDelivery.status === "rejected" ? [`自动交付: ${errorMessage(automaticDelivery.reason)}`] : []),
       ...(pushRetryResult && pushRetryResult.exhausted > 0 ? [`推送重试已耗尽: ${pushRetryResult.exhausted}`] : []),
       ...(pushRetry.status === "rejected" ? [`推送重试: ${errorMessage(pushRetry.reason)}`] : []),
     ];
@@ -41,9 +44,7 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
         status: failures.length === 0 ? "SUCCESS" : orderResult === null && pushRetryResult === null ? "FAILED" : "PARTIAL",
         scannedOrderCount: orderResult?.scanned ?? null,
         closedOrderCount: orderResult?.closed ?? null,
-        compensationRetried: orderResult?.compensationRetried ?? null,
-        compensationFailed: orderResult?.compensationFailed ?? null,
-        compensationExhausted: orderResult?.compensationExhausted ?? null,
+
         pushRetryAttempted: pushRetryResult?.attempted ?? null,
         pushRetrySent: pushRetryResult?.sent ?? null,
         pushRetryExhausted: pushRetryResult?.exhausted ?? null,
@@ -54,7 +55,7 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
       reportUnexpectedServerError("scheduled-task-log-complete", cause, { runId });
     }
 
-    return { orderCleanup: orderResult, pushRetry: pushRetryResult };
+    return { orderCleanup: orderResult, automaticDelivery: automaticDeliveryResult, orderEvents, pushRetry: pushRetryResult };
   } catch (cause) {
     try {
       await recordScheduledMaintenanceRunFailure(database, runId, cause, new Date());

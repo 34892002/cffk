@@ -15,6 +15,7 @@
         </CardHeader>
         <form class="grid gap-6" @submit.prevent="onSubmit">
           <CardContent class="grid gap-4">
+            <div v-if="localOrders.length" class="grid gap-2"><p class="text-sm font-medium">本机订单</p><div class="grid gap-2"><Button v-for="item in localOrders" :key="item.orderNo" type="button" variant="outline" class="h-auto justify-start px-3 py-2 text-left" @click="openLocalOrder(item)"><span class="grid gap-1"><span class="font-medium">{{ item.productName }}</span><span class="font-mono text-xs text-muted-foreground">{{ item.orderNo }}</span></span></Button></div></div>
             <label class="grid gap-2 text-sm font-medium">
               订单号
               <Input v-model="orderNo" required autocomplete="off" placeholder="例如：ORD-20260807-XXXX" />
@@ -41,9 +42,11 @@
         </CardHeader>
         <CardContent class="grid gap-4 text-sm">
           <div class="grid gap-2 border-y py-4"><div class="flex justify-between gap-4"><span class="text-muted-foreground">数量</span><span>{{ result.quantity }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">金额</span><span>¥{{ result.amount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">支付状态</span><span>{{ paymentStatusLabel(result.paymentStatus) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">交付状态</span><span>{{ deliveryStatusLabel(result.deliveryStatus) }}</span></div></div>
+          <div v-if="paymentQrCode" class="grid gap-3"><p class="font-medium">请扫码完成付款</p><PaymentQrCode :value="paymentQrCode" /></div>
           <div v-if="result.deliveries.length"><p class="font-medium">交付内容</p><pre class="overflow-x-auto whitespace-pre-wrap rounded-md border bg-muted/50 p-3 font-mono text-xs leading-6">{{ result.deliveries.join("\n") }}</pre></div>
           <p v-else-if="result.paymentStatus === 'PAID'" class="text-muted-foreground">订单已支付，正在等待交付处理。</p>
         </CardContent>
+        <CardFooter v-if="result?.paymentStatus === 'UNPAID'" class="border-t"><Button :disabled="resumingPayment" @click="resumePayment">{{ resumingPayment ? "正在生成支付信息..." : "继续支付" }}</Button></CardFooter>
       </Card>
     </section>
   </main>
@@ -52,21 +55,28 @@
 <script lang="ts" setup>
 import { onMounted, ref } from "vue";
 import { ArrowLeftIcon } from "@lucide/vue";
+import { toast } from "vue-sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import PaymentQrCode from "@/components/PaymentQrCode.vue";
+import { getLocalOrders, type LocalOrder } from "@/lib/local-orders";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
-import { onQueryOrder, type PublicOrder } from "@/server/order/public.telefunc";
+import { onQueryOrder, onResumeOrderPayment, type PublicOrder } from "@/server/order/public.telefunc";
 
 const orderNo = ref("");
 const queryToken = ref("");
 const result = ref<PublicOrder | null>(null);
 const error = ref<string | null>(null);
 const loading = ref(false);
+const resumingPayment = ref(false);
+const localOrders = ref<LocalOrder[]>([]);
+const paymentQrCode = ref("");
 
 onMounted(() => {
+  localOrders.value = getLocalOrders();
   const params = new URLSearchParams(window.location.search);
   orderNo.value = params.get("orderNo")?.trim() ?? "";
   queryToken.value = params.get("token")?.trim() ?? "";
@@ -76,6 +86,7 @@ onMounted(() => {
 async function onSubmit() {
   error.value = null;
   result.value = null;
+  paymentQrCode.value = "";
   loading.value = true;
   try {
     const record = await runTelefunc(() => onQueryOrder({ orderNo: orderNo.value, queryToken: queryToken.value }), { notifyError: false });
@@ -88,8 +99,25 @@ async function onSubmit() {
   }
 }
 
+function openLocalOrder(item: LocalOrder) { orderNo.value = item.orderNo; queryToken.value = item.queryToken; void onSubmit(); }
+
+async function resumePayment() {
+  if (!result.value || resumingPayment.value) return;
+  resumingPayment.value = true;
+  try {
+    const payment = await runTelefunc(() => onResumeOrderPayment({ orderNo: orderNo.value, queryToken: queryToken.value }), { notifyError: false });
+    if (payment.payment?.mode === "redirect" && payment.payment.url) { window.location.assign(payment.payment.url); return; }
+    if (payment.payment?.mode === "qr" && payment.payment.qrCode) { paymentQrCode.value = payment.payment.qrCode; return; }
+    toast.error("暂时无法生成支付信息，请稍后再试。");
+  } catch (cause) {
+    toast.error(userErrorMessage(cause, "暂时无法继续支付，请稍后再试。"));
+  } finally {
+    resumingPayment.value = false;
+  }
+}
+
 function statusLabel(status: PublicOrder["status"]) { return { PENDING: "待支付", PAID: "已支付", DELIVERED: "已交付", CLOSED: "已关闭", FAILED: "失败" }[status]; }
 function paymentStatusLabel(status: PublicOrder["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[status]; }
-function deliveryStatusLabel(status: PublicOrder["deliveryStatus"]) { return { NOT_DELIVERED: "未交付", DELIVERED: "已交付", FAILED: "交付失败" }[status]; }
+function deliveryStatusLabel(status: PublicOrder["deliveryStatus"]) { return { NOT_DELIVERED: "未交付", DELIVERING: "交付中", DELIVERED: "已交付", FAILED: "交付失败" }[status]; }
 function statusVariant(status: PublicOrder["status"]) { return status === "DELIVERED" || status === "PAID" ? "secondary" : status === "FAILED" ? "destructive" : "outline"; }
 </script>

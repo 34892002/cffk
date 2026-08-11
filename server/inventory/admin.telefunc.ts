@@ -6,7 +6,7 @@ import { getSiteSettings } from "@/server/site/public-settings";
 import { dateBoundaryInTimezone } from "@/lib/site-timezone";
 
 
-type CardStatus = "UNUSED" | "LOCKED" | "SOLD" | "DISABLED";
+type CardStatus = "UNUSED" | "SOLD" | "DISABLED";
 
 type CardAdminQuery = {
   productId?: number;

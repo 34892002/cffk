@@ -1,6 +1,6 @@
 export const pushChannels = ["EMAIL", "WECHAT", "TELEGRAM"] as const;
 export const pushMessageTypes = ["NORMAL", "ADMIN"] as const;
-export const pushScenes = ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"] as const;
+export const pushScenes = ["TEST", "ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED", "PAYMENT_EXCEPTION"] as const;
 
 export type PushChannel = (typeof pushChannels)[number];
 export type PushMessageType = (typeof pushMessageTypes)[number];

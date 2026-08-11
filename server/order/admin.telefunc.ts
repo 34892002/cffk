@@ -1,15 +1,15 @@
 import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
-import { order, orderDelivery, paymentLog, product } from "@/database/drizzle/schema";
+import { order, orderDelivery, paymentLog } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { dateBoundaryInTimezone } from "@/lib/site-timezone";
-import { notifyOrderDeliveryFailure, notifyOrderEmailEvents } from "@/server/email/order-events";
+import { notifyOrderEmailEvents } from "@/server/email/order-events";
 import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
 import { closePendingOrder, deliverPaidOrder } from "./service";
 
 type OrderStatus = "PENDING" | "PAID" | "DELIVERED" | "CLOSED" | "FAILED";
-type DeliveryStatus = "NOT_DELIVERED" | "DELIVERED" | "FAILED";
+type DeliveryStatus = "NOT_DELIVERED" | "DELIVERING" | "DELIVERED" | "FAILED";
 
 
 export async function onGetAdminOrders(input?: { query?: string; status?: OrderStatus; deliveryStatus?: DeliveryStatus; startDate?: string; endDate?: string; page?: number; pageSize?: number }) {
@@ -56,7 +56,7 @@ export async function onCloseAdminOrder(input: { orderId: number }) {
 export async function onRetryAutomaticDelivery(input: { orderId: number }) {
   const { database, runtime, db } = requireAdmin();
   await deliverPaidOrder(database, input.orderId);
-  await notifyOrderEmailEvents(database, runtime, input.orderId);
+  await notifyOrderEmailEvents(database, runtime);
   const [record] = await db.select({ id: order.id, deliveryStatus: order.deliveryStatus }).from(order).where(eq(order.id, input.orderId)).limit(1);
   if (!record) appError("ORDER_NOT_FOUND");
   if (record.deliveryStatus !== "DELIVERED") appError("ORDER_DELIVERY_NOT_COMPLETED");
@@ -67,20 +67,37 @@ export async function onRecordManualDelivery(input: { orderId: number; content: 
   const { database, runtime, db } = requireAdmin();
   const content = input.content.trim();
   if (!content) appError("DELIVERY_CONTENT_REQUIRED");
-  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, productId: order.productId, deliveryType: product.deliveryType }).from(order).innerJoin(product, eq(order.productId, product.id)).where(eq(order.id, input.orderId)).limit(1);
+  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, deliveryType: order.deliveryTypeSnapshot }).from(order).where(eq(order.id, input.orderId)).limit(1);
   if (!record) appError("ORDER_NOT_FOUND");
   if (record.paymentStatus !== "PAID") appError("ORDER_NOT_PAID");
   if (record.deliveryType !== "MANUAL" && record.deliveryType !== "EXPRESS") appError("ORDER_DELIVERY_TYPE_INVALID");
   if (record.deliveryStatus === "DELIVERED") appError("ORDER_ALREADY_DELIVERED");
 
-  const now = new Date();
-  if (input.failed) {
-    await db.update(order).set({ status: "FAILED", deliveryStatus: "FAILED", updatedAt: now }).where(eq(order.id, record.id));
-    await notifyOrderDeliveryFailure(database, runtime, record.id, content);
-    return { ...record, deliveryStatus: "FAILED" as const };
+  const token = crypto.randomUUID();
+  const now = Date.now();
+  const claimed = await database.prepare("UPDATE `order` SET deliveryStatus = 'DELIVERING', deliveryToken = ?, deliveryLeaseUntil = ?, updatedAt = ? WHERE id = ? AND paymentStatus = 'PAID' AND deliveryTypeSnapshot IN ('MANUAL', 'EXPRESS') AND (deliveryStatus IN ('NOT_DELIVERED', 'FAILED') OR (deliveryStatus = 'DELIVERING' AND deliveryLeaseUntil < ?))").bind(token, now + 5 * 60 * 1000, now, record.id, now).run();
+  if (claimed.meta.changes !== 1) appError("ORDER_DELIVERY_IN_PROGRESS");
+  const deliveryType = record.deliveryType;
+  const scene = input.failed ? "DELIVERY_FAILED" : "DELIVERY_SUCCESS";
+  const eventKey = `manual-${input.failed ? "failed" : "success"}:${token}`;
+  const statements = input.failed
+    ? [
+        database.prepare("INSERT INTO orderDelivery (orderId, deliveryType, attemptToken, contentSnapshot, errorCode, status, createdAt) VALUES (?, ?, ?, NULL, ?, 'FAILED', ?)").bind(record.id, deliveryType, token, content, now),
+        database.prepare("UPDATE `order` SET status = 'FAILED', deliveryStatus = 'FAILED', deliveryToken = NULL, deliveryLeaseUntil = NULL, updatedAt = ? WHERE id = ? AND deliveryStatus = 'DELIVERING' AND deliveryToken = ?").bind(now, record.id, token),
+        database.prepare("INSERT INTO transactionGuard (id, value) VALUES (1, changes()) ON CONFLICT(id) DO UPDATE SET value = excluded.value"),
+        database.prepare("INSERT INTO orderEvent (eventKey, orderId, scene, errorMessage, status, attemptCount, availableAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, 'PENDING', 0, ?, ?, ?)").bind(eventKey, record.id, scene, content, now, now, now),
+      ]
+    : [
+        database.prepare("INSERT INTO orderDelivery (orderId, deliveryType, attemptToken, contentSnapshot, errorCode, status, createdAt) VALUES (?, ?, ?, ?, NULL, 'SUCCESS', ?)").bind(record.id, deliveryType, token, JSON.stringify([content]), now),
+        database.prepare("UPDATE `order` SET status = 'DELIVERED', deliveryStatus = 'DELIVERED', deliveryToken = NULL, deliveryLeaseUntil = NULL, deliveredAt = ?, updatedAt = ? WHERE id = ? AND deliveryStatus = 'DELIVERING' AND deliveryToken = ?").bind(now, now, record.id, token),
+        database.prepare("INSERT INTO transactionGuard (id, value) VALUES (1, changes()) ON CONFLICT(id) DO UPDATE SET value = excluded.value"),
+        database.prepare("INSERT INTO orderEvent (eventKey, orderId, scene, status, attemptCount, availableAt, createdAt, updatedAt) VALUES (?, ?, ?, 'PENDING', 0, ?, ?, ?)").bind(eventKey, record.id, scene, now, now, now),
+      ];
+  try {
+    await database.batch(statements);
+  } catch {
+    appError("ORDER_DELIVERY_IN_PROGRESS");
   }
-  await db.insert(orderDelivery).values({ orderId: record.id, deliveryType: record.deliveryType, contentSnapshot: JSON.stringify([content]), status: "SUCCESS", createdAt: now }).onConflictDoNothing();
-  await db.update(order).set({ status: "DELIVERED", deliveryStatus: "DELIVERED", deliveredAt: now, updatedAt: now }).where(eq(order.id, record.id));
-  await notifyOrderEmailEvents(database, runtime, record.id);
-  return { ...record, deliveryStatus: "DELIVERED" as const };
+  await notifyOrderEmailEvents(database, runtime);
+  return { ...record, deliveryStatus: input.failed ? "FAILED" as const : "DELIVERED" as const };
 }

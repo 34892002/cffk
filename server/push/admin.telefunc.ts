@@ -6,7 +6,7 @@ import { parseEmailProviderConfig } from "@/lib/config-schemas";
 import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
 
-export type PushScene = "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED";
+export type PushScene = "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED" | "PAYMENT_EXCEPTION";
 export type PushChannel = "EMAIL" | "WECHAT" | "TELEGRAM";
 export type PushMessageType = "NORMAL" | "ADMIN";
 export type PushStatus = "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED" | "SKIPPED" | "EXHAUSTED";
@@ -16,7 +16,7 @@ type SaveInput = { isEnabled: boolean; policies: Policy[] };
 
 const pushChannels = new Set<PushChannel>(["EMAIL", "WECHAT", "TELEGRAM"]);
 const pushMessageTypes = new Set<PushMessageType>(["NORMAL", "ADMIN"]);
-const pushScenes = new Set<PushScene>(["ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED"]);
+const pushScenes = new Set<PushScene>(["ORDER_PAID", "DELIVERY_SUCCESS", "DELIVERY_FAILED", "PAYMENT_EXCEPTION"]);
 const pushStatuses = new Set<PushStatus>(["PENDING", "PROCESSING", "SUCCESS", "FAILED", "SKIPPED", "EXHAUSTED"]);
 
 const defaultPolicies: Policy[] = [
@@ -26,6 +26,8 @@ const defaultPolicies: Policy[] = [
   { messageType: "ADMIN", scene: "ORDER_PAID", channels: [], isEnabled: true },
   { messageType: "ADMIN", scene: "DELIVERY_SUCCESS", channels: ["EMAIL"], isEnabled: true },
   { messageType: "ADMIN", scene: "DELIVERY_FAILED", channels: ["EMAIL"], isEnabled: true },
+  { messageType: "NORMAL", scene: "PAYMENT_EXCEPTION", channels: [], isEnabled: false },
+  { messageType: "ADMIN", scene: "PAYMENT_EXCEPTION", channels: ["EMAIL"], isEnabled: true },
 ];
 
 function key(policy: Pick<Policy, "messageType" | "scene">) { return `${policy.messageType}:${policy.scene}`; }
