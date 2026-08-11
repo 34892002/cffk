@@ -1,8 +1,9 @@
 import { and, eq, lte, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { adminBootstrap, emailTemplate, order, orderDelivery, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry, siteSetting, user } from "@/database/drizzle/schema";
-import { parseEmailProviderConfig, parseEmailTemplateConfig } from "@/lib/config-schemas";
-import { pushRetryDelayMs, renderPushTemplate } from "@/lib/push-utils";
+import { parseEmailTemplateConfig } from "@/lib/config-schemas";
+import { parseEmailProviderConfigForKind, type EmailProviderKind } from "@/server/push/provider-definitions";
+import { parseEmailApiSuccessResponse, pushRetryDelayMs, renderPushTemplate } from "@/lib/push-utils";
 import { sanitizeDatabaseLogText } from "@/server/database-log-sanitizer";
 import type { PushChannel, PushDispatchInput, PushDispatchResult, PushRecipient } from "./types";
 
@@ -143,7 +144,8 @@ async function sendEmail(database: D1Database, runtime: Runtime, input: PushDisp
   }
   await db.update(pushLog).set({ channelConfigId: providerRecord.id, provider: providerRecord.provider, updatedAt: new Date() }).where(eq(pushLog.id, taskId));
   try {
-    const provider = parseEmailProviderConfig(providerRecord.configJson);
+    if (providerRecord.provider !== "API" && providerRecord.provider !== "SMTP" && providerRecord.provider !== "CLOUDFLARE") throw new Error("EMAIL_PROVIDER_INVALID");
+    const provider = parseEmailProviderConfigForKind(providerRecord.provider as EmailProviderKind, providerRecord.configJson);
     const template = parseEmailTemplateConfig(templateRecord.templateJson);
     const subject = renderPushTemplate(template.subject, input.variables);
     const body = renderPushTemplate(template.body, input.variables);
@@ -169,8 +171,7 @@ async function sendEmail(database: D1Database, runtime: Runtime, input: PushDisp
       const from = provider.fromName ? `${provider.fromName} <${provider.from}>` : provider.from;
       const response = await postEmailApi(endpoint, headers, JSON.stringify(provider.apiProvider === "RESEND" ? { from, to: [recipient], ...(provider.replyTo ? { reply_to: provider.replyTo } : {}), subject, ...(template.format === "html" ? { html: body } : { text: body }) } : { sender: { email: provider.from, ...(provider.fromName ? { name: provider.fromName } : {}) }, to: [{ email: recipient }], ...(provider.replyTo ? { replyTo: { email: provider.replyTo } } : {}), subject, textContent: body, htmlContent: template.format === "html" ? body : undefined }), provider.timeoutMs ?? DEFAULT_API_TIMEOUT_MS);
       if (!response.ok) throw new Error(response.status === 429 || response.status >= 500 ? "EMAIL_SEND_RETRYABLE" : "EMAIL_SEND_FAILED");
-      const payload = await response.json() as Record<string, unknown>;
-      result = { messageId: typeof payload.id === "string" ? payload.id : typeof payload.messageId === "string" ? payload.messageId : undefined };
+      result = parseEmailApiSuccessResponse(await response.text());
     } else {
       const { WorkerMailer } = await import("worker-mailer");
       const password = provider.password;

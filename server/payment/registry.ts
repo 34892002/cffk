@@ -1,5 +1,6 @@
 import { createProviderAdapter } from "./providers";
 import type { PaymentAdapter } from "./types";
+import { validateJsonFormValues, type JsonFormFieldDefinition, type JsonFormValues } from "@/lib/json-form-values";
 import {
   parseAlipayConfig,
   parseBepusdtConfig,
@@ -12,26 +13,13 @@ import {
 export type PaymentProviderKind = "ALIPAY" | "EPAY" | "BEPUSDT" | "STRIPE" | "HASHPAY";
 export type PaymentChannel = "web" | "wap" | "face_to_face" | "alipay" | "wxpay";
 
-type FieldType = "text" | "email" | "number" | "password" | "url" | "switch" | "select" | "multi_select" | "textarea";
-
-type FormField = {
-  key: string;
-  label: string;
-  type: FieldType;
-  required?: boolean;
-  secret?: boolean;
-  description?: string;
-  options?: Array<{ label: string; value: string }>;
-  min?: number;
-  max?: number;
-};
 
 export type ProviderDefinition = {
   provider: PaymentProviderKind;
   title: string;
   schemaVersion: 1;
-  fields: FormField[];
-  defaults: Record<string, string | number | boolean | string[]>;
+  fields: JsonFormFieldDefinition[];
+  defaults: JsonFormValues;
   parseConfig: (json: string) => PaymentProviderConfig;
   getChannels: (config: PaymentProviderConfig) => PaymentChannel[];
   createAdapter: (config: Record<string, unknown>) => PaymentAdapter;
@@ -155,6 +143,7 @@ export function parseProviderConfig(provider: string, configJson: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("PAYMENT_CONFIG_INVALID");
   const allowed = new Set(["schemaVersion", ...definition.fields.map((field) => field.key)]);
   if (Object.keys(value).some((key) => !allowed.has(key))) throw new Error("PAYMENT_CONFIG_INVALID");
+  validateJsonFormValues(definition.fields, value as Record<string, unknown>);
   return definition.parseConfig(configJson);
 }
 

@@ -4,18 +4,16 @@ import { asc, count, eq } from "drizzle-orm";
 import { requireAdmin } from "@/server/telefunc-context";
 import { paymentLog, paymentProvider, siteSetting } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { mergeJsonFormValues, redactJsonFormValues, type JsonFormSubmitValues, type JsonFormValues } from "@/lib/json-form-values";
 import { getPaymentNotifyPath, getPaymentUrlDefaults, getProviderDefinition, paymentProviderDefinitions, parseProviderConfig, type PaymentProviderKind } from "./registry";
 import { paymentRepository } from "./repository";
 
-type JsonValue = string | number | boolean | string[];
-type SecretUpdate = { action: "keepExisting" } | { action: "value"; value: string } | { action: "clear" };
-type SecretUpdates = Record<string, SecretUpdate>;
 
 function now() {
   return new Date();
 }
 
-export function mergePaymentUrls(provider: PaymentProviderKind, siteUrl: string | null | undefined, values: Record<string, JsonValue>): Record<string, string> {
+export function mergePaymentUrls(provider: PaymentProviderKind, siteUrl: string | null | undefined, values: Record<string, unknown>): Record<string, string> {
   const defaults = getPaymentUrlDefaults(provider, siteUrl);
   const hasNotifyUrl = getProviderDefinition(provider)?.fields.some((field) => field.key === "notifyUrl") ?? false;
   if (!defaults.returnUrl || (hasNotifyUrl && !defaults.notifyUrl)) appError("PAYMENT_SITE_URL_REQUIRED");
@@ -29,22 +27,18 @@ export function mergePaymentUrls(provider: PaymentProviderKind, siteUrl: string 
     let parsedNotifyUrl: URL;
     try { parsedNotifyUrl = new URL(notifyUrl); } catch { appError("PAYMENT_NOTIFY_URL_INVALID"); }
     const notifyPath = getPaymentNotifyPath(provider);
-    if (parsedNotifyUrl.origin !== origin || parsedNotifyUrl.username || parsedNotifyUrl.password || (parsedNotifyUrl.pathname !== notifyPath && !parsedNotifyUrl.pathname.startsWith(`${notifyPath}/`))) appError("PAYMENT_NOTIFY_URL_INVALID");
+    if (parsedNotifyUrl.origin !== origin || parsedNotifyUrl.username || parsedNotifyUrl.password || parsedNotifyUrl.pathname !== notifyPath || parsedNotifyUrl.search || parsedNotifyUrl.hash) appError("PAYMENT_NOTIFY_URL_INVALID");
   }
   const result: Record<string, string> = { returnUrl };
   if (hasNotifyUrl) result.notifyUrl = notifyUrl;
   return result;
 }
 
-function maskedSecret(value: unknown) {
-  return typeof value === "string" && value.length > 0 ? { configured: true, masked: "••••••••" } : { configured: false, masked: "" };
-}
 
 export function mergePaymentProviderConfig(input: {
   provider: PaymentProviderKind;
   currentConfigJson?: string;
-  values: Record<string, JsonValue>;
-  secretUpdates: SecretUpdates;
+  values: JsonFormSubmitValues;
 }) {
   const definition = getProviderDefinition(input.provider);
   if (!definition) appError("PAYMENT_PROVIDER_NOT_IMPLEMENTED");
@@ -55,16 +49,8 @@ export function mergePaymentProviderConfig(input: {
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) existing = parsed as Record<string, unknown>;
     } catch { /* Invalid stored JSON cannot block a complete replacement. */ }
   }
-  const config: Record<string, unknown> = {};
-  const allowed = new Set(definition.fields.map((field) => field.key));
-  for (const key of Object.keys(input.values ?? {})) if (!allowed.has(key)) appError("PAYMENT_CONFIG_INVALID");
-  for (const [key, update] of Object.entries(input.secretUpdates ?? {})) {
-    const field = definition.fields.find((item) => item.key === key);
-    if (!field?.secret || !update || !["keepExisting", "value", "clear"].includes(update.action)) appError("PAYMENT_CONFIG_INVALID");
-    if (update.action === "keepExisting" && existing[key] !== undefined) config[key] = existing[key];
-    if (update.action === "value") config[key] = update.value;
-  }
-  for (const [key, value] of Object.entries(input.values ?? {})) config[key] = value;
+  let config: Record<string, unknown>;
+  try { config = mergeJsonFormValues(definition.fields, input.values ?? {}, existing); } catch { appError("PAYMENT_CONFIG_INVALID"); }
   config.schemaVersion = definition.schemaVersion;
   const configJson = JSON.stringify(config);
   try { parseProviderConfig(input.provider, configJson); } catch { appError("PAYMENT_CONFIG_INVALID"); }
@@ -75,18 +61,17 @@ function getSafeForm(provider: string, name: string, isEnabled: boolean, sort: n
   const definition = getProviderDefinition(provider);
   if (!definition) return null;
   let parsed: Record<string, unknown> = {};
+  try {
+    const raw: unknown = JSON.parse(configJson);
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) parsed = raw as Record<string, unknown>;
+  } catch { /* Syntax-damaged JSON has no recoverable fields. */ }
   let valid = true;
-  try { parsed = definition.parseConfig(configJson) as unknown as Record<string, unknown>; } catch { valid = false; }
+  try { parseProviderConfig(provider, configJson); } catch { valid = false; }
 
-  const values: Record<string, JsonValue> = {};
-  const secrets: Record<string, ReturnType<typeof maskedSecret>> = {};
   const urlDefaults = getPaymentUrlDefaults(provider as PaymentProviderKind, siteUrl);
-  for (const field of definition.fields) {
-    const value = field.key === "notifyUrl" ? parsed.notifyUrl || urlDefaults.notifyUrl : field.key === "returnUrl" ? parsed.returnUrl || urlDefaults.returnUrl : parsed[field.key] ?? definition.defaults[field.key];
-    if (field.secret) secrets[field.key] = maskedSecret(value);
-    else if (value !== undefined) values[field.key] = value as JsonValue;
-  }
-  return { provider, title: definition.title, name, isEnabled, sort, updatedAt: updatedAt?.toISOString() ?? null, valid, schemaVersion: definition.schemaVersion, fields: definition.fields, values, secrets, siteUrl };
+  const displayValues = { ...definition.defaults, ...parsed, notifyUrl: parsed.notifyUrl || urlDefaults.notifyUrl, returnUrl: parsed.returnUrl || urlDefaults.returnUrl };
+  const { values, configuredSecrets } = redactJsonFormValues(definition.fields, displayValues);
+  return { provider, title: definition.title, name, isEnabled, sort, updatedAt: updatedAt?.toISOString() ?? null, valid, schemaVersion: definition.schemaVersion, fields: definition.fields, values: values as JsonFormValues, configuredSecrets, siteUrl };
 }
 
 async function internalOnGetPaymentProviders() {
@@ -111,8 +96,7 @@ async function savePaymentProvider(input: {
   provider: PaymentProviderKind;
   name: string;
   isEnabled: boolean;
-  values: Record<string, JsonValue>;
-  secretUpdates: SecretUpdates;
+  values: JsonFormSubmitValues;
 }) {
   const { db } = requireAdmin();
   const definition = getProviderDefinition(input.provider);
@@ -124,7 +108,7 @@ async function savePaymentProvider(input: {
     db.select({ siteUrl: siteSetting.siteUrl }).from(siteSetting).where(eq(siteSetting.id, 1)).limit(1).then(([record]) => record),
   ]);
   const urls = mergePaymentUrls(input.provider, settings?.siteUrl, input.values);
-  const configJson = mergePaymentProviderConfig({ provider: input.provider, currentConfigJson: current?.configJson, values: { ...input.values, ...urls }, secretUpdates: input.secretUpdates });
+  const configJson = mergePaymentProviderConfig({ provider: input.provider, currentConfigJson: current?.configJson, values: { ...input.values, ...urls } });
   const timestamp = now();
   if (current) {
     await db.update(paymentProvider).set({ name, isEnabled: input.isEnabled, configJson, updatedAt: timestamp }).where(eq(paymentProvider.provider, input.provider));
@@ -147,8 +131,7 @@ async function internalOnGetPaymentLogs(input?: { provider?: PaymentProviderKind
 
 async function validatePaymentProviderConfig(input: {
   provider: PaymentProviderKind;
-  values: Record<string, JsonValue>;
-  secretUpdates: SecretUpdates;
+  values: JsonFormSubmitValues;
 }) {
   const { db } = requireAdmin();
   const [record, settings] = await Promise.all([
@@ -157,7 +140,7 @@ async function validatePaymentProviderConfig(input: {
   ]);
   if (!record) appError("PAYMENT_PROVIDER_NOT_FOUND");
   const urls = mergePaymentUrls(input.provider, settings?.siteUrl, input.values);
-  mergePaymentProviderConfig({ provider: input.provider, currentConfigJson: record.configJson, values: { ...input.values, ...urls }, secretUpdates: input.secretUpdates });
+  mergePaymentProviderConfig({ provider: input.provider, currentConfigJson: record.configJson, values: { ...input.values, ...urls } });
   return { provider: input.provider, valid: true };
 }
 

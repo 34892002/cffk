@@ -10,7 +10,8 @@ import { dispatchPush } from "@/server/push/service";
 import { getSiteSettings } from "@/server/site/public-settings";
 import {
   emailProviderDefinitions,
-  maskedEmailProviderConfig,
+  emailProviderFormValues,
+  recoverEmailProviderFormValues,
   serializeEmailProviderConfig,
   type SaveEmailProviderInput,
 } from "@/server/push/provider-definitions";
@@ -44,13 +45,14 @@ async function internalOnGetEmailProviders() {
     .orderBy(asc(pushChannelConfig.id));
   return records.map((record) => {
     if (record.provider !== "API" && record.provider !== "SMTP" && record.provider !== "CLOUDFLARE") {
-      return { id: record.id, provider: record.provider, name: record.name, isEnabled: record.isEnabled, updatedAt: record.updatedAt, values: {}, secrets: {}, configurationError: true };
+      return { id: record.id, provider: record.provider, name: record.name, isEnabled: record.isEnabled, updatedAt: record.updatedAt, values: {}, configuredSecrets: [], configurationError: true };
     }
     try {
-      const { values, secrets } = maskedEmailProviderConfig(record.provider, record.configJson);
-      return { id: record.id, provider: record.provider, name: record.name, isEnabled: record.isEnabled, updatedAt: record.updatedAt, values, secrets, configurationError: false };
+      const { values, configuredSecrets } = emailProviderFormValues(record.provider, record.configJson);
+      return { id: record.id, provider: record.provider, name: record.name, isEnabled: record.isEnabled, updatedAt: record.updatedAt, values, configuredSecrets, configurationError: false };
     } catch {
-      return { id: record.id, provider: record.provider, name: record.name, isEnabled: record.isEnabled, updatedAt: record.updatedAt, values: {}, secrets: {}, configurationError: true };
+      const { values, configuredSecrets } = recoverEmailProviderFormValues(record.provider, record.configJson);
+      return { id: record.id, provider: record.provider, name: record.name, isEnabled: record.isEnabled, updatedAt: record.updatedAt, values, configuredSecrets, configurationError: true };
     }
   });
 }
@@ -90,8 +92,12 @@ async function deleteEmailProvider(id: number) {
 
 async function setEmailProviderEnabled(id: number, isEnabled: boolean) {
   const { db } = getAdminContext();
-  const [target] = await db.select({ id: pushChannelConfig.id, provider: pushChannelConfig.provider }).from(pushChannelConfig).where(and(eq(pushChannelConfig.id, id), eq(pushChannelConfig.channel, "EMAIL"))).limit(1);
+  const [target] = await db.select({ id: pushChannelConfig.id, provider: pushChannelConfig.provider, configJson: pushChannelConfig.configJson }).from(pushChannelConfig).where(and(eq(pushChannelConfig.id, id), eq(pushChannelConfig.channel, "EMAIL"))).limit(1);
   if (!target) appError("EMAIL_PROVIDER_NOT_FOUND");
+  if (isEnabled) {
+    if (target.provider !== "API" && target.provider !== "SMTP" && target.provider !== "CLOUDFLARE") appError("EMAIL_PROVIDER_INVALID");
+    try { emailProviderFormValues(target.provider, target.configJson); } catch { appError("EMAIL_PROVIDER_INVALID"); }
+  }
 
   const now = new Date();
   if (isEnabled) await db.update(pushChannelConfig).set({ isEnabled: false, updatedAt: now }).where(and(eq(pushChannelConfig.channel, "EMAIL"), ne(pushChannelConfig.id, id)));

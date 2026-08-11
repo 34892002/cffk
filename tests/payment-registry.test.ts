@@ -30,7 +30,8 @@ test("Alipay exposes one checkout channel per configured mode", () => {
 
 test("payment provider configs reject unknown fields, invalid types, and invalid channels", () => {
   assert.throws(() => parseProviderConfig("STRIPE", JSON.stringify({ ...validConfigs.STRIPE, unknownField: "no" })), /PAYMENT_CONFIG_INVALID/);
-  assert.throws(() => parseProviderConfig("STRIPE", JSON.stringify({ ...validConfigs.STRIPE, currency: 123 })), /currency must be a non-empty string/);
-  assert.throws(() => parseProviderConfig("EPAY", JSON.stringify({ ...validConfigs.EPAY, epayChannels: ["invalid"] })), /unsupported value/);
-  assert.throws(() => parseProviderConfig("ALIPAY", JSON.stringify({ ...validConfigs.ALIPAY, modes: [] })), /unsupported value/);
+  assert.throws(() => parseProviderConfig("STRIPE", JSON.stringify({ ...validConfigs.STRIPE, currency: 123 })), /Invalid JSON form field: currency/);
+  assert.throws(() => parseProviderConfig("EPAY", JSON.stringify({ ...validConfigs.EPAY, epayChannels: ["invalid"] })), /Invalid JSON form field: epayChannels/);
+  assert.throws(() => parseProviderConfig("ALIPAY", JSON.stringify({ ...validConfigs.ALIPAY, modes: [] })), /Required JSON form field: modes/);
+  assert.throws(() => parseProviderConfig("STRIPE", JSON.stringify({ ...validConfigs.STRIPE, currency: "eur" })), /Invalid JSON form field: currency/);
 });

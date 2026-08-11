@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { canonicalizeAlipayParameters, formatCentsAsYuan, parseAmountToCents } from "../lib/payment-utils.ts";
-import { pushRetryDelayMs, renderPushTemplate } from "../lib/push-utils.ts";
+import { parseEmailApiSuccessResponse, pushRetryDelayMs, renderPushTemplate } from "../lib/push-utils.ts";
 import { canConfirmPayment, paymentConfirmationOutcome } from "../lib/order-state.ts";
 import { sanitizeDatabaseLogJson, sanitizeDatabaseLogText } from "../server/database-log-sanitizer.ts";
 import { sanitizePaymentLogPayload } from "../server/payment/log-service.ts";
@@ -26,6 +26,13 @@ test("site timezone boundaries preserve non-whole-hour IANA zones and DST", () =
   assert.equal(startOfDayInTimezone(new Date("2026-01-01T12:00:00.000Z"), "America/New_York").toISOString(), "2026-01-01T05:00:00.000Z");
   assert.equal(formatDateTimeInputInTimezone("2026-01-01T18:15:00.000Z", "Asia/Kathmandu"), "2026-01-02T00:00");
   assert.match(formatDateInTimezone("2026-01-01T18:15:00.000Z", "Asia/Kathmandu", { dateStyle: "short", timeStyle: "short" }), /2026/);
+});
+
+test("email API success responses allow empty or non-JSON bodies and bound response size", () => {
+  assert.deepEqual(parseEmailApiSuccessResponse(""), {});
+  assert.deepEqual(parseEmailApiSuccessResponse("accepted"), {});
+  assert.deepEqual(parseEmailApiSuccessResponse('{"messageId":"message-1"}'), { messageId: "message-1" });
+  assert.throws(() => parseEmailApiSuccessResponse("x".repeat(65), 64), /EMAIL_SEND_FAILED/);
 });
 
 test("Cloudflare Email Sending errors map to retryable and fixed internal codes", () => {

@@ -20,7 +20,7 @@
       <Input :id="fieldId(field)" :model-value="stringValue(field.key)" :type="field.secret ? 'password' : field.type" :placeholder="secretPlaceholder(field)" autocomplete="off" :aria-invalid="Boolean(errors[field.key])" @update:model-value="setValue(field.key, normalizeJsonFormInputValue(field.type, $event))" />
     </template>
     <FieldDescription v-if="field.description">{{ field.description }}</FieldDescription>
-    <FieldDescription v-if="field.secret && secrets[field.key]?.configured">已保存敏感配置；留空则保持不变。</FieldDescription>
+    <FieldDescription v-if="field.secret && configuredSecrets.includes(field.key)">已保存敏感配置；留空则保持不变。</FieldDescription>
     <FieldError v-if="errors[field.key]" :errors="[errors[field.key]]" />
   </Field>
 </template>
@@ -33,18 +33,16 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { normalizeJsonFormInputValue } from "@/lib/json-form-values";
+import { normalizeJsonFormInputValue, type JsonFormFieldDefinition, type JsonFormInputValue, type JsonFormValues } from "@/lib/json-form-values";
 
-export type JsonFormValue = string | number | boolean | string[];
-export type JsonFormField = { key: string; label: string; type: "text" | "email" | "number" | "password" | "url" | "switch" | "select" | "multi_select" | "textarea"; required?: boolean; secret?: boolean; description?: string; options?: Array<{ label: string; value: string }> };
-const props = defineProps<{ fields: JsonFormField[]; values: Record<string, JsonFormValue>; secrets: Record<string, { configured: boolean }>; errors?: Record<string, string> }>();
+const props = defineProps<{ fields: JsonFormFieldDefinition[]; values: JsonFormValues; configuredSecrets: string[]; errors?: Record<string, string> }>();
 const errors = computed(() => props.errors ?? {});
-const emit = defineEmits<{ "update:values": [values: Record<string, JsonFormValue>] }>();
+const emit = defineEmits<{ "update:values": [values: JsonFormValues] }>();
 const visibleFields = computed(() => props.fields.filter((field) => field.key !== "notifyUrl" && field.key !== "returnUrl"));
-function setValue(key: string, value: JsonFormValue) { emit("update:values", { ...props.values, [key]: value }); }
+function setValue(key: string, value: JsonFormInputValue) { emit("update:values", { ...props.values, [key]: value }); }
 function stringValue(key: string) { const value = props.values[key]; return typeof value === "string" || typeof value === "number" ? String(value) : ""; }
 function arrayValue(key: string) { const value = props.values[key]; return Array.isArray(value) ? value : []; }
 function toggle(key: string, value: string, checked: boolean) { const current = arrayValue(key); setValue(key, checked ? [...new Set([...current, value])] : current.filter((item) => item !== value)); }
-function secretPlaceholder(field: JsonFormField) { return field.secret && props.secrets[field.key]?.configured ? "已配置，留空保持不变" : undefined; }
-function fieldId(field: JsonFormField) { return `payment-config-${field.key}`; }
+function secretPlaceholder(field: JsonFormFieldDefinition) { return field.secret && props.configuredSecrets.includes(field.key) ? "已配置，留空保持不变" : undefined; }
+function fieldId(field: JsonFormFieldDefinition) { return `payment-config-${field.key}`; }
 </script>

@@ -84,6 +84,14 @@ test("payment URL validation identifies the invalid field", () => {
     returnUrl: "https://shop.example/payment-result",
   })), "PAYMENT_NOTIFY_URL_INVALID");
   assert.equal(appErrorCode(() => mergePaymentUrls("EPAY", "https://shop.example", {
+    notifyUrl: "https://shop.example/api/payments/epay/notify/unused",
+    returnUrl: "https://shop.example/payment-result",
+  })), "PAYMENT_NOTIFY_URL_INVALID");
+  assert.equal(appErrorCode(() => mergePaymentUrls("EPAY", "https://shop.example", {
+    notifyUrl: "https://shop.example/api/payments/epay/notify?test=1",
+    returnUrl: "https://shop.example/payment-result",
+  })), "PAYMENT_NOTIFY_URL_INVALID");
+  assert.equal(appErrorCode(() => mergePaymentUrls("EPAY", "https://shop.example", {
     notifyUrl: "https://shop.example/api/payments/epay/notify",
     returnUrl: "https://other.example/payment-result",
   })), "PAYMENT_RETURN_URL_INVALID");
@@ -94,7 +102,6 @@ test("payment provider config preserves, replaces, and clears sensitive values",
     provider: "EPAY",
     currentConfigJson: JSON.stringify(epayConfig),
     values: { pid: "2000", baseUrl: epayConfig.baseUrl, epayChannels: ["wxpay"], notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
-    secretUpdates: { key: { action: "keepExisting" } },
   }));
   assert.equal(preserved.key, "old-secret");
   assert.equal(preserved.pid, "2000");
@@ -102,16 +109,14 @@ test("payment provider config preserves, replaces, and clears sensitive values",
   const replaced = JSON.parse(mergePaymentProviderConfig({
     provider: "EPAY",
     currentConfigJson: JSON.stringify(epayConfig),
-    values: { pid: epayConfig.pid, baseUrl: epayConfig.baseUrl, epayChannels: epayConfig.epayChannels, notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
-    secretUpdates: { key: { action: "value", value: "new-secret" } },
+    values: { pid: epayConfig.pid, baseUrl: epayConfig.baseUrl, key: "new-secret", epayChannels: epayConfig.epayChannels, notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
   }));
   assert.equal(replaced.key, "new-secret");
 
   const repaired = JSON.parse(mergePaymentProviderConfig({
     provider: "EPAY",
     currentConfigJson: JSON.stringify({ ...epayConfig, unknown: "stale" }),
-    values: { pid: epayConfig.pid, baseUrl: epayConfig.baseUrl, epayChannels: epayConfig.epayChannels, notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
-    secretUpdates: { key: { action: "value", value: "replacement-secret" } },
+    values: { pid: epayConfig.pid, baseUrl: epayConfig.baseUrl, key: "replacement-secret", epayChannels: epayConfig.epayChannels, notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
   }));
   assert.equal(repaired.key, "replacement-secret");
   assert.equal("unknown" in repaired, false);
@@ -119,24 +124,17 @@ test("payment provider config preserves, replaces, and clears sensitive values",
   assert.equal(appErrorCode(() => mergePaymentProviderConfig({
     provider: "EPAY",
     currentConfigJson: JSON.stringify(epayConfig),
-    values: { pid: epayConfig.pid, baseUrl: epayConfig.baseUrl, epayChannels: epayConfig.epayChannels, notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
-    secretUpdates: { key: { action: "clear" } },
+    values: { pid: epayConfig.pid, baseUrl: epayConfig.baseUrl, key: null, epayChannels: epayConfig.epayChannels, notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
   })), "PAYMENT_CONFIG_INVALID");
 });
 
-test("payment provider config rejects unknown fields and secret updates", () => {
+test("payment provider config rejects unknown fields", () => {
   assert.equal(appErrorCode(() => mergePaymentProviderConfig({
     provider: "EPAY",
     currentConfigJson: JSON.stringify(epayConfig),
     values: { ...epayConfig, unknown: "unexpected" },
-    secretUpdates: {},
   })), "PAYMENT_CONFIG_INVALID");
-  assert.equal(appErrorCode(() => mergePaymentProviderConfig({
-    provider: "EPAY",
-    currentConfigJson: JSON.stringify(epayConfig),
-    values: { pid: epayConfig.pid, baseUrl: epayConfig.baseUrl, epayChannels: epayConfig.epayChannels, notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
-    secretUpdates: { pid: { action: "keepExisting" } },
-  })), "PAYMENT_CONFIG_INVALID");
+
 });
 
 test("Epay adapter creates a signed redirect URL", async () => {

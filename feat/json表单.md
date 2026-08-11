@@ -1,241 +1,261 @@
-# JSON 映射表单组件规划
+# JSON 配置表单与 Provider 协议
 
-> **文档状态：规划中**
->
-> 本文从《框架设计规划》的共用组件原则中抽取 JSON 配置映射表单部分，作为后续支付、邮件、存储及其他 Provider 配置页面的统一实现依据。
+> **文档状态：已采用**
 
 ## 1. 目标
 
-建立一个由 JSON 定义驱动的后台表单组件，将配置定义、默认值、字段展示、输入控件、校验规则和敏感字段处理统一起来。
+项目只维护一套 JSON 表单模型。支付、邮件、对象存储及后续 Provider 共用相同的字段定义、提交规则和敏感字段处理，不再为不同模块维护 `secrets`、`secretUpdates`、`keepExisting` 等额外协议。
 
-后续支付配置必须优先复用本组件，不在各 Provider 页面重复手写相同的字段布局、字段类型判断、表单值转换和 Secret 输入逻辑。
+系统中的 JSON 分为两类，职责不能混用：
 
-目标包括：
+1. `JsonFormDefinition`：控制后台表单、提交白名单、类型、默认值、必填和敏感字段。
+2. Provider 协议定义：描述第三方请求或回调的字段名称、映射和基础数据结构。
 
-- 使用结构化 JSON 描述表单字段；
-- 根据字段类型映射到已有的 shadcn-vue 表单组件；
-- 支持文本、邮箱、URL、数字、密码、单选下拉、多选、开关和多行文本；
-- 支持默认值、必填、占位符、说明、选项、最小值和最大值；
-- 配置页面只负责读取定义、维护状态和提交业务输入；
-- 服务端继续负责最终校验、序列化、权限和敏感信息处理。
+签名、验签、金额核对、商户归属、支付状态判断和邮件发送行为仍由 Provider adapter 代码实现。协议 JSON 不执行任意代码，也不取代领域安全校验。
 
-## 2. 适用范围
-
-第一阶段用于后台 Provider 配置：
-
-- 支付渠道；
-- 邮件邮局；
-- 对象存储；
-- 其他需要根据类型展示不同连接参数的后台配置。
-
-不用于：
-
-- 复杂的多步骤业务表单；
-- 需要强交互联动的编辑器；
-- 订单、商品等具有明显领域语义的实体表单；
-- 服务端校验的替代品。
-
-## 3. JSON 定义结构
-
-表单定义应使用 TypeScript 类型约束的 JSON 对象，而不是在页面中散落条件判断。
+## 2. 统一表单定义
 
 ```ts
-type JsonFormValue = string | number | boolean | string[];
-type JsonFormValues = Record<string, JsonFormValue>;
+type JsonFormInputValue = string | number | boolean | string[];
+type JsonFormSubmitValue = JsonFormInputValue | null;
+type JsonFormValues = Record<string, JsonFormInputValue>;
+type JsonFormSubmitValues = Record<string, JsonFormSubmitValue>;
 
 type JsonFormDefinition = {
-  channel: string;
   provider: string;
   schemaVersion: number;
   title: string;
-  fields: JsonFormField[];
+  fields: JsonFormFieldDefinition[];
   defaults: JsonFormValues;
 };
 
-type JsonFormField = {
+type JsonFormFieldDefinition = {
   key: string;
   label: string;
-  type: "text" | "email" | "number" | "password" | "url" | "switch" | "select" | "multi_select" | "textarea";
+  type:
+    | "text"
+    | "email"
+    | "number"
+    | "password"
+    | "url"
+    | "switch"
+    | "select"
+    | "multi_select"
+    | "textarea";
   required?: boolean;
   placeholder?: string;
   description?: string;
   secret?: boolean;
   min?: number;
   max?: number;
-  options?: Array<{
-    label: string;
-    value: string;
-  }>;
+  options?: Array<{ label: string; value: string }>;
 };
 ```
 
-示例：
+`fields` 是服务端允许提交的字段白名单，也是服务端基础约束来源。浏览器提交定义之外的字段时必须拒绝；`required`、值类型、`min`、`max`、`options`、邮箱和 HTTP(S) URL 约束也必须在服务端执行，不能只用于渲染控件。Provider parser 在此基础上继续执行密钥格式、商户规则等领域校验。
+
+## 3. 示例
+
+```ts
+const smtpDefinition: JsonFormDefinition = {
+  provider: "SMTP",
+  schemaVersion: 1,
+  title: "SMTP",
+  defaults: {
+    host: "",
+    port: 587,
+    secure: false,
+    username: "",
+    from: "",
+  },
+  fields: [
+    { key: "host", label: "SMTP Host", type: "text", required: true },
+    { key: "port", label: "SMTP Port", type: "number", required: true, min: 1, max: 65535 },
+    { key: "secure", label: "使用 SMTPS / SSL", type: "switch" },
+    { key: "username", label: "SMTP 用户名", type: "text", required: true },
+    {
+      key: "password",
+      label: "SMTP 密码 / 授权码",
+      type: "password",
+      required: true,
+      secret: true,
+    },
+    { key: "from", label: "发件邮箱", type: "email", required: true },
+  ],
+};
+```
+
+同一个定义同时用于：
+
+- 渲染控件；
+- 初始化默认值；
+- 规范化数字等浏览器输入；
+- 限制服务端可接受字段；
+- 标识敏感字段；
+- 生成安全的编辑回显；
+- 合并本次提交和 D1 旧配置。
+
+## 4. 唯一提交协议
+
+页面只提交一个 `values` 对象，不提交第二套 Secret 操作对象：
 
 ```ts
 {
-  channel: "PAYMENT",
-  provider: "ALIPAY",
-  schemaVersion: 1,
-  title: "支付宝",
-  defaults: {
-    modes: ["web"],
-    appId: "",
-    notifyUrl: "",
-    returnUrl: "",
-  },
-  fields: [
-    {
-      key: "modes",
-      label: "支付模式",
-      type: "multi_select",
-      required: true,
-      options: [
-        { label: "网页支付", value: "web" },
-        { label: "当面付", value: "face_to_face" },
-      ],
-      min: 1,
-    },
-    {
-      key: "privateKey",
-      label: "应用私钥",
-      type: "textarea",
-      required: true,
-      secret: true,
-      description: "敏感值保存后不再回显原文；留空表示保留当前值。",
-    },
-  ],
+  provider: "SMTP",
+  values: {
+    host: "smtp.example.com",
+    port: 465,
+    secure: true,
+    username: "sender@example.com",
+    password: "new-credential",
+    from: "sender@example.com"
+  }
 }
 ```
 
-## 4. 字段映射规则
+对于 `secret: true` 字段，统一使用以下语义：
 
-| JSON `type` | 前端组件 | 值类型 | 说明 |
-| --- | --- | --- | --- |
-| `text` | `Input` | `string` | 普通文本 |
-| `email` | `Input type="email"` | `string` | 邮箱格式由服务端再次校验 |
-| `url` | `Input type="url"` | `string` | 地址由服务端再次校验 |
-| `number` | `Input type="number"` | `number` | 需要明确转换，不能把数字以字符串提交 |
-| `password` | `Input type="password"` | `string` | 敏感原文仅在本次提交中传输；服务端保存到 D1，读取时只返回配置状态和掩码 |
-| `select` | `Select` | `string` | 只能提交定义中声明的单个选项值 |
-| `multi_select` | `Checkbox` 选项组或项目统一多选组件 | `string[]` | 只能提交定义中声明的选项值；至少一项等数量约束由服务端校验 |
-| `switch` | `Switch` | `boolean` | 未设置时使用默认值 |
-| `textarea` | `Textarea` | `string` | 用于多行文本和列表配置 |
+| 提交状态 | 行为 |
+| --- | --- |
+| 字段不存在 | 保留 D1 中的旧值 |
+| 非空字符串 | 替换 D1 中的旧值 |
+| `null` | 明确清除旧值 |
+| 空字符串 | 前端提交构造器删除该字段，即保留旧值 |
+| 其他类型 | 服务端拒绝 |
 
-组件映射必须集中在通用渲染层。页面不应为每种 Provider 重复编写 `v-if="field.type === ..."` 的完整结构；如确有特殊字段，应通过扩展字段定义或局部插槽处理。
+普通字段按表单当前值提交。`schemaVersion` 由服务端根据 definition 写入，不由浏览器控制。
 
-## 5. 前端组件职责
+必填 Secret 被清除后，服务端 definition 校验或最终 Provider parser 必须拒绝该配置。新建配置没有必填 Secret 时同样拒绝保存。通用模型保留 `null` 语义，是为了支持未来的可选 Secret；当前邮件和支付的凭据字段全部必填，因此页面不显示无法成功保存的“清除凭据”操作，只允许留空保留或填写新值替换。
 
-建议提供以下组件边界：
+## 5. 读取与脱敏
 
-- `JsonForm`：接收表单定义、当前值和敏感字段状态，渲染完整表单；
-- `JsonFormField`：渲染单个字段，完成输入类型映射和基础展示；
-- `JsonFormSection`：按配置分组展示字段；
-- `JsonFormFooter`：统一处理取消、保存和 loading 状态。
+D1 `configJson` 保存 Provider 运行所需的完整配置，包括真实 API Key、SMTP 授权码或支付私钥。配置读取接口绝不能把这些原文返回浏览器。
 
-组件应支持：
+服务端根据 `secret: true` 自动生成安全响应：
 
-1. `definition`：当前 Provider 的 JSON 定义；
-2. `values`：普通字段值；
-3. `secrets`：已配置 Secret 的脱敏状态；
-4. `secretUpdates`：本次新增、保留或清除的 Secret 操作；
-5. `disabled` / `saving`：编辑中和提交中的交互状态；
-6. `update:values`：向页面返回规范化后的表单值。
-
-页面只保留领域相关行为，例如：
-
-- 加载当前 Provider；
-- 选择新增或编辑状态；
-- 调用保存 Telefunc；
-- 显示业务错误；
-- 在不同支付 Provider 之间切换定义。
-
-## 6. 敏感字段规则
-
-`secret: true` 表示敏感配置字段。其真实值可以按各业务模块的存储策略保存，例如支付模块将私钥、Token、Webhook Secret 等真实值保存在 D1 `configJson`；但敏感原文不得回显，也不得写入页面响应、普通日志或 HTML。
-
-编辑时必须区分三种状态：
-
-- `keepExisting`：编辑已有配置时输入为空，保留数据库中的原敏感值；
-- `value`：用户输入新的敏感值，由服务端替换旧值；新增配置时，必填敏感字段必须提交此状态；
-- `clear`：明确清除已有敏感值；如果字段必填，服务端必须拒绝清除后的配置。
-
-前端只显示“已配置（已脱敏）”等状态。服务端必须重新读取旧配置、验证字段和权限，并根据操作状态生成最终配置 JSON。通用表单不决定敏感值存入 D1、加密存储或外部 Secret；具体模块必须在自身设计中明确存储策略。
-
-建议将敏感字段操作统一建模为：
-
-```ts
-type SecretUpdate =
-  | { action: "keepExisting" }
-  | { action: "value"; value: string }
-  | { action: "clear" };
-
-type SecretUpdates = Record<string, SecretUpdate>;
+```json
+{
+  "values": {
+    "host": "smtp.example.com",
+    "port": 465,
+    "secure": true,
+    "username": "sender@example.com",
+    "from": "sender@example.com"
+  },
+  "configuredSecrets": ["password"]
+}
 ```
 
-前端提交 `secretUpdates`，不把敏感值混入普通 `values`；服务端只接受定义中标记为 `secret: true` 的字段。
+不返回掩码字符串，因为掩码本身不是配置值。前端只需根据 `configuredSecrets.includes(field.key)` 显示“已配置”。
 
-## 7. 校验与序列化
+敏感原文不得进入：
 
-JSON 表单组件只负责基础交互和浏览器级提示，不能替代服务端校验。
+- Telefunc 配置读取响应；
+- HTML 和页面数据；
+- 普通日志；
+- 数据库业务日志；
+- 错误消息。
 
-服务端保存流程必须为：
+## 6. 保存流程
 
-1. 校验 `channel`、`provider` 和 `schemaVersion`；
-2. 根据 Provider 定义校验字段是否存在、类型是否正确、值是否允许；
-3. 对 URL、邮箱、端口、金额和枚举值执行领域校验；
-4. 按业务模块的存储策略处理敏感字段；支付模块将真实值写入 D1 `configJson`，但不得写入响应或日志；
-5. 使用结构化对象序列化为 `configJson`；
-6. 保存前再次调用对应 Provider parser，确保读取和发送链路可以解析。
+服务端保存流程固定为：
 
-读取流程必须为：
+1. 根据 `provider` 获取 `JsonFormDefinition`。
+2. 解析现有 D1 `configJson`；损坏的旧 JSON 可由一份完整新提交替换。
+3. 拒绝 definition 未声明的提交字段。
+4. 普通字段使用本次提交值。
+5. Secret 按“缺失保留、字符串替换、`null` 清除”合并。
+6. 服务端写入固定 `schemaVersion`。
+7. 调用统一 definition 校验执行必填、类型、范围、选项、URL 和邮箱校验。
+8. 调用 Provider parser 执行密钥格式、商户规则等领域校验。
+9. 两层校验通过后序列化并写入 D1。
 
-1. 读取数据库中的 `configJson`；
-2. 通过 Provider parser 解析；
-3. 映射为普通字段值和脱敏 Secret 状态；
-4. 返回表单组件可直接使用的数据；
-5. 配置损坏时返回固定错误状态，不把原始 JSON 或异常信息展示给用户。
+配置不完整时不能启用或测试，但已经启用的损坏配置必须允许直接停用。页面应显示“配置不完整”，不能等到实际发送或支付时才暴露 parser 错误。若 D1 内容仍是合法 JSON 对象，读取层可以从 definition 白名单中恢复普通字段和 `configuredSecrets`，便于修复；语法损坏的 JSON 无法安全恢复 Secret，必须重新填写。
 
-## 8. 支付模块接入要求
+管理读取、公开 Provider 列表、创建请求、回调和主动查询必须调用同一个 strict parser。不能出现“管理保存严格、运行时读取宽松”的两套有效性标准。
 
-后续支付配置页面必须遵守以下要求：
+## 7. 控件映射
 
-- 支付 Provider 定义集中放在 `server/payment` 或对应的 Provider definitions 模块；
-- 页面通过定义驱动表单，不复制邮件邮局页面的字段渲染代码；
-- 支付宝私钥、证书、API 密钥等全部使用 `secret: true`，真实值由服务端保存到 D1 `configJson`；
-- 支付模式、网关类型等单值枚举使用 `select`，可同时启用多个模式的配置使用 `multi_select`；
-- 金额、端口、超时等数字字段使用 `number` 并在提交前保持数字类型；
-- 支付回调地址、前台返回地址等使用 `url`；
-- 保存、启用、删除和测试操作仍由服务端 `requireAdmin()` 保护；
-- Provider 的实际解析和支付回调校验必须保留在服务端，不能由 JSON 定义取代。
+| `type` | 前端组件 | 值类型 |
+| --- | --- | --- |
+| `text` | `Input` | `string` |
+| `email` | `Input type="email"` | `string` |
+| `url` | `Input type="url"` | `string` |
+| `number` | `Input type="number"` | `number` |
+| `password` | `Input type="password"` | `string` |
+| `select` | `Select` | `string` |
+| `multi_select` | `Checkbox` 选项组 | `string[]` |
+| `switch` | `Switch` | `boolean` |
+| `textarea` | `Textarea` | `string` |
 
-## 9. 版本与扩展
+组件只负责输入和基础交互。服务端 parser 始终是最终校验边界。
 
-`schemaVersion` 用于定义结构升级，不用于掩盖业务配置格式变化。
+## 8. 第三方协议 JSON
 
-当字段定义发生不兼容变化时：
+表单 definition 描述“管理员需要填写什么”，Provider 协议描述“第三方接口发送或返回什么”。二者是不同的数据结构。
 
-1. 增加新的 schema version；
-2. 提供旧版本读取兼容或明确迁移；
-3. 保持已有配置可读；
-4. 通过测试覆盖旧版本和新版本；
-5. 在本规划和框架改造进度中记录变更。
+可配置的协议元数据包括：
 
-新增字段类型前必须确认现有 shadcn-vue 组件是否能表达该交互。只有确有必要时才新增通用字段类型，避免为单个 Provider 增加一次性组件。
+```ts
+type ProviderProtocolDefinition = {
+  request?: {
+    method: "GET" | "POST";
+    contentType: "json" | "form";
+    fieldMap: Record<string, string>;
+  };
+  callback?: {
+    contentType: "json" | "form" | "query";
+    fieldMap: Record<string, string>;
+    requiredFields: string[];
+  };
+};
+```
 
-## 10. 实施顺序
+例如 `fieldMap` 可以声明第三方的 `out_trade_no` 对应项目内部 `orderNo`。但以下逻辑必须保留在 adapter 代码中：
 
-1. 抽取当前邮件邮局定义与字段渲染逻辑，形成通用 `JsonForm`；
-2. 为邮件 API、SMTP 和 Cloudflare 配置补充渲染回归测试；
-3. 接入支付 Provider，优先迁移支付宝配置；
-4. 接入对象存储等其他结构化配置；
-5. 删除各页面中重复的字段渲染和类型转换代码；
-6. 更新 `docs/components.md` 与本规划的完成状态。
+- 签名生成与验签；
+- 原始请求体校验；
+- 金额、币种、应用 ID 和商户 ID 核对；
+- 第三方状态到内部状态的安全转换；
+- 防重放、幂等和订单状态机；
+- Provider 特有的网络错误与重试策略。
+
+只有多个 Provider 确实共享相同映射方式时才引入协议 JSON。不能为了无代码适配而创建可执行表达式 DSL。
+
+## 9. 实现位置
+
+统一类型和纯函数位于 `lib/json-form-values.ts`：
+
+- `normalizeJsonFormInputValue()`：浏览器输入规范化；
+- `buildJsonFormSubmission()`：生成唯一的 `values` 提交对象；
+- `mergeJsonFormValues()`：服务端白名单校验与 Secret 合并；
+- `validateJsonFormValues()`：根据 definition 执行必填、类型、范围、选项、邮箱和 URL 校验；
+- `redactJsonFormValues()`：读取时移除 Secret 原文并生成 `configuredSecrets`。
+
+邮件和支付必须复用这些函数。Provider definition 可以分别维护在各自 registry 中，但字段类型和提交语义不得分叉。
+
+## 10. 测试要求
+
+`tests/json-form-values.test.ts` 必须覆盖：
+
+- 数字输入不会把空值转换成 `0`；
+- 未知字段被拒绝；
+- Secret 原文不会出现在读取结果；
+- Secret 字段缺失时保留旧值；
+- 非空字符串替换旧值；
+- `null` 清除旧值；
+- 非字符串 Secret 被拒绝；
+- required、类型、数值范围、select / multi-select 选项、邮箱和 URL 约束被服务端执行；
+- 页面提交构造器不会生成 Secret 操作对象。
+
+各 Provider 测试继续覆盖 parser、最终 `configJson` 和领域规则，不重复实现通用 Secret 状态机测试。
 
 ## 11. 验收标准
 
-- 新增 Provider 只需增加 JSON 定义和服务端 parser，不复制完整表单页面；
-- 所有字段类型映射到已有 shadcn-vue 组件；
-- 敏感原文可以按模块策略进入配置存储，但不进入页面回显、数据库业务日志或普通响应；
-- 桌面端和移动端表单布局稳定，弹窗使用官方 Dialog 组件；
-- 服务端可拒绝未知字段、非法枚举、错误类型和无效敏感字段操作；
-- 至少覆盖默认值、编辑回显、敏感值保留/清除、数字转换、多选白名单和校验失败测试。
+- 项目只有一套 JSON 表单字段类型和提交语义；
+- 邮件、支付及后续 Provider 都只提交 `{ values }`；
+- 不存在 `secretUpdates`、`keepExisting`、`masked` 等并行协议；
+- D1 保存完整运行时配置，读取接口只返回普通值和 `configuredSecrets`；
+- 未知字段、无效类型和缺少必填 Secret 的配置不能保存，也不能被运行时读取为有效配置；
+- 配置损坏时页面明确显示，不能测试或启用，但允许停用；
+- 第三方协议映射与签名、验签和业务状态校验保持清晰边界。

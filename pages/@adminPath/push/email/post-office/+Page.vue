@@ -11,8 +11,8 @@
           <div v-if="!loading && !providers.length" class="py-6 text-center text-sm text-muted-foreground">暂无邮局配置，请点击“新增邮局”。</div>
           <div v-else class="grid gap-2">
             <div v-for="item in providers" :key="item.id" class="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2.5">
-              <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="font-medium">{{ providerLabel(item.provider) }}</span><Badge :variant="item.isEnabled ? 'secondary' : 'outline'">{{ item.isEnabled ? '已启用' : '未启用' }}</Badge></div><p class="mt-0.5 text-sm text-muted-foreground">{{ item.name }}</p></div>
-              <div class="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" @click="editProvider(item)">编辑</Button><Button size="sm" variant="outline" :disabled="sendingTest" @click="selectTestProvider(item)">测试</Button><Button size="sm" variant="destructive" :disabled="item.isEnabled" @click="requestDelete(item)">删除</Button><Switch :model-value="item.isEnabled" :disabled="changingProviderId === item.id || item.provider === 'CLOUDFLARE'" :aria-label="`${providerLabel(item.provider)}启用状态`" @update:model-value="toggleProvider(item, $event === true)" /></div>
+              <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="font-medium">{{ providerLabel(item.provider) }}</span><Badge :variant="item.isEnabled ? 'secondary' : 'outline'">{{ item.isEnabled ? '已启用' : '未启用' }}</Badge><Badge v-if="item.configurationError" variant="outline" class="border-destructive/40 text-destructive">配置不完整</Badge></div><p class="mt-0.5 text-sm text-muted-foreground">{{ item.name }}</p></div>
+              <div class="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" @click="editProvider(item)">编辑</Button><Button size="sm" variant="outline" :disabled="sendingTest || item.configurationError" @click="selectTestProvider(item)">测试</Button><Button size="sm" variant="destructive" :disabled="item.isEnabled" @click="requestDelete(item)">删除</Button><Switch :model-value="item.isEnabled" :disabled="changingProviderId === item.id || item.provider === 'CLOUDFLARE' || (item.configurationError && !item.isEnabled)" :aria-label="`${providerLabel(item.provider)}启用状态`" @update:model-value="toggleProvider(item, $event === true)" /></div>
             </div>
           </div>
         </CardContent>
@@ -42,7 +42,7 @@
                     <Field v-if="field.type === 'switch'" orientation="horizontal"><FieldLabel :for="`field-${field.key}`">{{ field.label }}</FieldLabel><Switch :id="`field-${field.key}`" :model-value="values[field.key] === true" @update:model-value="values[field.key] = $event" /></Field>
                     <template v-else-if="field.type === 'select'"><FieldLabel :for="`field-${field.key}`">{{ field.label }}</FieldLabel><Select :model-value="textValue(field.key)" @update:model-value="setTextValue(field.key, $event)"><SelectTrigger :id="`field-${field.key}`"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in field.options" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select></template>
                     <template v-else-if="field.type === 'textarea'"><FieldLabel :for="`field-${field.key}`">{{ field.label }}</FieldLabel><Textarea :id="`field-${field.key}`" :model-value="textValue(field.key)" rows="3" :placeholder="field.placeholder" @update:model-value="setTextValue(field.key, $event)" /></template>
-                    <template v-else-if="field.secret"><FieldLabel :for="`field-${field.key}`">{{ field.label }}</FieldLabel><Input :id="`field-${field.key}`" v-model="secretValues[field.key]" type="password" autocomplete="off" :placeholder="secrets[field.key]?.configured ? '留空以保留现有配置' : field.placeholder" /><FieldDescription>{{ secrets[field.key]?.configured ? '已配置（已脱敏）' : field.description }}<label v-if="secrets[field.key]?.configured" class="mt-2 flex items-center gap-2"><Checkbox :model-value="clearSecrets[field.key] === true" @update:model-value="clearSecrets[field.key] = $event === true" />清除现有配置</label></FieldDescription></template>
+                    <template v-else-if="field.secret"><FieldLabel :for="`field-${field.key}`">{{ field.label }}</FieldLabel><Input :id="`field-${field.key}`" :model-value="textValue(field.key)" type="password" autocomplete="off" :placeholder="configuredSecrets.includes(field.key) ? '留空以保留现有配置' : field.placeholder" @update:model-value="setTextValue(field.key, $event)" /><FieldDescription>{{ configuredSecrets.includes(field.key) ? '已配置（原文不回显）' : field.description }}</FieldDescription></template>
                     <template v-else><FieldLabel :for="`field-${field.key}`">{{ field.label }}</FieldLabel><Input :id="`field-${field.key}`" :model-value="textValue(field.key)" :type="field.type" :required="field.required" :min="field.min" :max="field.max" :placeholder="field.placeholder" @update:model-value="setInputValue(field.key, field.type, $event)" /></template>
                     <FieldDescription v-if="field.description && !field.secret">{{ field.description }}</FieldDescription>
                   </Field>
@@ -79,7 +79,7 @@
 <script lang="ts" setup>
 import { RefreshCwIcon } from "@lucide/vue";
 import { computed, onMounted, reactive, ref } from "vue";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -89,7 +89,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import MailSettingsLayout from "@/components/admin/MailSettingsLayout.vue";
-import { normalizeJsonFormInputValue } from "@/lib/json-form-values";
+import { buildJsonFormSubmission, normalizeJsonFormInputValue, type JsonFormValues } from "@/lib/json-form-values";
 import { runTelefunc } from "@/lib/telefunc-client";
 import { onDeleteEmailProvider, onGetEmailProviderDefinitions, onGetEmailProviders, onSaveEmailProvider, onSendTestEmail, onSetEmailProviderEnabled } from "@/server/email/admin.telefunc";
 
@@ -97,7 +97,7 @@ type Provider = Awaited<ReturnType<typeof onGetEmailProviders>>[number];
 type Definition = Awaited<ReturnType<typeof onGetEmailProviderDefinitions>>[number];
 type Kind = Definition["provider"];
 const providers = ref<Provider[]>([]); const definitions = ref<Definition[]>([]); const loading = ref(false); const saving = ref(false); const sendingTest = ref(false); const deleting = ref(false); const changingProviderId = ref<number | null>(null); const formVisible = ref(false); const editingId = ref<number | undefined>(); const testProviderId = ref<number | undefined>(); const testDialogOpen = ref(false); const deleteDialogOpen = ref(false); const providerToDelete = ref<Provider | null>(null);
-const name = ref(""); const isEnabled = ref(false); const provider = ref<Kind>("API"); const values = reactive<Record<string, string | number | boolean>>({}); const secretValues = reactive<Record<string, string>>({}); const clearSecrets = reactive<Record<string, boolean>>({}); const secrets = reactive<Record<string, { configured: boolean; masked?: string }>>({});
+const name = ref(""); const isEnabled = ref(false); const provider = ref<Kind>("API"); const values = reactive<JsonFormValues>({}); const configuredSecrets = ref<string[]>([]);
 const testForm = reactive({ to: "", customContent: "" });
 const currentDefinition = computed(() => definitions.value.find((item) => item.provider === provider.value));
 const testProviderName = computed(() => providers.value.find((item) => item.id === testProviderId.value)?.name ?? "");
@@ -105,14 +105,15 @@ function textValue(key: string) { const value = values[key]; return typeof value
 function setTextValue(key: string, value: unknown) { values[key] = typeof value === "string" ? value : ""; }
 function setInputValue(key: string, type: string, value: unknown) { const normalized = normalizeJsonFormInputValue(type, value); if (!Array.isArray(normalized)) values[key] = normalized; }
 function replaceRecord<T>(target: Record<string, T>, source: Record<string, T>) { for (const key of Object.keys(target)) delete target[key]; Object.assign(target, source); }
-function resetValues() { const definition = currentDefinition.value; if (!definition) return; replaceRecord(values, { ...definition.defaults }); replaceRecord(secretValues, {}); replaceRecord(clearSecrets, {}); replaceRecord(secrets, {}); }
+function resetValues() { const definition = currentDefinition.value; if (!definition) return; replaceRecord(values, { ...definition.defaults } as JsonFormValues); configuredSecrets.value = []; }
 function startCreate() { name.value = ""; isEnabled.value = false; editingId.value = undefined; provider.value = definitions.value[0]?.provider ?? "API"; resetValues(); formVisible.value = true; }
-function editProvider(item: Provider) { if (item.provider !== "API" && item.provider !== "SMTP" && item.provider !== "CLOUDFLARE") return; editingId.value = item.id; name.value = item.name; isEnabled.value = item.isEnabled; provider.value = item.provider; replaceRecord(values, item.values as Record<string, string | number | boolean>); replaceRecord(secretValues, {}); replaceRecord(clearSecrets, {}); replaceRecord(secrets, item.secrets); formVisible.value = true; }
+function editProvider(item: Provider) { if (item.provider !== "API" && item.provider !== "SMTP" && item.provider !== "CLOUDFLARE") return; editingId.value = item.id; name.value = item.name; isEnabled.value = item.isEnabled; provider.value = item.provider; replaceRecord(values, item.values as JsonFormValues); configuredSecrets.value = item.configuredSecrets; formVisible.value = true; }
 function providerLabel(provider: Provider["provider"]) { return provider === "API" ? "API" : provider === "SMTP" ? "SMTP" : provider === "CLOUDFLARE" ? "Cloudflare Email Sending" : provider; }
+
 
 async function loadProviders() { loading.value = true; try { providers.value = await runTelefunc(() => onGetEmailProviders()); if (!providers.value.some((item) => item.id === testProviderId.value)) testProviderId.value = providers.value.find((item) => item.isEnabled)?.id ?? providers.value[0]?.id; } finally { loading.value = false; } }
 async function loadDefinitions() { definitions.value = await runTelefunc(() => onGetEmailProviderDefinitions()); }
-async function saveProvider() { saving.value = true; try { const secretUpdates = Object.fromEntries(currentDefinition.value?.fields.filter((field) => field.secret).map((field) => [field.key, clearSecrets[field.key] ? { clear: true } : secretValues[field.key]?.trim() ? { value: secretValues[field.key].trim() } : secrets[field.key]?.configured ? { keepExisting: true } : {}]) ?? []); await runTelefunc(() => onSaveEmailProvider({ id: editingId.value, channel: "EMAIL", provider: provider.value, name: name.value, isEnabled: isEnabled.value, values, secrets: secretUpdates }), { successMessage: "邮件邮局已保存。" }); formVisible.value = false; await loadProviders(); } catch { /* runTelefunc owns feedback */ } finally { saving.value = false; } }
+async function saveProvider() { const definition = currentDefinition.value; if (!definition) return; saving.value = true; try { const submittedValues = buildJsonFormSubmission(definition.fields, values); await runTelefunc(() => onSaveEmailProvider({ id: editingId.value, channel: "EMAIL", provider: provider.value, name: name.value, isEnabled: isEnabled.value, values: submittedValues }), { successMessage: "邮件邮局已保存。" }); formVisible.value = false; await loadProviders(); } catch { /* runTelefunc owns feedback */ } finally { saving.value = false; } }
 async function toggleProvider(item: Provider, enabled: boolean) { changingProviderId.value = item.id; try { await runTelefunc(() => onSetEmailProviderEnabled(item.id, enabled), { successMessage: enabled ? "邮件 Provider 已启用。" : "邮件 Provider 已停用。" }); await loadProviders(); } catch { /* runTelefunc owns feedback */ } finally { changingProviderId.value = null; } }
 function requestDelete(item: Provider) { providerToDelete.value = item; deleteDialogOpen.value = true; }
 async function removeProvider() { const item = providerToDelete.value; if (!item) return; deleting.value = true; try { await runTelefunc(() => onDeleteEmailProvider(item.id), { successMessage: "邮件 Provider 已删除。" }); deleteDialogOpen.value = false; providerToDelete.value = null; await loadProviders(); } catch { /* runTelefunc owns feedback */ } finally { deleting.value = false; } }

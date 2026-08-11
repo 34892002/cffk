@@ -1,18 +1,8 @@
 import { parseEmailProviderConfig, type EmailProviderConfig } from "@/lib/config-schemas";
+import { mergeJsonFormValues, redactJsonFormValues, validateJsonFormValues, type JsonFormFieldDefinition } from "@/lib/json-form-values";
 
 export type EmailProviderKind = "API" | "SMTP" | "CLOUDFLARE";
-export type ProviderFormField = {
-  key: string;
-  label: string;
-  type: "text" | "email" | "number" | "password" | "url" | "switch" | "select" | "textarea";
-  required?: boolean;
-  placeholder?: string;
-  description?: string;
-  options?: Array<{ label: string; value: string }>;
-  secret?: boolean;
-  min?: number;
-  max?: number;
-};
+export type ProviderFormField = JsonFormFieldDefinition;
 export type ProviderFormDefinition = {
   channel: "EMAIL";
   provider: EmailProviderKind;
@@ -22,7 +12,6 @@ export type ProviderFormDefinition = {
   capabilities: { messageTypes: ["NORMAL", "ADMIN"]; supportsTest: true };
   defaults: Record<string, string | number | boolean>;
 };
-export type SecretUpdate = { value?: string; keepExisting?: boolean; clear?: boolean };
 export type SaveEmailProviderInput = {
   id?: number;
   channel: "EMAIL";
@@ -30,9 +19,7 @@ export type SaveEmailProviderInput = {
   name: string;
   isEnabled: boolean;
   values: Record<string, unknown>;
-  secrets?: Record<string, SecretUpdate>;
 };
-export type MaskedSecret = { configured: boolean; masked?: string };
 
 const capabilities: ProviderFormDefinition["capabilities"] = { messageTypes: ["NORMAL", "ADMIN"], supportsTest: true };
 
@@ -95,20 +82,6 @@ function bool(values: Record<string, unknown>, key: string) {
   return values[key] === true;
 }
 
-function resolveSecret(update: SecretUpdate | undefined, existing?: string) {
-  if (update?.clear) return undefined;
-  if (update?.value?.trim()) return update.value.trim();
-  if (update?.keepExisting && existing) return existing;
-  return undefined;
-}
-
-function existingSecret(json: string | undefined, kind: "api" | "smtp") {
-  if (!json) return undefined;
-  const existing = parseStoredEmailProviderConfig(json);
-  if (kind === "api" && existing.kind === "api") return existing.apiKey;
-  if (kind === "smtp" && existing.kind === "smtp") return existing.password;
-  return undefined;
-}
 
 function normalizedConfig(config: EmailProviderConfig) {
   return { schemaVersion: 1 as const, ...config };
@@ -120,38 +93,58 @@ export function parseStoredEmailProviderConfig(json: string) {
   return normalizedConfig(config);
 }
 
+export function parseEmailProviderConfigForKind(provider: EmailProviderKind, json: string) {
+  const definition = getEmailProviderDefinition(provider);
+  const config = parseStoredEmailProviderConfig(json);
+  const expectedKind = provider === "API" ? "api" : provider === "SMTP" ? "smtp" : "cloudflare";
+  if (config.kind !== expectedKind) throw new Error("EMAIL_PROVIDER_KIND_MISMATCH");
+  const raw = rawEmailProviderValues(provider, json);
+  const allowed = new Set(["schemaVersion", "kind", ...definition.fields.map((field) => field.key)]);
+  if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error("EMAIL_PROVIDER_FIELD_INVALID");
+  validateJsonFormValues(definition.fields, config as unknown as Record<string, unknown>);
+  return config;
+}
+
+function rawEmailProviderValues(provider: EmailProviderKind, json?: string) {
+  if (!json) return {};
+  try {
+    const value: unknown = JSON.parse(json);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const record = value as Record<string, unknown>;
+    const expectedKind = provider === "API" ? "api" : provider === "SMTP" ? "smtp" : "cloudflare";
+    return record.kind === expectedKind ? record : {};
+  } catch {
+    return {};
+  }
+}
+
 export function serializeEmailProviderConfig(input: SaveEmailProviderInput, existingJson?: string) {
-  const values = input.values ?? {};
+  const definition = getEmailProviderDefinition(input.provider);
+  const values = mergeJsonFormValues(definition.fields, input.values ?? {}, rawEmailProviderValues(input.provider, existingJson));
+  validateJsonFormValues(definition.fields, values);
   let config: EmailProviderConfig;
   if (input.provider === "API") {
-    const apiKey = resolveSecret(input.secrets?.apiKey, input.secrets?.apiKey?.keepExisting ? existingSecret(existingJson, "api") : undefined);
-    config = { kind: "api", apiProvider: text(values, "apiProvider") === "RESEND" ? "RESEND" : "BREVO", endpoint: text(values, "endpoint"), apiKey: apiKey ?? "", from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}), timeoutMs: number(values, "timeoutMs", 10000) };
+    const apiProvider = text(values, "apiProvider") as "BREVO" | "RESEND";
+    config = { kind: "api", apiProvider, endpoint: text(values, "endpoint"), apiKey: text(values, "apiKey"), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}), timeoutMs: number(values, "timeoutMs", 10000) };
   } else if (input.provider === "SMTP") {
-    const password = resolveSecret(input.secrets?.password, input.secrets?.password?.keepExisting ? existingSecret(existingJson, "smtp") : undefined);
     const authType = text(values, "authType");
-    config = { kind: "smtp", host: text(values, "host"), port: number(values, "port", 587), secure: bool(values, "secure"), username: text(values, "username"), password: password ?? "", ...(authType === "login" || authType === "cram-md5" || authType === "plain" ? { authType } : {}), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
+    config = { kind: "smtp", host: text(values, "host"), port: number(values, "port", 587), secure: bool(values, "secure"), username: text(values, "username"), password: text(values, "password"), ...(authType === "login" || authType === "cram-md5" || authType === "plain" ? { authType } : {}), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
   } else {
     config = { kind: "cloudflare", from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
   }
   return JSON.stringify(normalizedConfig(parseEmailProviderConfig(JSON.stringify(config))));
 }
 
-export function maskedEmailProviderConfig(provider: EmailProviderKind, json: string) {
-  const config = parseStoredEmailProviderConfig(json);
-  const values: Record<string, unknown> = {
-    from: config.from,
-    fromName: config.fromName ?? "",
-    replyTo: config.replyTo ?? "",
-  };
-  const secrets: Record<string, MaskedSecret> = {};
-  if (provider === "API" && config.kind === "api") {
-    Object.assign(values, { apiProvider: config.apiProvider ?? "BREVO", endpoint: config.endpoint, timeoutMs: config.timeoutMs ?? 10000 });
-    secrets.apiKey = { configured: Boolean(config.apiKey), masked: config.apiKey ? "********" : undefined };
-  } else if (provider === "SMTP" && config.kind === "smtp") {
-    Object.assign(values, { host: config.host, port: config.port, secure: config.secure, username: config.username, authType: config.authType ?? "plain" });
-    secrets.password = { configured: Boolean(config.password), masked: config.password ? "********" : undefined };
-  } else if (provider !== "CLOUDFLARE" || config.kind !== "cloudflare") {
-    throw new Error("EMAIL_PROVIDER_KIND_MISMATCH");
-  }
-  return { values, secrets };
+export function recoverEmailProviderFormValues(provider: EmailProviderKind, json: string) {
+  const definition = getEmailProviderDefinition(provider);
+  const stored = rawEmailProviderValues(provider, json);
+  const redacted = redactJsonFormValues(definition.fields, stored);
+  return { values: { ...definition.defaults, ...redacted.values }, configuredSecrets: redacted.configuredSecrets };
+}
+
+export function emailProviderFormValues(provider: EmailProviderKind, json: string) {
+  const definition = getEmailProviderDefinition(provider);
+  const config = parseEmailProviderConfigForKind(provider, json);
+  const redacted = redactJsonFormValues(definition.fields, config as unknown as Record<string, unknown>);
+  return { values: { ...definition.defaults, ...redacted.values }, configuredSecrets: redacted.configuredSecrets };
 }

@@ -1,32 +1,24 @@
 import { describe, expect, test } from "bun:test";
 
-import { normalizeJsonFormInputValue } from "../lib/json-form-values";
-import { maskedEmailProviderConfig, serializeEmailProviderConfig } from "../server/push/provider-definitions";
+import { emailProviderFormValues, parseEmailProviderConfigForKind, recoverEmailProviderFormValues, serializeEmailProviderConfig } from "../server/push/provider-definitions";
 
 describe("email provider configuration", () => {
-  test("normalizes dynamic number fields without turning empty input into zero", () => {
-    expect(normalizeJsonFormInputValue("number", 465)).toBe(465);
-    expect(normalizeJsonFormInputValue("number", "465")).toBe(465);
-    expect(normalizeJsonFormInputValue("number", "")).toBe("");
-    expect(normalizeJsonFormInputValue("number", Number.NaN)).toBe("");
-  });
-
-  test("replaces an invalid stored SMTP configuration with a complete submission", () => {
+  test("stores a complete QQ SMTP configuration in D1 JSON", () => {
     const config = JSON.parse(serializeEmailProviderConfig({
       id: 2,
       channel: "EMAIL",
       provider: "SMTP",
-      name: "SMTP 邮局",
+      name: "SMTP post office",
       isEnabled: true,
       values: {
-        from: "wx_ggyy@qq.com",
+        from: "sender@example.com",
         host: "smtp.qq.com",
         port: 465,
         secure: true,
-        username: "wx_ggyy@qq.com",
+        username: "sender@example.com",
+        password: "fake-smtp-credential",
         authType: "plain",
       },
-      secrets: { password: { value: "smtp-authorization-code" } },
     }, "{\"kind\":\"smtp\",\"port\":0}"));
 
     expect(config).toMatchObject({
@@ -34,21 +26,20 @@ describe("email provider configuration", () => {
       host: "smtp.qq.com",
       port: 465,
       secure: true,
-      username: "wx_ggyy@qq.com",
-      password: "smtp-authorization-code",
-      from: "wx_ggyy@qq.com",
+      username: "sender@example.com",
+      password: "fake-smtp-credential",
+      from: "sender@example.com",
       authType: "plain",
     });
   });
 
-  test("keeps an existing SMTP credential without returning it to the form", () => {
+  test("preserves an existing SMTP credential when the field is missing", () => {
     const existing = serializeEmailProviderConfig({
       channel: "EMAIL",
       provider: "SMTP",
       name: "SMTP",
       isEnabled: true,
-      values: { from: "sender@example.com", host: "smtp.example.com", port: 465, secure: true, username: "sender@example.com", authType: "plain" },
-      secrets: { password: { value: "smtp-authorization-code" } },
+      values: { from: "sender@example.com", host: "smtp.example.com", port: 465, secure: true, username: "sender@example.com", password: "old-smtp-credential", authType: "plain" },
     });
     const updated = JSON.parse(serializeEmailProviderConfig({
       channel: "EMAIL",
@@ -56,62 +47,75 @@ describe("email provider configuration", () => {
       name: "SMTP",
       isEnabled: true,
       values: { from: "sender@example.com", host: "smtp.example.com", port: 465, secure: true, username: "sender@example.com", authType: "plain" },
-      secrets: { password: { keepExisting: true } },
     }, existing));
 
-    expect(updated.password).toBe("smtp-authorization-code");
+    expect(updated.password).toBe("old-smtp-credential");
   });
 
-  test("returns only masked SMTP credential state to the form", () => {
+  test("stores credentials but only returns configured secret field names", () => {
     const stored = serializeEmailProviderConfig({
+      channel: "EMAIL",
+      provider: "API",
+      name: "API",
+      isEnabled: true,
+      values: { apiProvider: "BREVO", endpoint: "https://api.example.com/v3/email", apiKey: "fake-api-key", from: "sender@example.com", timeoutMs: 10000 },
+    });
+
+    expect(stored).toContain("fake-api-key");
+    const form = emailProviderFormValues("API", stored);
+    expect(form.configuredSecrets).toEqual(["apiKey"]);
+    expect(form.values).not.toHaveProperty("apiKey");
+    expect(JSON.stringify(form)).not.toContain("fake-api-key");
+  });
+
+  test("rejects invalid definition values and unknown stored fields", () => {
+    expect(() => serializeEmailProviderConfig({
+      channel: "EMAIL",
+      provider: "API",
+      name: "API",
+      isEnabled: true,
+      values: { apiProvider: "UNKNOWN", endpoint: "not-a-url", apiKey: "fake-api-key", from: "not-an-email", timeoutMs: 999 },
+    })).toThrow();
+
+    const stored = JSON.stringify({ schemaVersion: 1, kind: "smtp", host: "smtp.example.com", port: 465, secure: true, username: "sender@example.com", password: "stored-secret", authType: "plain", from: "sender@example.com", unknown: true });
+    expect(() => parseEmailProviderConfigForKind("SMTP", stored)).toThrow("EMAIL_PROVIDER_FIELD_INVALID");
+    const recovered = recoverEmailProviderFormValues("SMTP", stored);
+    expect(recovered.configuredSecrets).toEqual(["password"]);
+    expect(recovered.values).not.toHaveProperty("unknown");
+    expect(JSON.stringify(recovered)).not.toContain("stored-secret");
+  });
+
+  test("rejects clearing a required credential", () => {
+    const existing = serializeEmailProviderConfig({
       channel: "EMAIL",
       provider: "SMTP",
       name: "SMTP",
       isEnabled: true,
-      values: { from: "sender@example.com", host: "smtp.example.com", port: 465, secure: true, username: "sender@example.com", authType: "plain" },
-      secrets: { password: { value: "fake-smtp-credential" } },
+      values: { from: "sender@example.com", host: "smtp.example.com", port: 465, secure: true, username: "sender@example.com", password: "old-smtp-credential", authType: "plain" },
     });
 
-    expect(stored).toContain("fake-smtp-credential");
-    const masked = maskedEmailProviderConfig("SMTP", stored);
-    expect(masked.secrets.password).toEqual({ configured: true, masked: "********" });
-    expect(JSON.stringify(masked)).not.toContain("fake-smtp-credential");
-  });
-
-  test("stores API keys in D1 JSON but returns only masked state", () => {
-    const stored = serializeEmailProviderConfig({
+    expect(() => serializeEmailProviderConfig({
       channel: "EMAIL",
-      provider: "API",
-      name: "Brevo",
+      provider: "SMTP",
+      name: "SMTP",
       isEnabled: true,
-      values: {
-        apiProvider: "BREVO",
-        endpoint: "https://api.example.com/v3/email",
-        from: "sender@example.com",
-        timeoutMs: 10000,
-      },
-      secrets: { apiKey: { value: "fake-api-key" } },
-    });
-
-    expect(stored).toContain("fake-api-key");
-    const masked = maskedEmailProviderConfig("API", stored);
-    expect(masked.secrets.apiKey).toEqual({ configured: true, masked: "********" });
-    expect(JSON.stringify(masked)).not.toContain("fake-api-key");
+      values: { from: "sender@example.com", host: "smtp.example.com", port: 465, secure: true, username: "sender@example.com", password: null, authType: "plain" },
+    }, existing)).toThrow("Required JSON form field: password");
   });
 
-  test("uses the fixed EMAIL binding for Cloudflare provider configuration", () => {
+  test("ignores arbitrary Cloudflare binding names", () => {
     const stored = serializeEmailProviderConfig({
       channel: "EMAIL",
       provider: "CLOUDFLARE",
       name: "Cloudflare",
       isEnabled: true,
-      values: { from: "sender@example.com", binding: "UNDECLARED_BINDING" },
+      values: { from: "sender@example.com" },
     });
 
     expect(JSON.parse(stored)).toEqual({ schemaVersion: 1, kind: "cloudflare", from: "sender@example.com" });
-    expect(maskedEmailProviderConfig("CLOUDFLARE", stored)).toEqual({
+    expect(emailProviderFormValues("CLOUDFLARE", stored)).toEqual({
       values: { from: "sender@example.com", fromName: "", replyTo: "" },
-      secrets: {},
+      configuredSecrets: [],
     });
   });
 });

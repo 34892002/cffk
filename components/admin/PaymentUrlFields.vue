@@ -10,13 +10,13 @@
         </PopoverTrigger>
         <PopoverContent align="start" class="space-y-1 text-sm">
           <p class="font-medium">支付平台会将付款结果发送到此地址。</p>
-          <p class="text-muted-foreground">网站域名取自系统设置。可调整路径，但必须保留在 /api/payments/ 下。</p>
+          <p class="text-muted-foreground">网站域名和回调路径由系统固定生成，避免配置到不存在的接口。</p>
           <p v-if="provider === 'STRIPE'" class="text-muted-foreground">复制后粘贴到 Stripe Dashboard 的 Webhook Endpoint。</p>
           <p v-else-if="provider === 'HASHPAY'" class="text-muted-foreground">复制后粘贴到 HashPay 商户后台的回调地址。</p>
         </PopoverContent>
       </Popover>
       <InputGroupAddon class="shrink-0 text-foreground">{{ origin }}</InputGroupAddon>
-      <InputGroupInput :model-value="notifyPath" :disabled="!origin" @update:model-value="setUrl('notify', String($event))" />
+      <InputGroupInput :model-value="notifyPath" disabled />
       <InputGroupAddon align="inline-end">
         <InputGroupButton :aria-label="copiedField === 'notify' ? '已复制回调地址' : '复制回调地址'" :title="copiedField === 'notify' ? '已复制' : '复制'" size="icon-xs" type="button" :disabled="!notifyUrl" @click="copyUrl('notify', notifyUrl)">
           <CheckIcon v-if="copiedField === 'notify'" /><CopyIcon v-else />

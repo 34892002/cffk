@@ -34,7 +34,7 @@ export async function getEnabledPaymentProviders(database: D1Database): Promise<
     try {
       const definition = getProviderDefinition(record.provider);
       if (!definition) return [];
-      const config = definition.parseConfig(record.configJson);
+      const config = parseProviderConfig(record.provider, record.configJson);
       return [{ provider: record.provider as PaymentProviderKind, name: record.name, channels: definition.getChannels(config), configStatus: "valid" as const }];
     } catch {
       return [];
@@ -53,7 +53,7 @@ export async function getPaymentProvider(database: D1Database, provider: Payment
   const definition = getProviderDefinition(record.provider);
   if (!definition) return null;
   try {
-    const config = definition.parseConfig(record.configJson);
+    const config = parseProviderConfig(record.provider, record.configJson);
     return { provider: record.provider as PaymentProviderKind, name: record.name, channels: definition.getChannels(config), configStatus: "valid", configJson: record.configJson, isEnabled: record.isEnabled };
   } catch {
     return { provider: record.provider as PaymentProviderKind, name: record.name, channels: [], configStatus: "invalid", configJson: record.configJson, isEnabled: record.isEnabled };
@@ -69,7 +69,7 @@ export async function getEnabledPaymentProvider(database: D1Database, provider: 
 export function requirePaymentChannel(provider: PaymentProviderKind, configJson: string, channel: string | undefined) {
   const definition = getProviderDefinition(provider);
   if (!definition) appError("PAYMENT_PROVIDER_NOT_IMPLEMENTED");
-  const config = definition.parseConfig(configJson);
+  const config = parseProviderConfig(provider, configJson);
   const selected = channel || definition.getChannels(config)[0];
   if (selected && !definition.getChannels(config).includes(selected as PaymentChannel)) appError("PAYMENT_CHANNEL_INVALID");
   return selected as PaymentChannel | undefined;
