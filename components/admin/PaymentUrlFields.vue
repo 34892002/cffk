@@ -1,5 +1,5 @@
 <template>
-  <Field v-if="showNotify">
+  <Field v-if="showNotify" :data-invalid="Boolean(errors.notifyUrl)">
     <FieldLabel>回调地址</FieldLabel>
     <InputGroup>
       <Popover>
@@ -16,7 +16,7 @@
         </PopoverContent>
       </Popover>
       <InputGroupAddon class="shrink-0 text-foreground">{{ origin }}</InputGroupAddon>
-      <InputGroupInput :model-value="notifyPath" disabled />
+      <InputGroupInput :model-value="notifyPath" :aria-invalid="Boolean(errors.notifyUrl)" disabled />
       <InputGroupAddon align="inline-end">
         <InputGroupButton :aria-label="copiedField === 'notify' ? '已复制回调地址' : '复制回调地址'" :title="copiedField === 'notify' ? '已复制' : '复制'" size="icon-xs" type="button" :disabled="!notifyUrl" @click="copyUrl('notify', notifyUrl)">
           <CheckIcon v-if="copiedField === 'notify'" /><CopyIcon v-else />
@@ -24,9 +24,10 @@
       </InputGroupAddon>
     </InputGroup>
     <FieldDescription v-if="!notifyUrl">请先在系统设置中填写网站地址。</FieldDescription>
+    <FieldError v-if="errors.notifyUrl" :errors="[errors.notifyUrl]" />
   </Field>
 
-  <Field>
+  <Field :data-invalid="Boolean(errors.returnUrl)">
     <FieldLabel>返回地址</FieldLabel>
     <InputGroup>
       <Popover>
@@ -41,7 +42,7 @@
         </PopoverContent>
       </Popover>
       <InputGroupAddon class="shrink-0 text-foreground">{{ origin }}</InputGroupAddon>
-      <InputGroupInput :model-value="returnPath" :disabled="!origin" @update:model-value="setUrl('return', String($event))" />
+      <InputGroupInput :model-value="returnPath" :aria-invalid="Boolean(errors.returnUrl)" :disabled="!origin" @update:model-value="setUrl('return', String($event))" />
       <InputGroupAddon align="inline-end">
         <InputGroupButton :aria-label="copiedField === 'return' ? '已复制返回地址' : '复制返回地址'" :title="copiedField === 'return' ? '已复制' : '复制'" size="icon-xs" type="button" :disabled="!returnUrl" @click="copyUrl('return', returnUrl)">
           <CheckIcon v-if="copiedField === 'return'" /><CopyIcon v-else />
@@ -49,17 +50,19 @@
       </InputGroupAddon>
     </InputGroup>
     <FieldDescription v-if="!returnUrl">请先在系统设置中填写网站地址。</FieldDescription>
+    <FieldError v-if="errors.returnUrl" :errors="[errors.returnUrl]" />
   </Field>
 </template>
 
 <script lang="ts" setup>
 import { computed, ref } from "vue";
 import { CheckIcon, CopyIcon, InfoIcon } from "@lucide/vue";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-const props = defineProps<{ notifyUrl: string; returnUrl: string; showNotify: boolean; siteUrl: string | null; provider: string }>();
+const props = defineProps<{ notifyUrl: string; returnUrl: string; showNotify: boolean; siteUrl: string | null; provider: string; errors?: Record<string, string> }>();
+const errors = computed(() => props.errors ?? {});
 const emit = defineEmits<{ "update:notifyUrl": [value: string]; "update:returnUrl": [value: string] }>();
 const origin = computed(() => props.siteUrl ? new URL(props.siteUrl).origin : "");
 const notifyPath = computed(() => pathOf(props.notifyUrl));

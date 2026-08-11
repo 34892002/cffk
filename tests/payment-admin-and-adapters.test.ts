@@ -17,6 +17,22 @@ function rawPemBody(pem: string) {
   return pem.replace(/-----BEGIN [^-]+-----/g, "").replace(/-----END [^-]+-----/g, "").replace(/\s+/g, "");
 }
 
+async function encryptHashpayCallback(value: unknown) {
+  const publicKey = await crypto.subtle.importKey(
+    "spki",
+    Buffer.from(rawPemBody(testPublicKey), "base64"),
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["encrypt"],
+  );
+  const aesKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+  const aesRaw = await crypto.subtle.exportKey("raw", aesKey);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, new TextEncoder().encode(JSON.stringify(value)));
+  const key = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, aesRaw);
+  return JSON.stringify({ key: Buffer.from(key).toString("base64"), iv: Buffer.from(iv).toString("base64"), data: Buffer.from(data).toString("base64") });
+}
+
 const epayConfig = {
   schemaVersion: 1,
   baseUrl: "https://epay.example",
@@ -165,7 +181,7 @@ test("BEpusdt and Stripe adapters create provider requests and surface failures"
     assert.deepEqual(bepPayment, { mode: "redirect", url: "https://cashier.example/pay", paymentOrderNo: "TRADE-1" });
 
     const stripe = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" });
-    const stripePayment = await stripe.create({ orderNo: "ORD-3", queryToken: "token", amount: 1234, subject: "Order", notifyUrl: "", returnUrl: "https://shop.example/result" });
+    const stripePayment = await stripe.create({ orderNo: "ORD-3", queryToken: "token", amount: 1234, subject: "Order", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" });
     assert.equal(stripePayment.paymentOrderNo, "cs_1");
     assert.equal(requests.length, 2);
     assert.equal(JSON.parse(await requests[0]!.text()).signature.length, 32);
@@ -261,13 +277,29 @@ test("HashPay adapter creates a signed provider request", async () => {
   };
   try {
     const adapter = createProviderAdapter("HASHPAY", { schemaVersion: 1, baseUrl: "https://hashpay.example", merchantId: "merchant-1", privateKey: testPrivateKey, currency: "USD", notifyUrl: "https://shop.example/api/payments/hashpay/notify", returnUrl: "https://shop.example/result" });
-    const payment = await adapter.create({ orderNo: "ORD-6", queryToken: "token", amount: 999, subject: "Order", notifyUrl: "", returnUrl: "https://shop.example/result" });
+    const payment = await adapter.create({ orderNo: "ORD-6", queryToken: "token", amount: 999, subject: "Order", notifyUrl: "https://shop.example/api/payments/hashpay/notify", returnUrl: "https://shop.example/result" });
     assert.deepEqual(payment, { mode: "redirect", url: "https://hashpay.example/checkout", paymentOrderNo: "HP-1" });
     assert.equal(request!.headers.get("X-Merchant-Id"), "merchant-1");
     assert.ok(request!.headers.get("X-Signature"));
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("HashPay callbacks reject invalid decrypted business fields", async () => {
+  const adapter = createProviderAdapter("HASHPAY", { schemaVersion: 1, baseUrl: "https://hashpay.example", merchantId: "merchant-1", privateKey: testPrivateKey, currency: "USD", notifyUrl: "https://shop.example/api/payments/hashpay/notify", returnUrl: "https://shop.example/result" });
+  const timestamp = Math.floor(Date.now() / 1000);
+  for (const payload of [
+    { merchantNo: "", amount: 1, status: "paid" },
+    { merchantNo: "ORD-HP-1", amount: 0, status: "paid" },
+    { merchantNo: "ORD-HP-1", amount: "invalid", status: "paid" },
+  ]) {
+    const result = await adapter.verify({ payload: {}, rawBody: await encryptHashpayCallback({ timestamp, payload }) });
+    assert.equal(result.verified, false);
+    assert.equal(result.message, "HASHPAY_CALLBACK_INVALID");
+  }
+  const invalidTimestamp = await adapter.verify({ payload: {}, rawBody: await encryptHashpayCallback({ timestamp: "not-an-integer", payload: { merchantNo: "ORD-HP-1", amount: 1 } }) });
+  assert.equal(invalidTimestamp.verified, false);
 });
 
 test("Epay and BEpusdt callbacks enforce signed provider status", async () => {
@@ -280,7 +312,9 @@ test("Epay and BEpusdt callbacks enforce signed provider status", async () => {
   const payload = { order_id: "ORD-7", trade_id: "TRADE-7", amount: "1.00", status: "2", optional: "" };
   const canonical = Object.entries(payload).filter(([, value]) => value !== "").sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}=${value}`).join("&");
   const signature = createHash("md5").update(`${canonical}secret`).digest("hex");
-  const bepusdtResult = await bepusdt.verify({ payload: { ...payload, signature } });
+  const rawBody = JSON.stringify({ ...payload, signature });
+  const normalized = normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/bepusdt/notify", rawBody, "BEPUSDT");
+  const bepusdtResult = await bepusdt.verify({ payload: normalized, rawBody });
   assert.equal(bepusdtResult.verified, true);
   assert.equal(bepusdtResult.status, "PAID");
 });
@@ -293,6 +327,25 @@ test("BEpusdt create rejects incomplete or non-success gateway responses", async
     await assert.rejects(() => adapter.create({ orderNo: "ORD-8", queryToken: "token", amount: 100, subject: "Order", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" }), /BEPUSDT_CREATE_FAILED/);
     globalThis.fetch = async () => new Response(JSON.stringify({ status_code: 400, data: { payment_url: "https://cashier.example/pay" } }), { status: 200 });
     await assert.rejects(() => adapter.create({ orderNo: "ORD-9", queryToken: "token", amount: 100, subject: "Order", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" }), /BEPUSDT_CREATE_FAILED/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("provider creates reject successful responses without third-party order IDs", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const bepusdt = createProviderAdapter("BEPUSDT", { schemaVersion: 1, baseUrl: "https://bepusdt.example", appSecret: "secret", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
+    globalThis.fetch = async () => new Response(JSON.stringify({ status_code: 200, data: { payment_url: "https://cashier.example/pay" } }), { status: 200 });
+    await assert.rejects(() => bepusdt.create({ orderNo: "ORD-ID-1", queryToken: "token", amount: 100, subject: "Order", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" }), /BEPUSDT_CREATE_FAILED/);
+
+    const stripe = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" });
+    globalThis.fetch = async () => new Response(JSON.stringify({ url: "https://checkout.stripe.example/session" }), { status: 200 });
+    await assert.rejects(() => stripe.create({ orderNo: "ORD-ID-2", queryToken: "token", amount: 100, subject: "Order", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" }), /STRIPE_CREATE_FAILED/);
+
+    const hashpay = createProviderAdapter("HASHPAY", { schemaVersion: 1, baseUrl: "https://hashpay.example", merchantId: "merchant-1", privateKey: testPrivateKey, currency: "USD", notifyUrl: "https://shop.example/api/payments/hashpay/notify", returnUrl: "https://shop.example/result" });
+    globalThis.fetch = async () => new Response(JSON.stringify({ checkoutUrl: "https://hashpay.example/checkout", order: {} }), { status: 200 });
+    await assert.rejects(() => hashpay.create({ orderNo: "ORD-ID-3", queryToken: "token", amount: 100, subject: "Order", notifyUrl: "https://shop.example/api/payments/hashpay/notify", returnUrl: "https://shop.example/result" }), /HASHPAY_CREATE_FAILED/);
   } finally {
     globalThis.fetch = originalFetch;
   }

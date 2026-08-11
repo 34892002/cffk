@@ -155,6 +155,7 @@ export const errorMessages: Record<string, string> = {
   PRODUCT_STOCK_NOT_ENOUGH: "库存不足，请调整数量后重试。",
   PRODUCT_FIXED_CONTENT_MISSING: "商品发货配置不完整，暂时不能购买。",
   CONTACT_VALUE_REQUIRED: "请填写联系方式。",
+  CONTACT_EMAIL_INVALID: "请输入有效的联系邮箱。",
   RECEIVER_INFO_REQUIRED: "请填写完整收件信息。",
   DISCOUNT_CODE_NOT_FOUND: "优惠码不存在。",
   DISCOUNT_CODE_DISABLED: "优惠码已停用。",

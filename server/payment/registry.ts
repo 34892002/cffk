@@ -28,8 +28,8 @@ export type ProviderDefinition = {
 };
 
 const common = {
-  notifyUrl: { key: "notifyUrl", label: "回调地址", type: "url" as const },
-  returnUrl: { key: "returnUrl", label: "返回地址", type: "url" as const },
+  notifyUrl: { key: "notifyUrl", label: "回调地址", type: "url" as const, required: true },
+  returnUrl: { key: "returnUrl", label: "返回地址", type: "url" as const, required: true },
 };
 
 export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDefinition> = {

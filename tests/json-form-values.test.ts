@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   buildJsonFormSubmission,
+  getJsonFormErrors,
   mergeJsonFormValues,
   normalizeJsonFormInputValue,
   redactJsonFormValues,
@@ -32,8 +33,22 @@ describe("JSON form values", () => {
     expect(() => validateJsonFormValues(fields, { ...valid, port: 0 })).toThrow("Invalid JSON form field: port");
     expect(() => validateJsonFormValues(fields, { ...valid, mode: "unknown" })).toThrow("Invalid JSON form field: mode");
     expect(() => validateJsonFormValues(fields, { ...valid, replyTo: "invalid" })).toThrow("Invalid JSON form field: replyTo");
+    expect(() => validateJsonFormValues(fields, { ...valid, replyTo: "Sender <reply@example.com>" })).toThrow("Invalid JSON form field: replyTo");
+    expect(() => validateJsonFormValues(fields, { ...valid, replyTo: "用户@example.com" })).toThrow("Invalid JSON form field: replyTo");
     expect(() => validateJsonFormValues(fields, { ...valid, endpoint: "ftp://api.example.com" })).toThrow("Invalid JSON form field: endpoint");
     expect(() => validateJsonFormValues(fields, { ...valid, host: "" })).toThrow("Required JSON form field: host");
+  });
+
+  test("builds frontend errors from the same JSON definition", () => {
+    expect(getJsonFormErrors(fields, { host: "", port: 0, mode: "unknown", replyTo: "invalid", endpoint: "ftp://api.example.com" }, ["password"])).toEqual({
+      host: "请填写Host。",
+      port: "Port格式无效。",
+      mode: "Mode格式无效。",
+      replyTo: "Reply to格式无效。",
+      endpoint: "Endpoint格式无效。",
+    });
+    expect(getJsonFormErrors(fields, { host: "smtp.example.com", port: 465, mode: "plain", password: "" }, ["password"])).toEqual({});
+    expect(getJsonFormErrors(fields, { host: "smtp.example.com", port: 465, mode: "plain", password: null }, ["password"]).password).toBe("请填写Password。");
   });
 
   test("redacts secret values and returns configured field names", () => {

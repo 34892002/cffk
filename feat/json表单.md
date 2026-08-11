@@ -188,7 +188,7 @@ D1 `configJson` 保存 Provider 运行所需的完整配置，包括真实 API K
 | `switch` | `Switch` | `boolean` |
 | `textarea` | `Textarea` | `string` |
 
-组件只负责输入和基础交互。服务端 parser 始终是最终校验边界。
+生成表单在提交前必须通过共享的 `getJsonFormErrors()` 直接执行 definition 中的 `required`、类型、范围、选项、邮箱和 URL 约束，并把错误显示到对应控件。服务端仍使用相同 definition 再校验一次，不能依赖可绕过的浏览器校验。专用展示控件（例如支付回调和返回地址）可以替换默认输入外观，但不能跳过 definition 校验。
 
 ## 8. 第三方协议 JSON
 
@@ -227,12 +227,13 @@ type ProviderProtocolDefinition = {
 统一类型和纯函数位于 `lib/json-form-values.ts`：
 
 - `normalizeJsonFormInputValue()`：浏览器输入规范化；
+- `getJsonFormErrors()`：根据同一 definition 生成前端字段错误；
 - `buildJsonFormSubmission()`：生成唯一的 `values` 提交对象；
 - `mergeJsonFormValues()`：服务端白名单校验与 Secret 合并；
 - `validateJsonFormValues()`：根据 definition 执行必填、类型、范围、选项、邮箱和 URL 校验；
 - `redactJsonFormValues()`：读取时移除 Secret 原文并生成 `configuredSecrets`。
 
-邮件和支付必须复用这些函数。Provider definition 可以分别维护在各自 registry 中，但字段类型和提交语义不得分叉。
+邮件和支付必须复用 `JsonFormFields` 和这些函数。Provider definition 可以分别维护在各自 registry 中，但字段渲染、前端校验、字段类型和提交语义不得分叉。
 
 ## 10. 测试要求
 
@@ -245,7 +246,8 @@ type ProviderProtocolDefinition = {
 - 非空字符串替换旧值；
 - `null` 清除旧值；
 - 非字符串 Secret 被拒绝；
-- required、类型、数值范围、select / multi-select 选项、邮箱和 URL 约束被服务端执行；
+- required、类型、数值范围、select / multi-select 选项、邮箱和 URL 约束被前端共享校验和服务端校验执行；
+- 已保存 Secret 留空时前端允许保留，显式清除必填 Secret 时前后端均拒绝；
 - 页面提交构造器不会生成 Secret 操作对象。
 
 各 Provider 测试继续覆盖 parser、最终 `configJson` 和领域规则，不重复实现通用 Secret 状态机测试。
@@ -253,7 +255,7 @@ type ProviderProtocolDefinition = {
 ## 11. 验收标准
 
 - 项目只有一套 JSON 表单字段类型和提交语义；
-- 邮件、支付及后续 Provider 都只提交 `{ values }`；
+- 邮件、支付及后续 Provider 都使用共享字段组件、共享 definition 校验，并且只提交 `{ values }`；
 - 不存在 `secretUpdates`、`keepExisting`、`masked` 等并行协议；
 - D1 保存完整运行时配置，读取接口只返回普通值和 `configuredSecrets`；
 - 未知字段、无效类型和缺少必填 Secret 的配置不能保存，也不能被运行时读取为有效配置；

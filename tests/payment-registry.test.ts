@@ -34,4 +34,6 @@ test("payment provider configs reject unknown fields, invalid types, and invalid
   assert.throws(() => parseProviderConfig("EPAY", JSON.stringify({ ...validConfigs.EPAY, epayChannels: ["invalid"] })), /Invalid JSON form field: epayChannels/);
   assert.throws(() => parseProviderConfig("ALIPAY", JSON.stringify({ ...validConfigs.ALIPAY, modes: [] })), /Required JSON form field: modes/);
   assert.throws(() => parseProviderConfig("STRIPE", JSON.stringify({ ...validConfigs.STRIPE, currency: "eur" })), /Invalid JSON form field: currency/);
+  assert.throws(() => parseProviderConfig("EPAY", JSON.stringify({ ...validConfigs.EPAY, notifyUrl: "" })), /Required JSON form field: notifyUrl/);
+  assert.throws(() => parseProviderConfig("EPAY", JSON.stringify({ ...validConfigs.EPAY, returnUrl: "" })), /Required JSON form field: returnUrl/);
 });

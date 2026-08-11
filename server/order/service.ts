@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { automaticDeliveryJob, order, orderDelivery, product } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { isJsonFormEmail } from "@/lib/json-form-values";
 import { canConfirmPayment } from "@/lib/order-state";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { validateDiscountForItem, positiveInteger } from "@/server/discount/service";
@@ -57,6 +58,13 @@ function generateQueryToken() {
   return crypto.randomUUID().replace(/-/g, "");
 }
 
+export function normalizeOrderContact(contactType: ContactType, value: string | undefined) {
+  const normalized = value?.trim() || null;
+  if (!normalized) fail("CONTACT_VALUE_REQUIRED");
+  if (contactType === "EMAIL" && !isJsonFormEmail(normalized)) fail("CONTACT_EMAIL_INVALID");
+  return normalized;
+}
+
 async function reservePhysicalStock(database: D1Database, productId: number, quantity: number) {
   const result = await database.prepare("UPDATE product SET physicalStock = physicalStock - ?, updatedAt = ? WHERE id = ? AND physicalStock >= ?").bind(quantity, Date.now(), productId, quantity).run();
   return result.meta.changes === 1;
@@ -79,7 +87,7 @@ export async function createOrder(database: D1Database, input: CreateOrderInput)
   const db = createDrizzleDb(database);
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   const requestedQuantity = positiveInteger(input.quantity, "QUANTITY");
-  const contactValue = input.contactValue?.trim() || null;
+  const contactValue = normalizeOrderContact(input.contactType, input.contactValue);
   const receiverInfo = input.receiverInfo?.trim() || null;
   const [item] = await db.select().from(product).where(and(eq(product.id, productId), eq(product.status, "ACTIVE"))).limit(1);
   if (!item) fail("PRODUCT_NOT_AVAILABLE");
@@ -90,7 +98,6 @@ export async function createOrder(database: D1Database, input: CreateOrderInput)
   if (item.deliveryType === "CARD_AUTO" && (await countAvailableCards(database, item.id)) < quantity) fail("PRODUCT_STOCK_NOT_ENOUGH");
   if (item.deliveryType === "FIXED_CARD" && !item.fixedDeliveryContent?.trim()) fail("PRODUCT_FIXED_CONTENT_MISSING");
   if (item.deliveryType === "EXPRESS" && !receiverInfo) fail("RECEIVER_INFO_REQUIRED");
-  if (!contactValue) fail("CONTACT_VALUE_REQUIRED");
 
   const originalAmount = item.price * quantity;
   let discountId: number | null = null;

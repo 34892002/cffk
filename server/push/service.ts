@@ -3,7 +3,7 @@ import { createDrizzleDb } from "@/database/drizzle";
 import { adminBootstrap, emailTemplate, order, orderDelivery, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry, siteSetting, user } from "@/database/drizzle/schema";
 import { parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { parseEmailProviderConfigForKind, type EmailProviderKind } from "@/server/push/provider-definitions";
-import { parseEmailApiSuccessResponse, pushRetryDelayMs, renderPushTemplate } from "@/lib/push-utils";
+import { buildSmtpMessage, parseEmailApiSuccessResponse, pushRetryDelayMs, renderPushTemplate } from "@/lib/push-utils";
 import { sanitizeDatabaseLogText } from "@/server/database-log-sanitizer";
 import type { PushChannel, PushDispatchInput, PushDispatchResult, PushRecipient } from "./types";
 
@@ -175,7 +175,7 @@ async function sendEmail(database: D1Database, runtime: Runtime, input: PushDisp
     } else {
       const { WorkerMailer } = await import("worker-mailer");
       const password = provider.password;
-      await WorkerMailer.send({ host: provider.host, port: provider.port, secure: provider.secure, credentials: { username: provider.username, password }, authType: provider.authType ?? "plain" }, { from: { email: provider.from, name: provider.fromName }, to: recipient, reply: provider.replyTo, subject, text: body, ...(template.format === "html" ? { html: body } : {}) });
+      await WorkerMailer.send({ host: provider.host, port: provider.port, secure: provider.secure, credentials: { username: provider.username, password }, authType: provider.authType ?? "plain" }, buildSmtpMessage({ from: provider.from, fromName: provider.fromName, to: recipient, replyTo: provider.replyTo, subject, body, format: template.format }));
       result = {};
     }
     await writeResult(database, taskId, "SUCCESS", attemptCount, { provider: providerRecord.provider, subject, messageId: result.messageId });

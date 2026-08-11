@@ -6,6 +6,17 @@ export function pushRetryDelayMs(attemptCount: number) {
   return Math.min(60 * 60 * 1000, 60 * 1000 * 2 ** Math.max(0, attemptCount - 1));
 }
 
+export function buildSmtpMessage(input: { from: string; fromName?: string; to: string; replyTo?: string; subject: string; body: string; format: "text" | "html" }) {
+  return {
+    from: input.fromName ? { email: input.from, name: input.fromName } : input.from,
+    to: input.to,
+    ...(input.replyTo ? { reply: input.replyTo } : {}),
+    subject: input.subject,
+    text: input.body,
+    ...(input.format === "html" ? { html: input.body } : {}),
+  };
+}
+
 export function parseEmailApiSuccessResponse(body: string, maxLength = 64 * 1024) {
   if (body.length > maxLength) throw new Error("EMAIL_SEND_FAILED");
   if (!body.trim()) return {};

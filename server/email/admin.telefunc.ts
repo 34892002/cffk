@@ -3,6 +3,7 @@ import { and, asc, count, eq, inArray, ne } from "drizzle-orm";
 
 import { emailTemplate, pushChannelConfig, pushLog } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { isJsonFormEmail } from "@/lib/json-form-values";
 import { formatDateInTimezone } from "@/lib/site-timezone";
 import { parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { getEmailTemplateDefinition } from "@/server/email/template-definitions";
@@ -162,7 +163,7 @@ function testDeliveryError(result: PushDispatchResult) {
 async function sendTestEmail(input: { to: string; customContent?: string; providerConfigId?: number }) {
   const { database, runtime, adminUserId } = getAdminContext();
   const recipient = input.to.trim();
-  if (!/^\S+@\S+\.\S+$/.test(recipient)) appError("EMAIL_RECIPIENT_INVALID");
+  if (!isJsonFormEmail(recipient)) appError("EMAIL_RECIPIENT_INVALID");
 
   const settings = await getSiteSettings(database);
   const results = await dispatchPush(database, runtime, { scene: "TEST", messageType: "ADMIN", recipient: { type: "ADMIN", address: recipient }, source: `admin:test:${adminUserId}:${crypto.randomUUID()}`, providerConfigId: input.providerConfigId, variables: { siteName: settings.siteName, sentAt: formatDateInTimezone(new Date(), settings.timezone, { dateStyle: "medium", timeStyle: "medium" }), customContent: input.customContent?.trim() || "这是一封测试邮件。" } });

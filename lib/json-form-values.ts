@@ -22,6 +22,10 @@ export type JsonFormDefinition = {
   defaults: JsonFormValues;
 };
 
+export function isJsonFormEmail(value: string) {
+  return /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/.test(value);
+}
+
 export function normalizeJsonFormInputValue(type: string, value: unknown): JsonFormInputValue {
   if (type !== "number") return typeof value === "string" ? value : "";
   if (typeof value === "number") return Number.isFinite(value) ? value : "";
@@ -30,39 +34,47 @@ export function normalizeJsonFormInputValue(type: string, value: unknown): JsonF
   return Number.isFinite(number) ? number : "";
 }
 
+type JsonFormValidationIssue = "required" | "invalid";
+
+function jsonFormValidationIssue(field: JsonFormFieldDefinition, value: unknown, configuredSecret = false): JsonFormValidationIssue | null {
+  const missing = value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
+  if (missing) return field.required && !(field.secret && configuredSecret && value !== null) ? "required" : null;
+  if (field.type === "number") return typeof value !== "number" || !Number.isFinite(value) || (field.min !== undefined && value < field.min) || (field.max !== undefined && value > field.max) ? "invalid" : null;
+  if (field.type === "switch") return typeof value !== "boolean" ? "invalid" : null;
+  if (field.type === "multi_select") {
+    const allowed = new Set(field.options?.map((option) => option.value) ?? []);
+    return !Array.isArray(value) || value.some((item) => typeof item !== "string" || !allowed.has(item)) ? "invalid" : null;
+  }
+  if (typeof value !== "string") return "invalid";
+  if (field.type === "select" && !field.options?.some((option) => option.value === value)) return "invalid";
+  if (field.type === "email" && !isJsonFormEmail(value)) return "invalid";
+  if (field.type === "url") {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return "invalid";
+    } catch {
+      return "invalid";
+    }
+  }
+  return null;
+}
+
+export function getJsonFormErrors(fields: readonly JsonFormFieldDefinition[], values: Record<string, unknown>, configuredSecrets: readonly string[] = []) {
+  const configured = new Set(configuredSecrets);
+  const errors: Record<string, string> = {};
+  for (const field of fields) {
+    const issue = jsonFormValidationIssue(field, values[field.key], configured.has(field.key));
+    if (issue === "required") errors[field.key] = `请填写${field.label}。`;
+    else if (issue === "invalid") errors[field.key] = `${field.label}格式无效。`;
+  }
+  return errors;
+}
+
 export function validateJsonFormValues(fields: readonly JsonFormFieldDefinition[], values: Record<string, unknown>) {
   for (const field of fields) {
-    const value = values[field.key];
-    const missing = value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
-    if (missing) {
-      if (field.required) throw new Error(`Required JSON form field: ${field.key}`);
-      continue;
-    }
-
-    if (field.type === "number") {
-      if (typeof value !== "number" || !Number.isFinite(value) || (field.min !== undefined && value < field.min) || (field.max !== undefined && value > field.max)) throw new Error(`Invalid JSON form field: ${field.key}`);
-      continue;
-    }
-    if (field.type === "switch") {
-      if (typeof value !== "boolean") throw new Error(`Invalid JSON form field: ${field.key}`);
-      continue;
-    }
-    if (field.type === "multi_select") {
-      const allowed = new Set(field.options?.map((option) => option.value) ?? []);
-      if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !allowed.has(item))) throw new Error(`Invalid JSON form field: ${field.key}`);
-      continue;
-    }
-    if (typeof value !== "string") throw new Error(`Invalid JSON form field: ${field.key}`);
-    if (field.type === "select" && !field.options?.some((option) => option.value === value)) throw new Error(`Invalid JSON form field: ${field.key}`);
-    if (field.type === "email" && !/^\S+@\S+\.\S+$/.test(value)) throw new Error(`Invalid JSON form field: ${field.key}`);
-    if (field.type === "url") {
-      try {
-        const url = new URL(value);
-        if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
-      } catch {
-        throw new Error(`Invalid JSON form field: ${field.key}`);
-      }
-    }
+    const issue = jsonFormValidationIssue(field, values[field.key]);
+    if (issue === "required") throw new Error(`Required JSON form field: ${field.key}`);
+    if (issue === "invalid") throw new Error(`Invalid JSON form field: ${field.key}`);
   }
   return values;
 }
