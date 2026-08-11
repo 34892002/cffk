@@ -62,7 +62,7 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     parseConfig: parseAlipayConfig,
     getChannels: (config) => {
       if (config.schemaVersion !== 1 || !("modes" in config)) return [];
-      return config.modes.flatMap((mode) => mode === "web" ? ["web", "wap"] : ["face_to_face"] as const);
+      return config.modes.map((mode) => mode === "web" ? "web" : "face_to_face");
     },
     createAdapter: (config) => createProviderAdapter("ALIPAY", config),
 

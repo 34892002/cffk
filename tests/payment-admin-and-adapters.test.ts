@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, sign as signData } from "node:crypto";
 import test from "node:test";
 import { AppError } from "../lib/app-error.ts";
+import { canonicalizeAlipayParameters } from "../lib/payment-utils.ts";
 import { mergePaymentProviderConfig, mergePaymentUrls } from "../server/payment/admin.telefunc.ts";
 import { createProviderAdapter } from "../server/payment/providers.ts";
 import { normalizePaymentCallbackPayload } from "../server/payment/callback-payload.ts";
@@ -215,6 +216,26 @@ test("Alipay web and face-to-face modes create signed provider requests", async 
     const faceUrl = new URL(requests[0]!.url);
     assert.equal(faceUrl.searchParams.get("method"), "alipay.trade.precreate");
     assert.equal(JSON.parse(faceUrl.searchParams.get("biz_content")!).product_code, "QR_CODE_OFFLINE");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Alipay callbacks require the configured application ID", async () => {
+  const adapter = createProviderAdapter("ALIPAY", { schemaVersion: 1, modes: ["web"], baseUrl: "https://openapi.alipay.example", appId: "expected-app", privateKey: testPrivateKey, alipayPublicKey: testPublicKey, notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
+  const payload = { app_id: "other-app", out_trade_no: "ORD-5", trade_no: "TRADE-5", total_amount: "12.34", trade_status: "TRADE_SUCCESS", sign_type: "RSA2" };
+  const sign = signData("RSA-SHA256", Buffer.from(canonicalizeAlipayParameters(payload, true)), testPrivateKey).toString("base64");
+  const result = await adapter.verify({ payload: { ...payload, sign } });
+  assert.equal(result.verified, false);
+});
+
+test("Alipay active query rejects a response for another merchant order", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ alipay_trade_query_response: { code: "10000", out_trade_no: "ORD-other", trade_no: "TRADE-5", total_amount: "12.34", trade_status: "TRADE_SUCCESS" } }), { status: 200 });
+  try {
+    const adapter = createProviderAdapter("ALIPAY", { schemaVersion: 1, modes: ["web"], baseUrl: "https://openapi.alipay.example", appId: "app-1", privateKey: testPrivateKey, alipayPublicKey: testPublicKey, notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
+    const result = await adapter.query!({ orderNo: "ORD-5", amount: 1234 });
+    assert.deepEqual(result, { provider: "ALIPAY", verified: false, orderNo: "ORD-5", paymentOrderNo: "TRADE-5", amount: 1234, status: "PENDING", message: "ALIPAY_QUERY_FAILED" });
   } finally {
     globalThis.fetch = originalFetch;
   }

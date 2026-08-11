@@ -278,6 +278,7 @@ export type QueriedOrder = {
   status: "PENDING" | "PAID" | "DELIVERED" | "CLOSED" | "FAILED";
   paymentStatus: "UNPAID" | "PAID" | "FAILED";
   deliveryStatus: "NOT_DELIVERED" | "DELIVERING" | "DELIVERED" | "FAILED";
+  paymentChannel: string | null;
   productName: string;
   quantity: number;
   amount: string;
@@ -290,7 +291,7 @@ export async function getOrderForQuery(database: D1Database, orderNo: string, qu
   const normalizedQueryToken = queryToken.trim();
   if (!normalizedOrderNo || !normalizedQueryToken) return null;
   const db = createDrizzleDb(database);
-  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, queryToken: order.queryToken, status: order.status, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, createdAt: order.createdAt }).from(order).where(eq(order.orderNo, normalizedOrderNo)).limit(1);
+  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, queryToken: order.queryToken, status: order.status, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, paymentChannel: order.paymentChannel, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, createdAt: order.createdAt }).from(order).where(eq(order.orderNo, normalizedOrderNo)).limit(1);
   if (!record || record.queryToken !== normalizedQueryToken) return null;
   const deliveries = await db.select({ contentSnapshot: orderDelivery.contentSnapshot }).from(orderDelivery).where(and(eq(orderDelivery.orderId, record.id), eq(orderDelivery.status, "SUCCESS"))).orderBy(asc(orderDelivery.id));
   return {
@@ -298,6 +299,7 @@ export async function getOrderForQuery(database: D1Database, orderNo: string, qu
     status: record.status,
     paymentStatus: record.paymentStatus,
     deliveryStatus: record.deliveryStatus,
+    paymentChannel: record.paymentChannel,
     productName: record.productName,
     quantity: record.quantity,
     amount: formatCentsAsYuan(record.amount),

@@ -23,6 +23,11 @@ test("payment provider configs accept each supported provider", () => {
   }
 });
 
+test("Alipay exposes one checkout channel per configured mode", () => {
+  const definition = getProviderDefinition("ALIPAY")!;
+  assert.deepEqual(definition.getChannels(parseProviderConfig("ALIPAY", JSON.stringify(validConfigs.ALIPAY))), ["web", "face_to_face"]);
+});
+
 test("payment provider configs reject unknown fields, invalid types, and invalid channels", () => {
   assert.throws(() => parseProviderConfig("STRIPE", JSON.stringify({ ...validConfigs.STRIPE, unknownField: "no" })), /PAYMENT_CONFIG_INVALID/);
   assert.throws(() => parseProviderConfig("STRIPE", JSON.stringify({ ...validConfigs.STRIPE, currency: 123 })), /currency must be a non-empty string/);
