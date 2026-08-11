@@ -16,17 +16,29 @@ function fromBase64(value: string) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-function pemBody(value: string, label: string) {
-  const match = value.match(new RegExp(`-----BEGIN ${label}-----([\\s\\S]+?)-----END ${label}-----`));
-  if (!match) throw new AlipayError(`ALIPAY_${label.replaceAll(" ", "_")}_REQUIRED`);
-  return fromBase64(match[1]);
+function keyBytes(value: string, label: string) {
+  const expectedLabel = label.replaceAll(" ", "_");
+  const normalized = value.replace(/\\n/g, "\n").trim();
+  if (!normalized) throw new AlipayError(`ALIPAY_${expectedLabel}_REQUIRED`);
+
+  const pem = normalized.match(new RegExp(`^-----BEGIN ${label}-----([\\s\\S]+?)-----END ${label}-----$`));
+  try {
+    return fromBase64(pem ? pem[1] : normalized);
+  } catch {
+    throw new AlipayError(`ALIPAY_${expectedLabel}_INVALID`);
+  }
+}
+
+function alipayGateway(baseUrl: string) {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  return normalized.endsWith("/gateway.do") ? normalized : `${normalized}/gateway.do`;
 }
 
 async function importPrivateKey(config: AlipayConfig) {
   try {
     return await crypto.subtle.importKey(
       "pkcs8",
-      pemBody(config.privateKey, "PRIVATE KEY"),
+      keyBytes(config.privateKey, "PRIVATE KEY"),
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
       ["sign"],
@@ -41,7 +53,7 @@ async function importPublicKey(config: AlipayConfig) {
   try {
     return await crypto.subtle.importKey(
       "spki",
-      pemBody(config.alipayPublicKey, "PUBLIC KEY"),
+      keyBytes(config.alipayPublicKey, "PUBLIC KEY"),
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
       ["verify"],
@@ -76,7 +88,7 @@ export async function createAlipayPayment(input: {
 }) {
   const config = parseAlipayConfig(input.configJson);
   if (!config.notifyUrl?.trim()) throw new AlipayError("ALIPAY_NOTIFY_URL_REQUIRED");
-  const gateway = `${config.baseUrl.replace(/\/+$/, "")}/gateway.do`;
+  const gateway = alipayGateway(config.baseUrl);
 
   const channel = input.paymentChannel === "face_to_face" ? "face_to_face" : input.paymentChannel === "wap" ? "wap" : "web";
   const configuredMode = channel === "face_to_face" ? "face_to_face" : "web";
@@ -131,7 +143,7 @@ export async function queryAlipayPayment(configJson: string, orderNo: string, am
     biz_content: JSON.stringify({ out_trade_no: orderNo }),
   };
   parameters.sign = await sign(parameters, config);
-  const response = await fetch(`${config.baseUrl.replace(/\/+$/, "")}/gateway.do`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(parameters) });
+  const response = await fetch(alipayGateway(config.baseUrl), { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(parameters) });
   const body = await response.json() as Record<string, unknown>;
   const result = body.alipay_trade_query_response as { code?: string; trade_status?: string; trade_no?: string; total_amount?: string } | undefined;
   const paid = result?.trade_status === "TRADE_SUCCESS" || result?.trade_status === "TRADE_FINISHED";

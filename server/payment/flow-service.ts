@@ -15,6 +15,12 @@ import type { PaymentChannel, PaymentProviderKind } from "./registry";
 
 type RuntimeContext = { env?: Record<string, unknown> & { DB?: D1Database } };
 
+function safePaymentCreateError(cause: unknown) {
+  return cause instanceof Error && /^[A-Z][A-Z0-9_:-]+$/.test(cause.message)
+    ? cause.message
+    : "PAYMENT_CREATE_FAILED";
+}
+
 export class PaymentFlowService {
   constructor(private readonly database: D1Database, private readonly runtime: Record<string, unknown> = {}) {}
 
@@ -44,7 +50,7 @@ export class PaymentFlowService {
     } catch (cause) {
       reportUnexpectedServerError("payment-create", cause, { orderId: created.id, orderNo: created.orderNo, provider: provider.provider });
       await repository.failAttempt(attemptId).catch(() => undefined);
-      await logs.writeBestEffort({ orderId: created.id, provider: provider.provider, orderNo: created.orderNo, eventType: "CREATE_FAILED", verifyStatus: "FAILED", message: "PAYMENT_CREATE_FAILED", payload: { error: cause instanceof Error ? cause.name : "unknown" } });
+      await logs.writeBestEffort({ orderId: created.id, provider: provider.provider, orderNo: created.orderNo, eventType: "CREATE_FAILED", verifyStatus: "FAILED", message: safePaymentCreateError(cause), payload: { error: safePaymentCreateError(cause) } });
       await closePendingOrder(this.database, created.id).catch((closeCause) => reportUnexpectedServerError("payment-close-failed-order", closeCause, { orderId: created.id, orderNo: created.orderNo }));
       appError("PAYMENT_CREATE_FAILED");
     }
@@ -75,7 +81,7 @@ export class PaymentFlowService {
     } catch (cause) {
       reportUnexpectedServerError("payment-resume", cause, { orderId: record.id, orderNo: record.orderNo, provider: provider.provider });
       await repository.failAttempt(attemptId).catch(() => undefined);
-      await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: provider.provider, orderNo: record.orderNo, eventType: "RESUME_FAILED", verifyStatus: "FAILED", message: "PAYMENT_CREATE_FAILED", payload: { error: cause instanceof Error ? cause.name : "unknown" } });
+      await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: provider.provider, orderNo: record.orderNo, eventType: "RESUME_FAILED", verifyStatus: "FAILED", message: safePaymentCreateError(cause), payload: { error: safePaymentCreateError(cause) } });
       appError("PAYMENT_CREATE_FAILED");
     }
   }

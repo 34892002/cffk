@@ -7,7 +7,13 @@ import { createProviderAdapter } from "../server/payment/providers.ts";
 import { normalizePaymentCallbackPayload } from "../server/payment/callback-payload.ts";
 import { getPaymentUrlDefaults } from "../server/payment/registry.ts";
 
-const testPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+const testKeyPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const testPrivateKey = testKeyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+const testPublicKey = testKeyPair.publicKey.export({ type: "spki", format: "pem" }).toString();
+
+function rawPemBody(pem: string) {
+  return pem.replace(/-----BEGIN [^-]+-----/g, "").replace(/-----END [^-]+-----/g, "").replace(/\s+/g, "");
+}
 
 const epayConfig = {
   schemaVersion: 1,
@@ -161,6 +167,25 @@ test("BEpusdt and Stripe adapters create provider requests and surface failures"
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("Alipay accepts raw Base64 keys and preserves a complete sandbox gateway URL", async () => {
+  const adapter = createProviderAdapter("ALIPAY", {
+    schemaVersion: 1,
+    modes: ["web"],
+    baseUrl: "https://openapi-sandbox.dl.alipaydev.com/gateway.do",
+    appId: "app-1",
+    privateKey: rawPemBody(testPrivateKey),
+    alipayPublicKey: rawPemBody(testPublicKey),
+    notifyUrl: "https://shop.example/notify",
+    returnUrl: "https://shop.example/result",
+  });
+
+  const payment = await adapter.create({ orderNo: "ORD-raw-key", queryToken: "token", amount: 1234, subject: "Order", channel: "web", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
+  const url = new URL(payment.url!);
+  assert.equal(url.pathname, "/gateway.do");
+  assert.equal(url.searchParams.get("method"), "alipay.trade.page.pay");
+  assert.ok(url.searchParams.get("sign"));
 });
 
 test("Alipay web and face-to-face modes create signed provider requests", async () => {
