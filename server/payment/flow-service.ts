@@ -24,7 +24,7 @@ export class PaymentFlowService {
     const provider = await getEnabledPaymentProvider(this.database, input.paymentProvider);
     if (!provider) appError("PAYMENT_PROVIDER_NOT_AVAILABLE");
     const channel = input.paymentChannel ?? provider.channels[0];
-    if (!channel || !provider.channels.includes(channel)) appError("PAYMENT_CHANNEL_INVALID");
+    if (provider.channels.length > 0 && (!channel || !provider.channels.includes(channel))) appError("PAYMENT_CHANNEL_INVALID");
     const created = await createOrder(this.database, { ...input, paymentChannel: channel, allowPendingPayment: true } as CreateOrderInput);
     const logs = new PaymentLogService(this.database);
     if (created.amount === 0) {

@@ -14,6 +14,7 @@
         <Card>
           <CardHeader><CardDescription>当前价格</CardDescription><CardTitle class="text-3xl">¥{{ data.price }}</CardTitle></CardHeader><form class="grid gap-6" @submit.prevent="onSubmit">
             <CardContent class="grid gap-4">
+              <p v-if="requiresPayment && !methods.length" class="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">当前没有可用的支付方式，请稍后再试。</p>
               <label class="grid gap-2 text-sm font-medium">联系方式<span class="text-destructive">*</span><Input v-model="contactValue" required /></label>
               <label class="grid gap-2 text-sm font-medium">购买数量<Input v-model.number="quantity" type="number" :min="data.minBuy" :max="purchaseLimit" required /><span v-if="isStockLimited" class="text-xs font-normal text-muted-foreground">可用库存：{{ availableStock }}</span></label>
               <label v-if="data.deliveryType === 'EXPRESS'" class="grid gap-2 text-sm font-medium">收件信息<Textarea v-model="receiverInfo" required rows="3" /></label>
@@ -23,7 +24,7 @@
               <label class="grid gap-2 text-sm font-medium">备注<Textarea v-model="buyerNote" rows="3" /></label>
 
               <div v-if="success" class="grid gap-2 break-all rounded-md border bg-muted/40 p-3 text-xs"><p>订单号：{{ success.orderNo }}</p><p>查询令牌：{{ success.queryToken }}</p><a v-if="success.payment?.mode === 'redirect'" :href="success.payment.url" class="text-sm font-medium">前往支付</a><template v-if="success.payment?.mode === 'qr'"><p>请扫码完成付款。</p><PaymentQrCode :value="success.payment.qrCode!" /></template><a v-if="!success.payment" href="/order" class="text-sm font-medium">查看我的订单</a></div>
-            </CardContent><CardFooter class="flex-col items-stretch gap-3"><Button type="submit" :disabled="loading || success !== null || isOutOfStock">{{ loading ? "处理中..." : isOutOfStock ? "暂时缺货" : requiresPayment ? "提交订单并支付" : "创建零元订单" }}</Button><p class="text-xs text-muted-foreground">支付金额与订单状态均由服务端校验。</p></CardFooter>
+            </CardContent><CardFooter class="flex-col items-stretch gap-3"><Button type="submit" :disabled="loading || success !== null || isOutOfStock || (requiresPayment && !methods.length)">{{ loading ? "处理中..." : isOutOfStock ? "暂时缺货" : requiresPayment ? "提交订单并支付" : "创建零元订单" }}</Button><p class="text-xs text-muted-foreground">支付金额与订单状态均由服务端校验。</p></CardFooter>
           </form>
         </Card>
       </aside>
