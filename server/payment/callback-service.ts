@@ -8,6 +8,10 @@ import { paymentRepository } from "./repository";
 import { getProviderDefinition } from "./registry";
 import type { PaymentProviderKind } from "./registry";
 
+export function paymentCallbackResponse(ok: boolean) {
+  return { body: ok ? "success" : "fail", contentType: "text/plain", status: ok ? 200 : 400 };
+}
+
 export class PaymentCallbackService {
   constructor(private readonly database: D1Database, private readonly runtime: Record<string, unknown> = {}) {}
 
@@ -64,10 +68,7 @@ export class PaymentCallbackService {
     }
   }
 
-  private response(provider: PaymentProviderKind, ok: boolean) {
-    const protocol = getProviderDefinition(provider)?.callbackResponse;
-    if (protocol === "bepusdt_json") return { body: JSON.stringify({ status_code: ok ? 200 : 500 }), contentType: "application/json", status: ok ? 200 : 400 };
-    if (protocol === "hashpay_json") return { body: JSON.stringify({ code: ok ? "SUCCESS" : "FAIL" }), contentType: "application/json", status: ok ? 200 : 400 };
-    return { body: ok ? "success" : "failure", contentType: "text/plain", status: ok ? 200 : 400 };
+  private response(_provider: PaymentProviderKind, ok: boolean) {
+    return paymentCallbackResponse(ok);
   }
 }

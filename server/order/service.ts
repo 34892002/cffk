@@ -1,4 +1,4 @@
-import { and, asc, eq, lt, or } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { automaticDeliveryJob, order, orderDelivery, product } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
@@ -318,9 +318,14 @@ export async function getOrderForQuery(database: D1Database, orderNo: string, qu
 
 export type OrderCloseMaintenanceResult = { scanned: number; closed: number };
 
-export async function closeExpiredPendingOrders(database: D1Database, cutoff: Date, limit = 100): Promise<OrderCloseMaintenanceResult> {
+export async function closeExpiredPendingOrders(database: D1Database, cutoff: Date, limit = 100, closeableAlipayOrderIds: readonly number[] = []): Promise<OrderCloseMaintenanceResult> {
   const db = createDrizzleDb(database);
-  const records = await db.select({ id: order.id }).from(order).where(and(eq(order.status, "PENDING"), eq(order.paymentStatus, "UNPAID"), lt(order.createdAt, cutoff))).limit(limit);
+  const records = await db.select({ id: order.id }).from(order).where(and(
+    eq(order.status, "PENDING"),
+    eq(order.paymentStatus, "UNPAID"),
+    lt(order.createdAt, cutoff),
+    or(sql`${order.paymentProvider} != 'ALIPAY'`, closeableAlipayOrderIds.length ? inArray(order.id, closeableAlipayOrderIds) : sql`0 = 1`),
+  )).limit(limit);
   let closed = 0;
   for (const record of records) if ((await closePendingOrder(database, record.id)).closed) closed += 1;
   return { scanned: records.length, closed };

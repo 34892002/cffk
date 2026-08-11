@@ -37,7 +37,7 @@ WHERE `categoryId` IS NULL;
 INSERT INTO `paymentProvider` (
   `provider`, `name`, `isEnabled`, `sort`, `configJson`, `createdAt`, `updatedAt`
 ) VALUES
-  ('ALIPAY', '支付宝', false, 10, '{"schemaVersion":1,"modes":["web","face_to_face"],"baseUrl":"https://openapi.alipay.com","appId":"","privateKey":"","alipayPublicKey":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
+  ('ALIPAY', '支付宝', false, 10, '{"schemaVersion":1,"modes":["web","face_to_face"],"baseUrl":"https://openapi.alipay.com","appId":"","sellerId":"","privateKey":"","alipayPublicKey":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
   ('EPAY', '易支付', false, 20, '{"schemaVersion":1,"baseUrl":"","pid":"","key":"","epayChannels":["alipay","wxpay"],"notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
   ('BEPUSDT', 'BEpusdt', false, 30, '{"schemaVersion":1,"baseUrl":"","appSecret":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
   ('STRIPE', 'Stripe', false, 40, '{"schemaVersion":1,"secretKey":"","webhookSecret":"","currency":"cny","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),

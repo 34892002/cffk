@@ -131,7 +131,7 @@ export async function createAlipayPayment(input: {
   return { mode: "face_to_face" as const, qrCode: result.qr_code, paymentOrderNo: result.out_trade_no };
 }
 
-export async function queryAlipayPayment(configJson: string, orderNo: string, amount: number) {
+export async function queryAlipayPayment(configJson: string, orderNo: string, _amount: number) {
   const config = parseAlipayConfig(configJson);
   const parameters: Record<string, string> = {
     app_id: config.appId,
@@ -146,15 +146,16 @@ export async function queryAlipayPayment(configJson: string, orderNo: string, am
   const response = await fetch(alipayGateway(config.baseUrl), { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(parameters) });
   const body = await response.json() as Record<string, unknown>;
   const result = body.alipay_trade_query_response as { code?: string; out_trade_no?: string; trade_status?: string; trade_no?: string; total_amount?: string } | undefined;
+  const returnedAmount = result?.total_amount === undefined ? undefined : Number(result.total_amount);
   const verified = response.ok && result?.code === "10000" && result.out_trade_no === orderNo;
   const paid = verified && (result.trade_status === "TRADE_SUCCESS" || result.trade_status === "TRADE_FINISHED");
-  return { provider: "ALIPAY" as const, verified, orderNo, paymentOrderNo: result?.trade_no ?? orderNo, amount: result?.total_amount ? Math.round(Number(result.total_amount) * 100) : amount, status: paid ? "PAID" as const : "PENDING" as const, message: verified ? "ALIPAY_QUERY" : "ALIPAY_QUERY_FAILED" };
+  return { provider: "ALIPAY" as const, verified, orderNo, paymentOrderNo: result?.trade_no ?? orderNo, amount: Number.isFinite(returnedAmount) ? Math.round(returnedAmount! * 100) : undefined, status: paid ? "PAID" as const : "PENDING" as const, message: verified ? "ALIPAY_QUERY" : "ALIPAY_QUERY_FAILED" };
 }
 
 export async function verifyAlipayCallback(configJson: string, parameters: Record<string, string>) {
   const config = parseAlipayConfig(configJson);
   const signature = parameters.sign;
-  if (!signature || parameters.sign_type !== "RSA2" || parameters.app_id !== config.appId) return false;
+  if (!signature || parameters.sign_type !== "RSA2" || parameters.app_id !== config.appId || parameters.seller_id !== config.sellerId) return false;
   try {
     return crypto.subtle.verify(
       "RSASSA-PKCS1-v1_5",

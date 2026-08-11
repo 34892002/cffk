@@ -7,6 +7,7 @@ export const alipayConfig = {
   modes: ["web", "face_to_face"],
   baseUrl: "https://openapi.alipay.com",
   appId: "2026xxxxxxxxxxxx",
+  sellerId: "2088xxxxxxxxxxxx",
   privateKey: "-----BEGIN PRIVATE KEY-----\n...",
   alipayPublicKey: "-----BEGIN PUBLIC KEY-----\n...",
   notifyUrl: "https://shop.example.com/api/payments/alipay/notify",

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign as signData } from "node:crypto";
+import { createHash, createHmac, generateKeyPairSync, sign as signData } from "node:crypto";
 import test from "node:test";
 import { AppError } from "../lib/app-error.ts";
 import { canonicalizeAlipayParameters } from "../lib/payment-utils.ts";
 import { mergePaymentProviderConfig, mergePaymentUrls } from "../server/payment/admin.telefunc.ts";
 import { createProviderAdapter } from "../server/payment/providers.ts";
 import { normalizePaymentCallbackPayload } from "../server/payment/callback-payload.ts";
+import { paymentCallbackResponse } from "../server/payment/callback-service.ts";
 import { getPaymentUrlDefaults } from "../server/payment/registry.ts";
 
 const testKeyPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -176,6 +177,7 @@ test("Alipay accepts raw Base64 keys and preserves a complete sandbox gateway UR
     modes: ["web"],
     baseUrl: "https://openapi-sandbox.dl.alipaydev.com/gateway.do",
     appId: "app-1",
+    sellerId: "seller-1",
     privateKey: rawPemBody(testPrivateKey),
     alipayPublicKey: rawPemBody(testPublicKey),
     notifyUrl: "https://shop.example/notify",
@@ -198,7 +200,7 @@ test("Alipay web and face-to-face modes create signed provider requests", async 
     return new Response(JSON.stringify({ alipay_trade_precreate_response: { code: "10000", out_trade_no: "ORD-5", qr_code: "https://qr.example/code" } }), { status: 200 });
   };
   try {
-    const adapter = createProviderAdapter("ALIPAY", { schemaVersion: 1, modes: ["web", "face_to_face"], baseUrl: "https://openapi.alipay.example", appId: "app-1", privateKey: testPrivateKey, alipayPublicKey: "unused-for-create", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
+    const adapter = createProviderAdapter("ALIPAY", { schemaVersion: 1, modes: ["web", "face_to_face"], baseUrl: "https://openapi.alipay.example", appId: "app-1", sellerId: "seller-1", privateKey: testPrivateKey, alipayPublicKey: "unused-for-create", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
     const web = await adapter.create({ orderNo: "ORD-5", queryToken: "token", amount: 1234, subject: "Order", channel: "web", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
     assert.equal(web.mode, "redirect");
     const webUrl = new URL(web.url!);
@@ -221,19 +223,21 @@ test("Alipay web and face-to-face modes create signed provider requests", async 
   }
 });
 
-test("Alipay callbacks require the configured application ID", async () => {
-  const adapter = createProviderAdapter("ALIPAY", { schemaVersion: 1, modes: ["web"], baseUrl: "https://openapi.alipay.example", appId: "expected-app", privateKey: testPrivateKey, alipayPublicKey: testPublicKey, notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
-  const payload = { app_id: "other-app", out_trade_no: "ORD-5", trade_no: "TRADE-5", total_amount: "12.34", trade_status: "TRADE_SUCCESS", sign_type: "RSA2" };
-  const sign = signData("RSA-SHA256", Buffer.from(canonicalizeAlipayParameters(payload, true)), testPrivateKey).toString("base64");
-  const result = await adapter.verify({ payload: { ...payload, sign } });
-  assert.equal(result.verified, false);
+test("Alipay callbacks require the configured application and seller IDs", async () => {
+  const adapter = createProviderAdapter("ALIPAY", { schemaVersion: 1, modes: ["web"], baseUrl: "https://openapi.alipay.example", appId: "expected-app", sellerId: "seller-1", privateKey: testPrivateKey, alipayPublicKey: testPublicKey, notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
+  for (const identity of [{ app_id: "other-app", seller_id: "seller-1" }, { app_id: "expected-app", seller_id: "other-seller" }]) {
+    const payload = { ...identity, out_trade_no: "ORD-5", trade_no: "TRADE-5", total_amount: "12.34", trade_status: "TRADE_SUCCESS", sign_type: "RSA2" };
+    const sign = signData("RSA-SHA256", Buffer.from(canonicalizeAlipayParameters(payload, true)), testPrivateKey).toString("base64");
+    const result = await adapter.verify({ payload: { ...payload, sign } });
+    assert.equal(result.verified, false);
+  }
 });
 
 test("Alipay active query rejects a response for another merchant order", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ alipay_trade_query_response: { code: "10000", out_trade_no: "ORD-other", trade_no: "TRADE-5", total_amount: "12.34", trade_status: "TRADE_SUCCESS" } }), { status: 200 });
   try {
-    const adapter = createProviderAdapter("ALIPAY", { schemaVersion: 1, modes: ["web"], baseUrl: "https://openapi.alipay.example", appId: "app-1", privateKey: testPrivateKey, alipayPublicKey: testPublicKey, notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
+    const adapter = createProviderAdapter("ALIPAY", { schemaVersion: 1, modes: ["web"], baseUrl: "https://openapi.alipay.example", appId: "app-1", sellerId: "seller-1", privateKey: testPrivateKey, alipayPublicKey: testPublicKey, notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
     const result = await adapter.query!({ orderNo: "ORD-5", amount: 1234 });
     assert.deepEqual(result, { provider: "ALIPAY", verified: false, orderNo: "ORD-5", paymentOrderNo: "TRADE-5", amount: 1234, status: "PENDING", message: "ALIPAY_QUERY_FAILED" });
   } finally {
@@ -259,14 +263,18 @@ test("HashPay adapter creates a signed provider request", async () => {
   }
 });
 
-test("Epay and BEpusdt callbacks reject invalid signatures", async () => {
+test("Epay and BEpusdt callbacks enforce signed provider status", async () => {
   const epay = createProviderAdapter("EPAY", epayConfig);
-  const epayResult = await epay.verify({ payload: { pid: "1000", out_trade_no: "ORD-7", money: "1.00", trade_status: "TRADE_SUCCESS", sign: "invalid", sign_type: "MD5" } });
+  const epayResult = await epay.verify({ payload: { pid: "1000", out_trade_no: "ORD-7", money: "1.00", trade_status: "TRADE_CLOSED", status: "success", sign: "invalid", sign_type: "MD5" } });
   assert.equal(epayResult.verified, false);
+  assert.equal(epayResult.status, "FAILED");
 
   const bepusdt = createProviderAdapter("BEPUSDT", { schemaVersion: 1, baseUrl: "https://bepusdt.example", appSecret: "secret", notifyUrl: "https://shop.example/notify", returnUrl: "https://shop.example/result" });
-  const bepusdtResult = await bepusdt.verify({ payload: { order_id: "ORD-7", trade_id: "TRADE-7", amount: "1.00", status: "2", signature: "invalid" } });
-  assert.equal(bepusdtResult.verified, false);
+  const payload = { order_id: "ORD-7", trade_id: "TRADE-7", amount: "1.00", status: "2", optional: "" };
+  const canonical = Object.entries(payload).filter(([, value]) => value !== "").sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}=${value}`).join("&");
+  const signature = createHash("md5").update(`${canonical}secret`).digest("hex");
+  const bepusdtResult = await bepusdt.verify({ payload: { ...payload, signature } });
+  assert.equal(bepusdtResult.verified, true);
   assert.equal(bepusdtResult.status, "PAID");
 });
 
@@ -281,6 +289,21 @@ test("BEpusdt create rejects incomplete or non-success gateway responses", async
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("Stripe completed callbacks require a paid Checkout Session", async () => {
+  const adapter = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" });
+  const rawBody = JSON.stringify({ type: "checkout.session.completed", data: { object: { id: "cs_1", metadata: { orderNo: "ORD-3" }, amount_total: 1234, currency: "usd", payment_status: "unpaid" } } });
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const signature = createHmac("sha256", "whsec_test").update(`${timestamp}.${rawBody}`).digest("hex");
+  const result = await adapter.verify({ payload: {}, rawBody, headers: new Headers({ "Stripe-Signature": `t=${timestamp},v1=${signature}` }) });
+  assert.equal(result.verified, true);
+  assert.equal(result.status, "PENDING");
+});
+
+test("payment callbacks use provider-compatible text responses", () => {
+  assert.deepEqual(paymentCallbackResponse(true), { body: "success", contentType: "text/plain", status: 200 });
+  assert.deepEqual(paymentCallbackResponse(false), { body: "fail", contentType: "text/plain", status: 400 });
 });
 
 test("Stripe active query verifies order ownership before confirming payment", async () => {

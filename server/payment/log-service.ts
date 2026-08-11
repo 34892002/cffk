@@ -1,3 +1,4 @@
+import { and, eq, gt } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { paymentLog } from "@/database/drizzle/schema";
 import { reportUnexpectedServerError } from "@/server/error-handling";
@@ -27,6 +28,15 @@ export class PaymentLogService {
       message: input.message ?? null,
       createdAt: new Date(),
     });
+  }
+
+  async hasRecent(orderId: number, eventType: string, verifyStatus: "PENDING" | "VERIFIED" | "FAILED", since: Date) {
+    const [record] = await createDrizzleDb(this.database)
+      .select({ id: paymentLog.id })
+      .from(paymentLog)
+      .where(and(eq(paymentLog.orderId, orderId), eq(paymentLog.eventType, eventType), eq(paymentLog.verifyStatus, verifyStatus), gt(paymentLog.createdAt, since)))
+      .limit(1);
+    return Boolean(record);
   }
 
   async writeBestEffort(input: Parameters<PaymentLogService["write"]>[0]) {

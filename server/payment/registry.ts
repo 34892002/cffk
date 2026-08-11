@@ -36,7 +36,7 @@ export type ProviderDefinition = {
   getChannels: (config: PaymentProviderConfig) => PaymentChannel[];
   createAdapter: (config: Record<string, unknown>) => PaymentAdapter;
 
-  callbackResponse: "text" | "bepusdt_json" | "hashpay_json";
+  callbackResponse: "text";
 };
 
 const common = {
@@ -53,12 +53,13 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
       { key: "modes", label: "支付模式", type: "multi_select", required: true, min: 1, options: [{ label: "网页/H5", value: "web" }, { label: "当面付", value: "face_to_face" }] },
       { key: "baseUrl", label: "网关地址", type: "url", required: true },
       { key: "appId", label: "应用 ID", type: "text", required: true },
+      { key: "sellerId", label: "商户 PID / seller_id", type: "text", required: true },
       { key: "privateKey", label: "应用私钥", type: "textarea", required: true, secret: true },
       { key: "alipayPublicKey", label: "支付宝公钥", type: "textarea", required: true, secret: true },
       common.notifyUrl,
       common.returnUrl,
     ],
-    defaults: { schemaVersion: 1, modes: ["web"], baseUrl: "https://openapi.alipay.com", appId: "", notifyUrl: "", returnUrl: "" },
+    defaults: { schemaVersion: 1, modes: ["web"], baseUrl: "https://openapi.alipay.com", appId: "", sellerId: "", notifyUrl: "", returnUrl: "" },
     parseConfig: parseAlipayConfig,
     getChannels: (config) => {
       if (config.schemaVersion !== 1 || !("modes" in config)) return [];
@@ -95,7 +96,7 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     parseConfig: parseBepusdtConfig,
     getChannels: () => [],
     createAdapter: (config) => createProviderAdapter("BEPUSDT", config),
-    callbackResponse: "bepusdt_json",
+    callbackResponse: "text",
   },
   STRIPE: {
     provider: "STRIPE",
@@ -117,7 +118,7 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     parseConfig: parseHashpayConfig,
     getChannels: () => [],
     createAdapter: (config) => createProviderAdapter("HASHPAY", config),
-    callbackResponse: "hashpay_json",
+    callbackResponse: "text",
   },
 };
 

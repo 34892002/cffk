@@ -7,6 +7,7 @@ import { telefuncHandler } from "./telefunc-handler";
 import vike from "@vikejs/hono";
 import { Hono, type Context } from "hono";
 import type { PaymentProviderKind } from "./payment/registry";
+import { PaymentLogService } from "./payment/log-service";
 
 function getApp() {
   const app = new Hono<{ Bindings: Record<string, unknown> & { DB: D1Database } }>();
@@ -19,13 +20,23 @@ function getApp() {
   for (const [provider, path] of [["ALIPAY", "/api/payments/alipay/notify"], ["EPAY", "/api/payments/epay/notify"], ["BEPUSDT", "/api/payments/bepusdt/notify"], ["STRIPE", "/api/payments/stripe/notify"], ["HASHPAY", "/api/payments/hashpay/notify"]] as const) {
     const handlePaymentCallback = async (context: Context<{ Bindings: Record<string, unknown> & { DB: D1Database } }>) => {
       const contentLength = Number(context.req.header("content-length"));
-      if (Number.isFinite(contentLength) && contentLength > MAX_PAYMENT_CALLBACK_BYTES) return context.text("failure", 400);
+      if (Number.isFinite(contentLength) && contentLength > MAX_PAYMENT_CALLBACK_BYTES) {
+        await new PaymentLogService(context.env.DB).writeBestEffort({ provider, eventType: "NOTIFY", verifyStatus: "FAILED", message: "PAYMENT_CALLBACK_TOO_LARGE" });
+        return context.text("failure", 400);
+      }
       const rawBody = await context.req.text();
-      const payload = normalizePaymentCallbackPayload(context.req.method, context.req.url, rawBody, provider);
+      let payload: Record<string, string>;
+      try {
+        payload = normalizePaymentCallbackPayload(context.req.method, context.req.url, rawBody, provider);
+      } catch (cause) {
+        await new PaymentLogService(context.env.DB).writeBestEffort({ provider, eventType: "NOTIFY", verifyStatus: "FAILED", message: "PAYMENT_CALLBACK_PAYLOAD_INVALID" });
+        throw cause;
+      }
       const result = await new PaymentCallbackService(context.env.DB, context.env).handle(provider as PaymentProviderKind, { payload, rawBody, headers: context.req.raw.headers });
       return context.body(result.body, result.status as 200 | 400, { "content-type": result.contentType });
     };
-    app.all(path, handlePaymentCallback);
+    if (provider === "ALIPAY" || provider === "EPAY") app.on(["GET", "POST"], path, handlePaymentCallback);
+    else app.post(path, handlePaymentCallback);
   }
   registerMediaRoutes(app);
   app.get("/api/security/turnstile", (context) => {

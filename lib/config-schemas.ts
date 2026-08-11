@@ -7,6 +7,7 @@ export type AlipayConfig = {
   modes: AlipayMode[];
   baseUrl: string;
   appId: string;
+  sellerId: string;
   privateKey: string;
   alipayPublicKey: string;
   notifyUrl: string;
@@ -143,6 +144,7 @@ export function parseAlipayConfig(json: string): AlipayConfig {
     modes,
     baseUrl: requireUrl(value.baseUrl, "baseUrl"),
     appId: requireString(value.appId, "appId"),
+    sellerId: requireString(value.sellerId, "sellerId"),
     privateKey: requireString(value.privateKey, "privateKey"),
     alipayPublicKey: requireString(value.alipayPublicKey, "alipayPublicKey"),
     notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
