@@ -43,7 +43,7 @@ import { onGetPushConfig, onSavePushConfig, type PushChannel, type PushMessageTy
 
 type Config = Awaited<ReturnType<typeof onGetPushConfig>>;
 type Policy = Config["policies"][number];
-const scenes: Array<{ value: PushScene; label: string; description: string }> = [{ value: "ORDER_PAID", label: "支付成功", description: "订单完成支付后发送通知。" }, { value: "DELIVERY_SUCCESS", label: "发货成功", description: "订单完成交付后发送通知。" }, { value: "DELIVERY_FAILED", label: "发货失败", description: "订单交付异常时发送通知。" }];
+const scenes: Array<{ value: PushScene; label: string; description: string }> = [{ value: "ORDER_PAID", label: "支付成功", description: "订单完成支付后发送通知。" }, { value: "DELIVERY_SUCCESS", label: "发货成功", description: "订单完成发货后发送通知。" }, { value: "DELIVERY_FAILED", label: "发货失败", description: "订单发货异常时发送通知。" }];
 const groups = [{ messageType: "NORMAL" as const, title: "普通消息", description: "发送给订单客户。客户消息只能投递到订单快照中的有效邮箱。" }, { messageType: "ADMIN" as const, title: "管理消息", description: "发送给唯一 Root 管理员。管理员专属渠道不会向客户联系方式投递。" }];
 const initialPolicies: Policy[] = [
   { messageType: "NORMAL", scene: "ORDER_PAID", channels: ["EMAIL"], isEnabled: true }, { messageType: "NORMAL", scene: "DELIVERY_SUCCESS", channels: ["EMAIL"], isEnabled: true }, { messageType: "NORMAL", scene: "DELIVERY_FAILED", channels: [], isEnabled: true },

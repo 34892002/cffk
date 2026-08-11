@@ -76,7 +76,7 @@ function formatDate(value: Date) {
 }
 
 function statusLabel(status: Data["recentOrders"][number]["status"]) {
-  return { PENDING: "待支付", PAID: "已支付", DELIVERED: "已交付", CLOSED: "已关闭", FAILED: "失败" }[status];
+  return { PENDING: "待支付", PAID: "已支付", DELIVERED: "已发货", CLOSED: "已关闭", FAILED: "失败" }[status];
 }
 
 function statusVariant(status: Data["recentOrders"][number]["status"]) {

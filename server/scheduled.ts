@@ -39,7 +39,7 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
     const failures = [
       ...(reconciliation.status === "rejected" ? [`支付主动查询: ${errorMessage(reconciliation.reason)}`] : []),
       ...(orderCleanup.status === "rejected" ? [`订单自动关闭: ${errorMessage(orderCleanup.reason)}`] : []),
-      ...(automaticDelivery.status === "rejected" ? [`自动交付: ${errorMessage(automaticDelivery.reason)}`] : []),
+      ...(automaticDelivery.status === "rejected" ? [`自动发货: ${errorMessage(automaticDelivery.reason)}`] : []),
       ...(pushRetryResult && pushRetryResult.exhausted > 0 ? [`推送重试已耗尽: ${pushRetryResult.exhausted}`] : []),
       ...(pushRetry.status === "rejected" ? [`推送重试: ${errorMessage(pushRetry.reason)}`] : []),
     ];

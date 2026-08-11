@@ -27,7 +27,7 @@ export const productFormSchema = z.object({
   sort: z.number().int().min(0),
 }).superRefine((value, ctx) => {
   if (value.deliveryType !== "FIXED_CARD" && value.maxBuy < value.minBuy) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["maxBuy"], message: "最大购买数不能小于最小购买数" });
-  if (value.deliveryType === "FIXED_CARD" && value.status === "ACTIVE" && !value.fixedDeliveryContent.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["fixedDeliveryContent"], message: "上架前必须填写固定交付内容" });
+  if (value.deliveryType === "FIXED_CARD" && value.status === "ACTIVE" && !value.fixedDeliveryContent.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["fixedDeliveryContent"], message: "上架前必须填写固定发货内容" });
 });
 
 export type ProductForm = z.infer<typeof productFormSchema>;

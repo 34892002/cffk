@@ -38,7 +38,7 @@ export const emailTemplateDefinitions: readonly EmailTemplateDefinition[] = [
   {
     scene: "DELIVERY_SUCCESS",
     title: "订单发货成功",
-    description: "订单自动或人工交付完成后发送给客户和管理员。",
+    description: "订单自动或人工发货完成后发送给客户和管理员。",
     variables: [
       { key: "siteName", label: "站点名称", example: "CFFK" },
       { key: "orderNo", label: "订单号", example: "CFFK202608080001" },
@@ -55,7 +55,7 @@ export const emailTemplateDefinitions: readonly EmailTemplateDefinition[] = [
   {
     scene: "DELIVERY_FAILED",
     title: "订单发货失败",
-    description: "订单交付失败、需要处理时发送给管理员。",
+    description: "订单发货失败、需要处理时发送给管理员。",
     variables: [
       { key: "siteName", label: "站点名称", example: "CFFK" },
       { key: "orderNo", label: "订单号", example: "CFFK202608080001" },

@@ -75,7 +75,7 @@ export const adminPages = {
     title: "订单管理",
     path: "/orders",
     pageTitle: "订单管理",
-    description: "查看订单、关闭未支付订单，并处理人工、物流及自动交付恢复。",
+    description: "查看订单、关闭未支付订单，并处理人工、物流及自动发货恢复。",
   },
   pushConfig: {
     title: "推送配置",

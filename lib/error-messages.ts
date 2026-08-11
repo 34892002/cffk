@@ -47,7 +47,7 @@ export const errorMessages: Record<string, string> = {
   PRODUCT_PURCHASE_NOTE_INVALID: "购买说明无效或超过长度限制。",
   PRODUCT_VISIBLE_STOCK_INVALID: "前台库存展示设置无效。",
   PRODUCT_CONTACT_REQUIRED_INVALID: "联系方式设置无效。",
-  FIXED_DELIVERY_CONTENT_INVALID: "固定交付内容无效或超过长度限制。",
+  FIXED_DELIVERY_CONTENT_INVALID: "固定发货内容无效或超过长度限制。",
   PHYSICAL_STOCK_INVALID: "库存数量无效。",
   PRODUCT_SORT_INVALID: "商品排序无效。",
   PRICE_INVALID: "商品价格必须为有效金额。",
@@ -153,7 +153,7 @@ export const errorMessages: Record<string, string> = {
 
   PRODUCT_NOT_AVAILABLE: "商品已下架或不可购买。",
   PRODUCT_STOCK_NOT_ENOUGH: "库存不足，请调整数量后重试。",
-  PRODUCT_FIXED_CONTENT_MISSING: "商品交付配置不完整，暂时不能购买。",
+  PRODUCT_FIXED_CONTENT_MISSING: "商品发货配置不完整，暂时不能购买。",
   CONTACT_VALUE_REQUIRED: "请填写联系方式。",
   RECEIVER_INFO_REQUIRED: "请填写完整收件信息。",
   DISCOUNT_CODE_NOT_FOUND: "优惠码不存在。",
@@ -170,8 +170,8 @@ export const errorMessages: Record<string, string> = {
   ORDER_CANNOT_CLOSE: "当前订单状态不能关闭。",
   ORDER_DELIVERY_NOT_COMPLETED: "订单尚未完成发货。",
   ORDER_DELIVERY_TYPE_INVALID: "该订单不支持此发货操作。",
-  FIXED_DELIVERY_CONTENT_MISSING: "订单交付内容不完整，请联系管理员。",
-  CARD_DELIVERY_COUNT_MISMATCH: "订单交付库存异常，请稍后重试。",
+  FIXED_DELIVERY_CONTENT_MISSING: "订单发货内容不完整，请联系管理员。",
+  CARD_DELIVERY_COUNT_MISMATCH: "订单发货库存异常，请稍后重试。",
   CARD_INVENTORY_SHORTAGE: "可用卡密库存不足，请调整数量后重试。",
   CARD_QUANTITY_INVALID: "购买数量无效。",
 
