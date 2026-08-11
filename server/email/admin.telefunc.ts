@@ -1,7 +1,8 @@
 import { and, asc, count, eq, inArray, ne } from "drizzle-orm";
+import { Abort } from "telefunc";
 
 import { emailTemplate, pushChannelConfig, pushLog } from "@/database/drizzle/schema";
-import { appError } from "@/lib/app-error";
+import { AppError, appError } from "@/lib/app-error";
 import { formatDateInTimezone } from "@/lib/site-timezone";
 import { parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { getEmailTemplateDefinition } from "@/server/email/template-definitions";
@@ -21,10 +22,20 @@ function getAdminContext() {
   return { database, runtime, db, adminUserId };
 }
 
-function requiredText(value: string, field: string) {
+function requiredText(value: unknown, field: string) {
+  if (typeof value !== "string") appError(`${field}_REQUIRED`);
   const normalized = value.trim();
-  if (!normalized) throw new Error(`${field}_REQUIRED`);
+  if (!normalized) appError(`${field}_REQUIRED`);
   return normalized;
+}
+
+async function abortAppError<T>(action: () => Promise<T>) {
+  try {
+    return await action();
+  } catch (cause) {
+    if (cause instanceof AppError) throw Abort({ code: cause.code });
+    throw cause;
+  }
 }
 
 export async function onGetEmailProviderDefinitions() {
@@ -52,7 +63,7 @@ export async function onGetEmailProviders() {
   });
 }
 
-export async function onSaveEmailProvider(input: SaveEmailProviderInput) {
+async function saveEmailProvider(input: SaveEmailProviderInput) {
   const { db } = getAdminContext();
   if (!input || input.channel !== "EMAIL" || (input.provider !== "API" && input.provider !== "SMTP" && input.provider !== "CLOUDFLARE") || typeof input.isEnabled !== "boolean" || !input.values) appError("EMAIL_PROVIDER_INVALID");
 
@@ -78,14 +89,14 @@ export async function onSaveEmailProvider(input: SaveEmailProviderInput) {
   return result[0];
 }
 
-export async function onDeleteEmailProvider(id: number) {
+async function deleteEmailProvider(id: number) {
   const { db } = getAdminContext();
   const result = await db.delete(pushChannelConfig).where(and(eq(pushChannelConfig.id, id), eq(pushChannelConfig.channel, "EMAIL"), eq(pushChannelConfig.isEnabled, false))).returning({ id: pushChannelConfig.id });
   if (!result[0]) appError("EMAIL_PROVIDER_DELETE_REJECTED");
   return result[0];
 }
 
-export async function onSetEmailProviderEnabled(id: number, isEnabled: boolean) {
+async function setEmailProviderEnabled(id: number, isEnabled: boolean) {
   const { db } = getAdminContext();
   const [target] = await db.select({ id: pushChannelConfig.id, provider: pushChannelConfig.provider }).from(pushChannelConfig).where(and(eq(pushChannelConfig.id, id), eq(pushChannelConfig.channel, "EMAIL"))).limit(1);
   if (!target) appError("EMAIL_PROVIDER_NOT_FOUND");
@@ -114,7 +125,7 @@ function templateVariables(value: string) {
   return [...value.matchAll(/{{\s*([A-Za-z0-9_.-]+)\s*}}/g)].map((match) => match[1]).filter((key): key is string => Boolean(key));
 }
 
-export async function onSaveEmailTemplate(input: { scene: PushScene; name: string; subject: string; body: string; format: "text" | "html" }) {
+async function saveEmailTemplate(input: { scene: PushScene; name: string; subject: string; body: string; format: "text" | "html" }) {
   const { db } = getAdminContext();
   const name = requiredText(input.name, "EMAIL_TEMPLATE_NAME");
   const definition = getEmailTemplateDefinition(input.scene);
@@ -126,7 +137,7 @@ export async function onSaveEmailTemplate(input: { scene: PushScene; name: strin
   const templateJson = JSON.stringify({ subject, body, format: input.format, variables });
   try { parseEmailTemplateConfig(templateJson); } catch { appError("EMAIL_TEMPLATE_INVALID"); }
   const result = await db.update(emailTemplate).set({ name, templateJson, updatedAt: new Date() }).where(eq(emailTemplate.scene, input.scene)).returning({ id: emailTemplate.id, scene: emailTemplate.scene });
-  if (!result[0]) throw new Error("EMAIL_TEMPLATE_NOT_FOUND");
+  if (!result[0]) appError("EMAIL_TEMPLATE_NOT_FOUND");
   return result[0];
 }
 
@@ -136,7 +147,7 @@ function testDeliveryError(result: PushDispatchResult) {
   appError("EMAIL_SEND_FAILED");
 }
 
-export async function onSendTestEmail(input: { to: string; customContent?: string; providerConfigId?: number }) {
+async function sendTestEmail(input: { to: string; customContent?: string; providerConfigId?: number }) {
   const { database, runtime, adminUserId } = getAdminContext();
   const recipient = input.to.trim();
   if (!/^\S+@\S+\.\S+$/.test(recipient)) appError("EMAIL_RECIPIENT_INVALID");
@@ -147,6 +158,26 @@ export async function onSendTestEmail(input: { to: string; customContent?: strin
   if (!result) appError("EMAIL_SEND_FAILED");
   testDeliveryError(result);
   return { messageId: result.messageId };
+}
+
+export function onSaveEmailProvider(input: SaveEmailProviderInput) {
+  return abortAppError(() => saveEmailProvider(input));
+}
+
+export function onDeleteEmailProvider(id: number) {
+  return abortAppError(() => deleteEmailProvider(id));
+}
+
+export function onSetEmailProviderEnabled(id: number, isEnabled: boolean) {
+  return abortAppError(() => setEmailProviderEnabled(id, isEnabled));
+}
+
+export function onSaveEmailTemplate(input: { scene: PushScene; name: string; subject: string; body: string; format: "text" | "html" }) {
+  return abortAppError(() => saveEmailTemplate(input));
+}
+
+export function onSendTestEmail(input: { to: string; customContent?: string; providerConfigId?: number }) {
+  return abortAppError(() => sendTestEmail(input));
 }
 
 export async function onGetEmailOverview() {

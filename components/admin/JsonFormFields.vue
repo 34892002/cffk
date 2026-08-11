@@ -17,7 +17,7 @@
     </template>
     <template v-else>
       <FieldLabel :for="fieldId(field)">{{ field.label }}<span v-if="field.required" class="text-destructive"> *</span></FieldLabel>
-      <Input :id="fieldId(field)" :model-value="stringValue(field.key)" :type="field.secret ? 'password' : field.type" :placeholder="secretPlaceholder(field)" autocomplete="off" :aria-invalid="Boolean(errors[field.key])" @update:model-value="setValue(field.key, field.type === 'number' ? Number($event) : $event)" />
+      <Input :id="fieldId(field)" :model-value="stringValue(field.key)" :type="field.secret ? 'password' : field.type" :placeholder="secretPlaceholder(field)" autocomplete="off" :aria-invalid="Boolean(errors[field.key])" @update:model-value="setValue(field.key, normalizeJsonFormInputValue(field.type, $event))" />
     </template>
     <FieldDescription v-if="field.description">{{ field.description }}</FieldDescription>
     <FieldDescription v-if="field.secret && secrets[field.key]?.configured">已保存敏感配置；留空则保持不变。</FieldDescription>
@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { normalizeJsonFormInputValue } from "@/lib/json-form-values";
 
 export type JsonFormValue = string | number | boolean | string[];
 export type JsonFormField = { key: string; label: string; type: "text" | "email" | "number" | "password" | "url" | "switch" | "select" | "multi_select" | "textarea"; required?: boolean; secret?: boolean; description?: string; options?: Array<{ label: string; value: string }> };

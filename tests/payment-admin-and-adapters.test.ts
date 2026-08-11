@@ -107,6 +107,15 @@ test("payment provider config preserves, replaces, and clears sensitive values",
   }));
   assert.equal(replaced.key, "new-secret");
 
+  const repaired = JSON.parse(mergePaymentProviderConfig({
+    provider: "EPAY",
+    currentConfigJson: JSON.stringify({ ...epayConfig, unknown: "stale" }),
+    values: { pid: epayConfig.pid, baseUrl: epayConfig.baseUrl, epayChannels: epayConfig.epayChannels, notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl },
+    secretUpdates: { key: { action: "value", value: "replacement-secret" } },
+  }));
+  assert.equal(repaired.key, "replacement-secret");
+  assert.equal("unknown" in repaired, false);
+
   assert.equal(appErrorCode(() => mergePaymentProviderConfig({
     provider: "EPAY",
     currentConfigJson: JSON.stringify(epayConfig),

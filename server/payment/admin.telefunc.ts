@@ -1,7 +1,8 @@
 import { asc, count, eq } from "drizzle-orm";
+import { Abort } from "telefunc";
 import { requireAdmin } from "@/server/telefunc-context";
 import { paymentLog, paymentProvider, siteSetting } from "@/database/drizzle/schema";
-import { appError } from "@/lib/app-error";
+import { AppError, appError } from "@/lib/app-error";
 import { getPaymentNotifyPath, getPaymentUrlDefaults, getProviderDefinition, paymentProviderDefinitions, parseProviderConfig, type PaymentProviderKind } from "./registry";
 import { paymentRepository } from "./repository";
 
@@ -48,19 +49,23 @@ export function mergePaymentProviderConfig(input: {
   if (!definition) appError("PAYMENT_PROVIDER_NOT_IMPLEMENTED");
   let existing: Record<string, unknown> = {};
   if (input.currentConfigJson) {
-    try { existing = JSON.parse(input.currentConfigJson) as Record<string, unknown>; } catch { existing = {}; }
+    try {
+      const parsed: unknown = JSON.parse(input.currentConfigJson);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) existing = parsed as Record<string, unknown>;
+    } catch { /* Invalid stored JSON cannot block a complete replacement. */ }
   }
+  const config: Record<string, unknown> = {};
   const allowed = new Set(definition.fields.map((field) => field.key));
   for (const key of Object.keys(input.values ?? {})) if (!allowed.has(key)) appError("PAYMENT_CONFIG_INVALID");
   for (const [key, update] of Object.entries(input.secretUpdates ?? {})) {
     const field = definition.fields.find((item) => item.key === key);
     if (!field?.secret || !update || !["keepExisting", "value", "clear"].includes(update.action)) appError("PAYMENT_CONFIG_INVALID");
-    if (update.action === "value") existing[key] = update.value;
-    if (update.action === "clear") delete existing[key];
+    if (update.action === "keepExisting" && existing[key] !== undefined) config[key] = existing[key];
+    if (update.action === "value") config[key] = update.value;
   }
-  for (const [key, value] of Object.entries(input.values ?? {})) existing[key] = value;
-  existing.schemaVersion = definition.schemaVersion;
-  const configJson = JSON.stringify(existing);
+  for (const [key, value] of Object.entries(input.values ?? {})) config[key] = value;
+  config.schemaVersion = definition.schemaVersion;
+  const configJson = JSON.stringify(config);
   try { parseProviderConfig(input.provider, configJson); } catch { appError("PAYMENT_CONFIG_INVALID"); }
   return configJson;
 }
@@ -101,7 +106,7 @@ export async function onGetPaymentProviderForm(input: { provider: PaymentProvide
   return getSafeForm(input.provider, record?.name ?? paymentProviderDefinitions[input.provider].title, record?.isEnabled ?? false, record?.sort ?? 0, record?.configJson ?? JSON.stringify(paymentProviderDefinitions[input.provider].defaults), settings?.siteUrl ?? null, record?.updatedAt);
 }
 
-export async function onSavePaymentProvider(input: {
+async function savePaymentProvider(input: {
   provider: PaymentProviderKind;
   name: string;
   isEnabled: boolean;
@@ -139,7 +144,7 @@ export async function onGetPaymentLogs(input?: { provider?: PaymentProviderKind;
   return { rows, total: total?.value ?? 0, page, pageSize };
 }
 
-export async function onValidatePaymentProviderConfig(input: {
+async function validatePaymentProviderConfig(input: {
   provider: PaymentProviderKind;
   values: Record<string, JsonValue>;
   secretUpdates: SecretUpdates;
@@ -155,7 +160,7 @@ export async function onValidatePaymentProviderConfig(input: {
   return { provider: input.provider, valid: true };
 }
 
-export async function onSetPaymentProviderEnabled(input: { provider: PaymentProviderKind; isEnabled: boolean }) {
+async function setPaymentProviderEnabled(input: { provider: PaymentProviderKind; isEnabled: boolean }) {
   const { db } = requireAdmin();
   const [record] = await db.select().from(paymentProvider).where(eq(paymentProvider.provider, input.provider)).limit(1);
   if (!record) appError("PAYMENT_PROVIDER_NOT_FOUND");
@@ -164,4 +169,25 @@ export async function onSetPaymentProviderEnabled(input: { provider: PaymentProv
   }
   await db.update(paymentProvider).set({ isEnabled: input.isEnabled, updatedAt: now() }).where(eq(paymentProvider.provider, input.provider));
   return { provider: input.provider, isEnabled: input.isEnabled };
+}
+
+async function abortAppError<T>(action: () => Promise<T>) {
+  try {
+    return await action();
+  } catch (cause) {
+    if (cause instanceof AppError) throw Abort({ code: cause.code });
+    throw cause;
+  }
+}
+
+export function onSavePaymentProvider(input: Parameters<typeof savePaymentProvider>[0]) {
+  return abortAppError(() => savePaymentProvider(input));
+}
+
+export function onValidatePaymentProviderConfig(input: Parameters<typeof validatePaymentProviderConfig>[0]) {
+  return abortAppError(() => validatePaymentProviderConfig(input));
+}
+
+export function onSetPaymentProviderEnabled(input: Parameters<typeof setPaymentProviderEnabled>[0]) {
+  return abortAppError(() => setPaymentProviderEnabled(input));
 }

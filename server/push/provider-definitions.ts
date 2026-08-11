@@ -96,12 +96,20 @@ function bool(values: Record<string, unknown>, key: string) {
   return values[key] === true;
 }
 
-function resolveSecret(key: string, update: SecretUpdate | undefined, existing?: { secret: string }) {
+function resolveSecret(update: SecretUpdate | undefined, existing?: { secret: string }) {
   if (update?.clear) return undefined;
   const value = update?.value?.trim();
   if (value) return { secret: value };
   if (update?.keepExisting && existing) return existing;
-  return existing;
+  return undefined;
+}
+
+function existingSecret(json: string | undefined, kind: "api" | "smtp") {
+  if (!json) return undefined;
+  const existing = parseStoredEmailProviderConfig(json);
+  if (kind === "api" && existing.kind === "api") return existing.apiKey;
+  if (kind === "smtp" && existing.kind === "smtp") return existing.password;
+  return undefined;
 }
 
 function normalizedConfig(config: EmailProviderConfig) {
@@ -115,14 +123,13 @@ export function parseStoredEmailProviderConfig(json: string) {
 }
 
 export function serializeEmailProviderConfig(input: SaveEmailProviderInput, existingJson?: string) {
-  const existing = existingJson ? parseStoredEmailProviderConfig(existingJson) : undefined;
   const values = input.values ?? {};
   let config: EmailProviderConfig;
   if (input.provider === "API") {
-    const apiKey = resolveSecret("apiKey", input.secrets?.apiKey, existing?.kind === "api" ? existing.apiKey : undefined);
+    const apiKey = resolveSecret(input.secrets?.apiKey, input.secrets?.apiKey?.keepExisting ? existingSecret(existingJson, "api") : undefined);
     config = { kind: "api", apiProvider: text(values, "apiProvider") === "RESEND" ? "RESEND" : "BREVO", endpoint: text(values, "endpoint"), apiKey: apiKey ?? { secret: "" }, from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}), timeoutMs: number(values, "timeoutMs", 10000) };
   } else if (input.provider === "SMTP") {
-    const password = resolveSecret("password", input.secrets?.password, existing?.kind === "smtp" ? existing.password : undefined);
+    const password = resolveSecret(input.secrets?.password, input.secrets?.password?.keepExisting ? existingSecret(existingJson, "smtp") : undefined);
     const authType = text(values, "authType");
     config = { kind: "smtp", host: text(values, "host"), port: number(values, "port", 587), secure: bool(values, "secure"), username: text(values, "username"), password: password ?? { secret: "" }, ...(authType === "login" || authType === "cram-md5" || authType === "plain" ? { authType } : {}), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
   } else {

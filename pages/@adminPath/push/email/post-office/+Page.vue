@@ -89,6 +89,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import MailSettingsLayout from "@/components/admin/MailSettingsLayout.vue";
+import { normalizeJsonFormInputValue } from "@/lib/json-form-values";
 import { runTelefunc } from "@/lib/telefunc-client";
 import { onDeleteEmailProvider, onGetEmailProviderDefinitions, onGetEmailProviders, onSaveEmailProvider, onSendTestEmail, onSetEmailProviderEnabled } from "@/server/email/admin.telefunc";
 
@@ -102,7 +103,7 @@ const currentDefinition = computed(() => definitions.value.find((item) => item.p
 const testProviderName = computed(() => providers.value.find((item) => item.id === testProviderId.value)?.name ?? "");
 function textValue(key: string) { const value = values[key]; return typeof value === "string" || typeof value === "number" ? value : ""; }
 function setTextValue(key: string, value: unknown) { values[key] = typeof value === "string" ? value : ""; }
-function setInputValue(key: string, type: string, value: unknown) { const text = typeof value === "string" ? value : ""; values[key] = type === "number" ? Number(text) : text; }
+function setInputValue(key: string, type: string, value: unknown) { const normalized = normalizeJsonFormInputValue(type, value); if (!Array.isArray(normalized)) values[key] = normalized; }
 function replaceRecord<T>(target: Record<string, T>, source: Record<string, T>) { for (const key of Object.keys(target)) delete target[key]; Object.assign(target, source); }
 function resetValues() { const definition = currentDefinition.value; if (!definition) return; replaceRecord(values, { ...definition.defaults }); replaceRecord(secretValues, {}); replaceRecord(clearSecrets, {}); replaceRecord(secrets, {}); }
 function startCreate() { name.value = ""; isEnabled.value = false; editingId.value = undefined; provider.value = definitions.value[0]?.provider ?? "API"; resetValues(); formVisible.value = true; }
