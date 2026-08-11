@@ -133,9 +133,23 @@ async function saveEmailTemplate(input: { scene: PushScene; name: string; subjec
   return result[0];
 }
 
+const testDeliveryErrorCodes = new Set([
+
+  "EMAIL_CLOUDFLARE_BINDING_UNAVAILABLE",
+  "EMAIL_CLOUDFLARE_SENDER_NOT_VERIFIED",
+  "EMAIL_CLOUDFLARE_SENDER_DOMAIN_UNAVAILABLE",
+  "EMAIL_CLOUDFLARE_RECIPIENT_NOT_ALLOWED",
+  "EMAIL_CLOUDFLARE_RECIPIENT_SUPPRESSED",
+  "EMAIL_CLOUDFLARE_CONTENT_TOO_LARGE",
+  "EMAIL_CLOUDFLARE_INVALID",
+  "EMAIL_CLOUDFLARE_RATE_LIMITED",
+  "EMAIL_CLOUDFLARE_FAILED",
+]);
+
 function testDeliveryError(result: PushDispatchResult) {
   if (result.status === "SUCCESS") return;
   if (result.reason === "EMAIL_TEMPLATE_NOT_AVAILABLE" || result.reason === "CHANNEL_NOT_AVAILABLE") appError(result.reason === "CHANNEL_NOT_AVAILABLE" ? "EMAIL_PROVIDER_NOT_AVAILABLE" : result.reason);
+  if (result.reason && testDeliveryErrorCodes.has(result.reason)) appError(result.reason);
   appError("EMAIL_SEND_FAILED");
 }
 

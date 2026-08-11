@@ -82,6 +82,15 @@
         "description": "用于签名会话。请输入随机值。",
         "secret": true,
         "required": true
+      },
+      "TURNSTILE_SITE_KEY": {
+        "description": "可选。Cloudflare Turnstile 前端站点 Key。",
+        "required": false
+      },
+      "TURNSTILE_SECRET_KEY": {
+        "description": "可选。Cloudflare Turnstile 服务端 Secret Key。",
+        "secret": true,
+        "required": false
       }
     }
   }

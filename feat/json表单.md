@@ -115,7 +115,7 @@ type JsonFormField = {
 | `email` | `Input type="email"` | `string` | 邮箱格式由服务端再次校验 |
 | `url` | `Input type="url"` | `string` | 地址由服务端再次校验 |
 | `number` | `Input type="number"` | `number` | 需要明确转换，不能把数字以字符串提交 |
-| `password` | `Input type="password"` | `string` | 与 Secret 处理配合使用 |
+| `password` | `Input type="password"` | `string` | 敏感原文仅在本次提交中传输；服务端保存到 D1，读取时只返回配置状态和掩码 |
 | `select` | `Select` | `string` | 只能提交定义中声明的单个选项值 |
 | `multi_select` | `Checkbox` 选项组或项目统一多选组件 | `string[]` | 只能提交定义中声明的选项值；至少一项等数量约束由服务端校验 |
 | `switch` | `Switch` | `boolean` | 未设置时使用默认值 |

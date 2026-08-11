@@ -1,4 +1,3 @@
-export type SecretReference = { secret: string };
 
 export type AlipayMode = "web" | "face_to_face";
 
@@ -54,9 +53,9 @@ export type HashpayConfig = {
 export type PaymentProviderConfig = AlipayConfig | EpayConfig | BepusdtConfig | StripeConfig | HashpayConfig;
 
 export type EmailProviderConfig =
-  | { kind: "smtp"; host: string; port: number; secure: boolean; username: string; password: SecretReference; authType?: "plain" | "login" | "cram-md5"; from: string; fromName?: string; replyTo?: string }
-  | { kind: "api"; endpoint: string; apiKey: SecretReference; apiProvider?: "BREVO" | "RESEND"; from: string; fromName?: string; replyTo?: string; timeoutMs?: number }
-  | { kind: "cloudflare"; binding: string; from: string; fromName?: string; replyTo?: string };
+  | { kind: "smtp"; host: string; port: number; secure: boolean; username: string; password: string; authType?: "plain" | "login" | "cram-md5"; from: string; fromName?: string; replyTo?: string }
+  | { kind: "api"; endpoint: string; apiKey: string; apiProvider?: "BREVO" | "RESEND"; from: string; fromName?: string; replyTo?: string; timeoutMs?: number }
+  | { kind: "cloudflare"; from: string; fromName?: string; replyTo?: string };
 
 export type S3Config = {
   schemaVersion: 2;
@@ -90,10 +89,6 @@ function normalizeTemplateText(value: string) {
   return value.replace(/\\n/g, "\n");
 }
 
-function requireSecretReference(value: unknown, field: string): SecretReference {
-  if (!isRecord(value)) throw new Error(`Invalid configuration: ${field} must reference a Worker Secret`);
-  return { secret: requireString(value.secret, `${field}.secret`) };
-}
 
 function requireSchemaVersion(value: JsonObject, field: string) {
   if (value.schemaVersion !== 1) throw new Error(`Invalid configuration: ${field} must be 1`);
@@ -214,7 +209,6 @@ export function parseEmailProviderConfig(json: string): EmailProviderConfig {
   if (value.kind === "cloudflare") {
     return {
       kind: "cloudflare",
-      binding: requireString(value.binding, "binding"),
       from,
       ...(typeof value.fromName === "string" && value.fromName.trim() ? { fromName: value.fromName.trim() } : {}),
       ...(typeof value.replyTo === "string" && value.replyTo.trim() ? { replyTo: value.replyTo.trim() } : {}),
@@ -231,7 +225,7 @@ export function parseEmailProviderConfig(json: string): EmailProviderConfig {
       port: value.port,
       secure: value.secure,
       username: requireString(value.username, "username"),
-      password: requireSecretReference(value.password, "password"),
+      password: requireString(value.password, "password"),
       from,
       ...(value.authType === "login" || value.authType === "cram-md5" || value.authType === "plain" ? { authType: value.authType } : {}),
       ...(typeof value.fromName === "string" && value.fromName.trim() ? { fromName: value.fromName.trim() } : {}),
@@ -242,7 +236,7 @@ export function parseEmailProviderConfig(json: string): EmailProviderConfig {
     return {
       kind: "api",
       endpoint: requireString(value.endpoint, "endpoint"),
-      apiKey: requireSecretReference(value.apiKey, "apiKey"),
+      apiKey: requireString(value.apiKey, "apiKey"),
       from,
       ...(value.apiProvider === "BREVO" || value.apiProvider === "RESEND" ? { apiProvider: value.apiProvider } : {}),
       ...(typeof value.fromName === "string" && value.fromName.trim() ? { fromName: value.fromName.trim() } : {}),
@@ -293,6 +287,3 @@ export function parseEmailTemplateConfig(json: string): EmailTemplateConfig {
   };
 }
 
-export function getWorkerSecret(env: Record<string, unknown>, reference: SecretReference): string {
-  return requireString(env[reference.secret], `Worker Secret ${reference.secret}`);
-}

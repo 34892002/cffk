@@ -20,7 +20,7 @@ export const smtpEmailConfig = {
   port: 465,
   secure: true,
   username: "orders@example.com",
-  password: { secret: "SMTP_PASSWORD" },
+  password: "smtp-authorization-code",
   from: "CFFK <orders@example.com>",
 } satisfies EmailProviderConfig;
 

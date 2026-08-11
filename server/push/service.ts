@@ -6,7 +6,7 @@ import { pushRetryDelayMs, renderPushTemplate } from "@/lib/push-utils";
 import { sanitizeDatabaseLogText } from "@/server/database-log-sanitizer";
 import type { PushChannel, PushDispatchInput, PushDispatchResult, PushRecipient } from "./types";
 
-type Runtime = Record<string, unknown>;
+type Runtime = Record<string, unknown> & { EMAIL?: CloudflareEmailBinding };
 
 type CloudflareEmailBinding = {
   send(message: {
@@ -149,7 +149,7 @@ async function sendEmail(database: D1Database, runtime: Runtime, input: PushDisp
     const body = renderPushTemplate(template.body, input.variables);
     let result: { messageId?: string };
     if (provider.kind === "cloudflare") {
-      const sender = runtime[provider.binding] as CloudflareEmailBinding | undefined;
+      const sender = runtime.EMAIL;
       if (!sender || typeof sender.send !== "function") throw new Error("EMAIL_CLOUDFLARE_BINDING_UNAVAILABLE");
       try {
         result = await sender.send({
@@ -163,8 +163,7 @@ async function sendEmail(database: D1Database, runtime: Runtime, input: PushDisp
         throw new Error(cloudflareEmailError(cause));
       }
     } else if (provider.kind === "api") {
-      const apiKey = runtime[provider.apiKey.secret];
-      if (typeof apiKey !== "string" || !apiKey) throw new Error("EMAIL_PROVIDER_SECRET_UNAVAILABLE");
+      const apiKey = provider.apiKey;
       const endpoint = provider.apiProvider === "RESEND" ? `${provider.endpoint.replace(/\/+$/, "")}/emails` : provider.endpoint;
       const headers: Record<string, string> = provider.apiProvider === "RESEND" ? { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" } : { "api-key": apiKey, "content-type": "application/json" };
       const from = provider.fromName ? `${provider.fromName} <${provider.from}>` : provider.from;
@@ -174,8 +173,7 @@ async function sendEmail(database: D1Database, runtime: Runtime, input: PushDisp
       result = { messageId: typeof payload.id === "string" ? payload.id : typeof payload.messageId === "string" ? payload.messageId : undefined };
     } else {
       const { WorkerMailer } = await import("worker-mailer");
-      const password = runtime[provider.password.secret];
-      if (typeof password !== "string" || !password) throw new Error("EMAIL_PROVIDER_SECRET_UNAVAILABLE");
+      const password = provider.password;
       await WorkerMailer.send({ host: provider.host, port: provider.port, secure: provider.secure, credentials: { username: provider.username, password }, authType: provider.authType ?? "plain" }, { from: { email: provider.from, name: provider.fromName }, to: recipient, reply: provider.replyTo, subject, text: body, ...(template.format === "html" ? { html: body } : {}) });
       result = {};
     }

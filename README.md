@@ -111,11 +111,13 @@ npm run db:seed:local
 
 ## Better Auth 配置
 
-`ADMIN_PATH` 是 `wrangler.jsonc` 中的普通变量；`BETTER_AUTH_SECRET` 是 Secret。为本地开发创建未提交的 `.dev.vars`，填入：
+项目只使用四个 Worker 环境变量：必填的普通变量 `ADMIN_PATH`、必填 Secret `BETTER_AUTH_SECRET`，以及启用验证码时成对配置的可选变量 `TURNSTILE_SITE_KEY` 和可选 Secret `TURNSTILE_SECRET_KEY`。为本地开发创建未提交的 `.dev.vars`，按需填入：
 
 ```ini
 ADMIN_PATH=admin
 BETTER_AUTH_SECRET=local-development-secret
+# TURNSTILE_SITE_KEY=your-site-key
+# TURNSTILE_SECRET_KEY=your-secret-key
 ```
 
 提供的页面：
@@ -164,7 +166,7 @@ npm run generate-types
 
 ### 3. 配置生产认证变量
 
-一键部署时，部署按钮会将 `ADMIN_PATH` 作为普通变量、`BETTER_AUTH_SECRET` 作为 Secret 收集。生产环境请为后台路径使用不可预测的值。后台“网站地址”是认证、支付回调和 SEO 的统一公开地址；未设置时会使用当前请求地址。
+一键部署时，部署按钮会收集必填的 `ADMIN_PATH`、`BETTER_AUTH_SECRET`，并允许选填 `TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY`。Turnstile 两项必须成对配置；不配置时不启用验证码。生产环境请为后台路径使用不可预测的值。后台“网站地址”是认证、支付回调和 SEO 的统一公开地址；未设置时会使用当前请求地址。
 
 手动部署时，使用 Wrangler 设置强随机密钥：
 
@@ -176,19 +178,13 @@ npx wrangler secret put BETTER_AUTH_SECRET
 
 后台进入 `/${ADMIN_PATH}/push/email/post-office`，点击“新增邮局”即可配置邮件发送方式。支持三类 Provider：
 
-- `API`：Brevo 或 Resend。填写发件邮箱、API 地址，并填写 API Key 对应的 Worker Secret 名称。
-- `SMTP`：填写 SMTP Host、端口、用户名，并填写密码对应的 Worker Secret 名称。
-- `Cloudflare`：填写 Email Sending Binding 名称和发件邮箱。
+- `API`：Brevo 或 Resend。填写发件邮箱、API 地址和真实 API Key。
+- `SMTP`：填写 SMTP Host、端口、用户名和真实密码或授权码。QQ 邮箱使用 465 端口时必须开启 SMTPS / SSL。
+- `Cloudflare`：填写发件邮箱，服务端固定使用 `EMAIL` binding。
 
-密钥原文不能写入 D1 配置或代码仓库。先设置 Worker Secret，例如：
+API Key、SMTP 密码和授权码由服务端保存在 D1 `configJson` 中，不创建或引用任意 Worker Secret 名称。配置读取接口只返回 `configured` 和掩码，不向浏览器、普通日志或 HTML 返回敏感原文。编辑时可以保留、替换或显式清除现有敏感值。
 
-```bash
-npx wrangler secret put BREVO_API_KEY
-npx wrangler secret put RESEND_API_KEY
-npx wrangler secret put SMTP_PASSWORD
-```
-
-页面中的 Secret 名称必须与实际 Secret 名称一致。配置保存后，在邮局列表中点击“测试”验证指定 Provider；点击“启用”后该邮件 Provider 才会用于业务通知，同一时间只会启用一个邮件 Provider。
+配置保存后，在邮局列表中点击“测试”验证指定 Provider；点击“启用”后该邮件 Provider 才会用于业务通知，同一时间只会启用一个邮件 Provider。
 
 邮件模板在 `/${ADMIN_PATH}/push/email/templates` 配置，业务发送策略在 `/${ADMIN_PATH}/push/config` 配置，投递结果在 `/${ADMIN_PATH}/push/history` 查看。
 
@@ -225,8 +221,8 @@ Worker 通过 `wrangler.jsonc` 的 Cron Trigger 每 5 分钟运行一次维护�
 ## 邮件配置排查
 
 - 页面没有任何邮局：执行 `npm run db:seed:local` 或 `npm run db:seed:remote` 初始化默认 API、SMTP 和 Cloudflare 配置。
-- Provider 显示已启用但发送失败：检查对应 Worker Secret 是否存在、Secret 名称是否拼写一致，以及发件域名是否已在服务商处验证。
-- Cloudflare 邮件发送失败：检查 `wrangler.jsonc` 中的 Email Sending Binding 名称是否与页面中的 Binding 一致。
+- Provider 显示已启用但发送失败：检查后台保存的 API Key、SMTP 密码或授权码是否有效，以及发件域名是否已在服务商处验证。QQ 邮箱使用 465 端口时还需开启 SMTPS / SSL。
+- Cloudflare 邮件发送失败：检查 `wrangler.jsonc` 是否声明固定的 `EMAIL` Email Sending binding，并确认发件地址已通过 Cloudflare 验证。
 - 业务没有发送记录：检查 `/push/config` 的全局开关、消息策略和 `/push/email/templates` 中对应场景模板是否启用。
 
 ## 项目命令

@@ -82,9 +82,8 @@ export const errorMessages: Record<string, string> = {
   DISCOUNT_EXPIRES_AT_INVALID: "过期时间无效。",
   DISCOUNT_NOT_FOUND: "优惠码不存在。",
 
-  EMAIL_PROVIDER_INVALID: "邮件 Provider 配置无效，请检查字段和 Secret 引用。",
+  EMAIL_PROVIDER_INVALID: "邮件 Provider 配置无效，请检查必填字段。",
   EMAIL_PROVIDER_NAME_REQUIRED: "请填写邮件 Provider 名称。",
-  EMAIL_PROVIDER_SECRET_UNAVAILABLE: "邮件 Provider 的 Worker Secret 不可用，请检查 Secret 配置。",
   EMAIL_PROVIDER_NOT_FOUND: "邮件 Provider 不存在。",
   EMAIL_PROVIDER_DELETE_REJECTED: "只能删除未启用的邮件 Provider。",
   EMAIL_PROVIDER_NOT_AVAILABLE: "请先启用一个邮件 Provider。",

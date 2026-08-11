@@ -43,7 +43,7 @@ export const emailProviderDefinitions: ProviderFormDefinition[] = [
     fields: [
       { key: "apiProvider", label: "API 服务商", type: "select", required: true, options: [{ label: "Brevo", value: "BREVO" }, { label: "Resend", value: "RESEND" }] },
       { key: "endpoint", label: "API 地址", type: "url", required: true },
-      { key: "apiKey", label: "API Key Secret 名称", type: "password", required: true, secret: true, description: "填写 Worker Secret 名称，不要填写密钥原文。" },
+      { key: "apiKey", label: "API Key", type: "password", required: true, secret: true, description: "敏感值保存到 D1，保存后不再回显原文。" },
       { key: "from", label: "发件邮箱", type: "email", required: true },
       { key: "fromName", label: "发件人名称", type: "text" },
       { key: "replyTo", label: "回复邮箱", type: "email" },
@@ -55,10 +55,10 @@ export const emailProviderDefinitions: ProviderFormDefinition[] = [
     defaults: { host: "", port: 587, secure: false, username: "", authType: "plain", from: "", fromName: "", replyTo: "" },
     fields: [
       { key: "host", label: "SMTP Host", type: "text", required: true },
-      { key: "port", label: "SMTP Port", type: "number", required: true, min: 1, max: 65535 },
-      { key: "secure", label: "使用 SMTPS / SSL", type: "switch" },
+      { key: "port", label: "SMTP Port", type: "number", required: true, min: 1, max: 65535, description: "端口 465 通常需要启用 SMTPS / SSL；587 通常不启用。" },
+      { key: "secure", label: "使用 SMTPS / SSL", type: "switch", description: "QQ 邮箱使用 465 端口时必须启用。" },
       { key: "username", label: "SMTP 用户名", type: "text", required: true },
-      { key: "password", label: "密码 Secret 名称", type: "password", required: true, secret: true, description: "填写 Worker Secret 名称，不要填写密码原文。" },
+      { key: "password", label: "SMTP 密码 / 授权码", type: "password", required: true, secret: true, description: "QQ 邮箱请填写 SMTP 授权码。敏感值保存到 D1，保存后不再回显原文。" },
       { key: "authType", label: "认证方式", type: "select", required: true, options: [{ label: "PLAIN", value: "plain" }, { label: "LOGIN", value: "login" }, { label: "CRAM-MD5", value: "cram-md5" }] },
       { key: "from", label: "发件邮箱", type: "email", required: true },
       { key: "fromName", label: "发件人名称", type: "text" },
@@ -67,9 +67,8 @@ export const emailProviderDefinitions: ProviderFormDefinition[] = [
   },
   {
     channel: "EMAIL", provider: "CLOUDFLARE", schemaVersion: 1, title: "Cloudflare Email Sending", capabilities,
-    defaults: { binding: "EMAIL", from: "", fromName: "", replyTo: "" },
+    defaults: { from: "", fromName: "", replyTo: "" },
     fields: [
-      { key: "binding", label: "Binding 名称", type: "text", required: true },
       { key: "from", label: "发件邮箱", type: "email", required: true },
       { key: "fromName", label: "发件人名称", type: "text" },
       { key: "replyTo", label: "回复邮箱", type: "email" },
@@ -96,10 +95,9 @@ function bool(values: Record<string, unknown>, key: string) {
   return values[key] === true;
 }
 
-function resolveSecret(update: SecretUpdate | undefined, existing?: { secret: string }) {
+function resolveSecret(update: SecretUpdate | undefined, existing?: string) {
   if (update?.clear) return undefined;
-  const value = update?.value?.trim();
-  if (value) return { secret: value };
+  if (update?.value?.trim()) return update.value.trim();
   if (update?.keepExisting && existing) return existing;
   return undefined;
 }
@@ -127,13 +125,13 @@ export function serializeEmailProviderConfig(input: SaveEmailProviderInput, exis
   let config: EmailProviderConfig;
   if (input.provider === "API") {
     const apiKey = resolveSecret(input.secrets?.apiKey, input.secrets?.apiKey?.keepExisting ? existingSecret(existingJson, "api") : undefined);
-    config = { kind: "api", apiProvider: text(values, "apiProvider") === "RESEND" ? "RESEND" : "BREVO", endpoint: text(values, "endpoint"), apiKey: apiKey ?? { secret: "" }, from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}), timeoutMs: number(values, "timeoutMs", 10000) };
+    config = { kind: "api", apiProvider: text(values, "apiProvider") === "RESEND" ? "RESEND" : "BREVO", endpoint: text(values, "endpoint"), apiKey: apiKey ?? "", from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}), timeoutMs: number(values, "timeoutMs", 10000) };
   } else if (input.provider === "SMTP") {
     const password = resolveSecret(input.secrets?.password, input.secrets?.password?.keepExisting ? existingSecret(existingJson, "smtp") : undefined);
     const authType = text(values, "authType");
-    config = { kind: "smtp", host: text(values, "host"), port: number(values, "port", 587), secure: bool(values, "secure"), username: text(values, "username"), password: password ?? { secret: "" }, ...(authType === "login" || authType === "cram-md5" || authType === "plain" ? { authType } : {}), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
+    config = { kind: "smtp", host: text(values, "host"), port: number(values, "port", 587), secure: bool(values, "secure"), username: text(values, "username"), password: password ?? "", ...(authType === "login" || authType === "cram-md5" || authType === "plain" ? { authType } : {}), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
   } else {
-    config = { kind: "cloudflare", binding: text(values, "binding"), from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
+    config = { kind: "cloudflare", from: text(values, "from"), ...(text(values, "fromName") ? { fromName: text(values, "fromName") } : {}), ...(text(values, "replyTo") ? { replyTo: text(values, "replyTo") } : {}) };
   }
   return JSON.stringify(normalizedConfig(parseEmailProviderConfig(JSON.stringify(config))));
 }
@@ -148,13 +146,11 @@ export function maskedEmailProviderConfig(provider: EmailProviderKind, json: str
   const secrets: Record<string, MaskedSecret> = {};
   if (provider === "API" && config.kind === "api") {
     Object.assign(values, { apiProvider: config.apiProvider ?? "BREVO", endpoint: config.endpoint, timeoutMs: config.timeoutMs ?? 10000 });
-    secrets.apiKey = { configured: Boolean(config.apiKey.secret), masked: config.apiKey.secret ? "********" : undefined };
+    secrets.apiKey = { configured: Boolean(config.apiKey), masked: config.apiKey ? "********" : undefined };
   } else if (provider === "SMTP" && config.kind === "smtp") {
     Object.assign(values, { host: config.host, port: config.port, secure: config.secure, username: config.username, authType: config.authType ?? "plain" });
-    secrets.password = { configured: Boolean(config.password.secret), masked: config.password.secret ? "********" : undefined };
-  } else if (provider === "CLOUDFLARE" && config.kind === "cloudflare") {
-    Object.assign(values, { binding: config.binding });
-  } else {
+    secrets.password = { configured: Boolean(config.password), masked: config.password ? "********" : undefined };
+  } else if (provider !== "CLOUDFLARE" || config.kind !== "cloudflare") {
     throw new Error("EMAIL_PROVIDER_KIND_MISMATCH");
   }
   return { values, secrets };

@@ -22,7 +22,7 @@
     <Dialog v-model:open="formVisible">
       <DialogContent class="max-h-[calc(100dvh-2rem)] sm:max-w-215 grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0" @interact-outside.prevent @escape-key-down.prevent>
         <DialogHeader class="border-b px-6 py-5 pr-14">
-          <DialogTitle>{{ editingId ? '编辑邮局' : '新增邮局' }}</DialogTitle><DialogDescription>敏感字段只接受 Worker Secret 名称，编辑时不会回显已有名称。</DialogDescription>
+          <DialogTitle>{{ editingId ? '编辑邮局' : '新增邮局' }}</DialogTitle><DialogDescription>敏感字段保存后不会回显原文；留空可保留现有配置。</DialogDescription>
         </DialogHeader>
         <form v-if="currentDefinition" class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" novalidate @submit.prevent="saveProvider">
           <div class="overflow-y-auto px-6 py-5">

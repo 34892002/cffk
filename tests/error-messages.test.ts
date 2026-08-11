@@ -13,7 +13,7 @@ describe("client error message normalization", () => {
   test("maps Telefunc business aborts to user-safe messages", () => {
     const cause = Abort({ code: "EMAIL_PROVIDER_INVALID" });
     expect(errorCode(cause)).toBe("EMAIL_PROVIDER_INVALID");
-    expect(userErrorMessage(cause)).toBe("邮件 Provider 配置无效，请检查字段和 Secret 引用。");
+    expect(userErrorMessage(cause)).toBe("邮件 Provider 配置无效，请检查必填字段。");
   });
 
   test("does not expose unexpected server exception messages", () => {
