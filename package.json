@@ -75,10 +75,13 @@
   "cloudflare": {
     "bindings": {
       "ADMIN_PATH": {
-        "description": "访问后台管理路径。请输入随机值，例如 3q9527ko8。"
+        "description": "访问后台管理路径。请输入随机值，例如 3q9527ko8。",
+        "required": true
       },
       "BETTER_AUTH_SECRET": {
-        "description": "用于签名会话。请输入随机值。"
+        "description": "用于签名会话。请输入随机值。",
+        "secret": true,
+        "required": true
       }
     }
   }
