@@ -141,7 +141,8 @@ async function saveEmailTemplate(input: { scene: PushScene; name: string; subjec
 }
 
 const testDeliveryErrorCodes = new Set([
-
+  "EMAIL_SMTP_HOST_INVALID",
+  "EMAIL_SEND_RETRYABLE",
   "EMAIL_CLOUDFLARE_BINDING_UNAVAILABLE",
   "EMAIL_CLOUDFLARE_SENDER_NOT_VERIFIED",
   "EMAIL_CLOUDFLARE_SENDER_DOMAIN_UNAVAILABLE",

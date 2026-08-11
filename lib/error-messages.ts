@@ -96,6 +96,8 @@ export const errorMessages: Record<string, string> = {
   EMAIL_TEMPLATE_VARIABLE_INVALID: "变量名只能包含字母、数字、点、下划线或连字符。",
   EMAIL_TEMPLATE_NOT_AVAILABLE: "请先启用 TEST 邮件模板。",
   EMAIL_SEND_FAILED: "邮件发送失败，请检查 Provider 和 Worker 配置。",
+  EMAIL_SEND_RETRYABLE: "SMTP 网络连接暂时失败，请检查端口、SSL 和 Cloudflare 出站连接后重试。",
+  EMAIL_SMTP_HOST_INVALID: "SMTP Host 无效，请填写纯主机名，例如 smtp.qq.com，不要包含协议、端口或空格。",
   EMAIL_CLOUDFLARE_BINDING_UNAVAILABLE: "未找到 Cloudflare Email Sending binding，请检查 Worker 配置。",
   EMAIL_CLOUDFLARE_SENDER_NOT_VERIFIED: "Cloudflare 发件域尚未验证，请先完成 Email Sending 域名验证。",
   EMAIL_CLOUDFLARE_SENDER_DOMAIN_UNAVAILABLE: "Cloudflare 发件域不可用，请检查 Email Sending 域名配置。",

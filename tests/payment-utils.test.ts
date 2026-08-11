@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { canonicalizeAlipayParameters, formatCentsAsYuan, parseAmountToCents } from "../lib/payment-utils.ts";
-import { buildSmtpMessage, parseEmailApiSuccessResponse, pushRetryDelayMs, renderPushTemplate } from "../lib/push-utils.ts";
+import { buildSmtpMessage, buildSmtpTransport, parseEmailApiSuccessResponse, pushRetryDelayMs, renderPushTemplate, smtpSendError } from "../lib/push-utils.ts";
 import { canConfirmPayment, paymentConfirmationOutcome } from "../lib/order-state.ts";
 import { sanitizeDatabaseLogJson, sanitizeDatabaseLogText } from "../server/database-log-sanitizer.ts";
 import { sanitizePaymentLogPayload } from "../server/payment/log-service.ts";
@@ -28,12 +28,21 @@ test("site timezone boundaries preserve non-whole-hour IANA zones and DST", () =
   assert.match(formatDateInTimezone("2026-01-01T18:15:00.000Z", "Asia/Kathmandu", { dateStyle: "short", timeStyle: "short" }), /2026/);
 });
 
-test("SMTP messages omit empty optional address fields", () => {
+test("SMTP transport and messages match the working edgeKey adapter", () => {
+  assert.deepEqual(buildSmtpTransport({ host: "smtp.qq.com", port: 465, secure: true, username: "sender@example.com", password: "credential", authType: "plain" }), {
+    host: "smtp.qq.com",
+    port: 465,
+    secure: true,
+    credentials: { username: "sender@example.com", password: "credential" },
+    authType: "plain",
+  });
   assert.deepEqual(buildSmtpMessage({ from: "sender@example.com", to: "recipient@example.com", subject: "Test", body: "Body", format: "text" }), {
-    from: "sender@example.com",
+    from: { email: "sender@example.com" },
     to: "recipient@example.com",
+    reply: undefined,
     subject: "Test",
     text: "Body",
+    html: undefined,
   });
   assert.deepEqual(buildSmtpMessage({ from: "sender@example.com", fromName: "Sender", to: "recipient@example.com", replyTo: "reply@example.com", subject: "Test", body: "<p>Body</p>", format: "html" }), {
     from: { email: "sender@example.com", name: "Sender" },
@@ -43,6 +52,8 @@ test("SMTP messages omit empty optional address fields", () => {
     text: "<p>Body</p>",
     html: "<p>Body</p>",
   });
+  assert.equal(smtpSendError(new Error("Specified address is empty string, contains unsupported characters or is too long.")), "EMAIL_SMTP_HOST_INVALID");
+  assert.equal(smtpSendError(new Error("socket connection failed")), "EMAIL_SEND_RETRYABLE");
 });
 
 test("email API success responses allow empty or non-JSON bodies and bound response size", () => {

@@ -82,7 +82,7 @@ function isRecord(value: unknown): value is JsonObject {
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) throw new Error(`Invalid configuration: ${field} must be a non-empty string`);
-  return value;
+  return value.trim();
 }
 
 function normalizeTemplateText(value: string) {
@@ -215,13 +215,17 @@ export function parseEmailProviderConfig(json: string): EmailProviderConfig {
     };
   }
   if (value.kind === "smtp") {
+    const host = requireString(value.host, "host");
+    if (host.length > 253 || /[\s\u0000-\u001f\u007f/:@?#\\]/.test(host) || !host.split(".").every((label) => /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$/.test(label))) {
+      throw new Error("EMAIL_SMTP_HOST_INVALID");
+    }
     if (typeof value.port !== "number" || !Number.isInteger(value.port) || value.port < 1 || value.port > 65535) {
       throw new Error("Invalid configuration: port must be a valid integer");
     }
     if (typeof value.secure !== "boolean") throw new Error("Invalid configuration: secure must be boolean");
     return {
       kind: "smtp",
-      host: requireString(value.host, "host"),
+      host,
       port: value.port,
       secure: value.secure,
       username: requireString(value.username, "username"),
