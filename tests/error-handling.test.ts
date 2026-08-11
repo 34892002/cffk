@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AppError } from "../lib/app-error.ts";
+import { AppError, errorCode } from "../lib/app-error.ts";
 import { reportUnexpectedRequestError, reportUnexpectedServerError, withServerDataErrorHandling } from "../server/error-handling.ts";
+import { telefuncAction } from "../server/telefunc-action.ts";
 
 test("unexpected request errors retain raw request and stack for Observability", async () => {
   const entries: unknown[][] = [];
@@ -61,6 +62,23 @@ test("page data errors retain the route context and stack for Observability", as
   assert.ok(payload.error.stack);
   assert.equal(payload.details.page.urlPathname, "/product/ce-shi");
   assert.deepEqual(payload.details.page.routeParams, { slug: "ce-shi" });
+});
+
+test("telefuncAction converts AppError into a readable Telefunc Abort", async () => {
+  const action = telefuncAction(async () => {
+    throw new AppError("ORDER_NOT_FOUND");
+  });
+
+  await assert.rejects(action(), cause => errorCode(cause) === "ORDER_NOT_FOUND");
+});
+
+test("telefuncAction rethrows the same unexpected Error object", async () => {
+  const unexpected = new Error("database unavailable");
+  const action = telefuncAction(async () => {
+    throw unexpected;
+  });
+
+  await assert.rejects(action(), cause => cause === unexpected);
 });
 
 test("expected business errors are not reported as unexpected errors", () => {

@@ -1,16 +1,11 @@
-import { AppError } from "@/lib/app-error";
+import { telefuncAction } from "@/server/telefunc-action";
 import { requirePaymentFlowService } from "./flow-service";
-import type { PaymentCreateInput, PaymentCreateResult } from "./types";
+import type { PaymentCreateInput } from "./types";
 
-export type PaymentCheckoutResult = PaymentCreateResult | { errorCode: string };
-
-export async function onCreatePayment(input: PaymentCreateInput): Promise<PaymentCheckoutResult> {
-  try {
-    return await requirePaymentFlowService().create(input);
-  } catch (cause) {
-    if (cause instanceof AppError) return { errorCode: cause.code };
-    throw cause;
-  }
+async function internalOnCreatePayment(input: PaymentCreateInput) {
+  return requirePaymentFlowService().create(input);
 }
+
+export const onCreatePayment = telefuncAction(internalOnCreatePayment);
 
 export type { PaymentCreateInput };

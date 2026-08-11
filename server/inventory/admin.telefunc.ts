@@ -1,5 +1,7 @@
+import { telefuncAction } from "@/server/telefunc-action";
 import { and, asc, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import type { createDrizzleDb } from "@/database/drizzle";
+import { appError } from "@/lib/app-error";
 import { requireAdmin } from "@/server/telefunc-context";
 import { card, product } from "@/database/drizzle/schema";
 import { getSiteSettings } from "@/server/site/public-settings";
@@ -24,7 +26,7 @@ function getAdminDb() {
 }
 
 function positiveInteger(value: number, field: string) {
-  if (!Number.isInteger(value) || value < 1) throw new Error(`${field}_INVALID`);
+  if (!Number.isInteger(value) || value < 1) appError(`${field}_INVALID`);
   return value;
 }
 
@@ -42,12 +44,12 @@ async function assertCardProduct(db: ReturnType<typeof createDrizzleDb>, product
     .from(product)
     .where(eq(product.id, productId))
     .limit(1);
-  if (!target) throw new Error("PRODUCT_NOT_FOUND");
-  if (target.deliveryType !== "CARD_AUTO") throw new Error("PRODUCT_NOT_CARD_AUTO");
+  if (!target) appError("PRODUCT_NOT_FOUND");
+  if (target.deliveryType !== "CARD_AUTO") appError("PRODUCT_NOT_CARD_AUTO");
 }
 
 
-export async function onGetCardAdminData(input: CardAdminQuery = {}) {
+async function internalOnGetCardAdminData(input: CardAdminQuery = {}) {
   const { database, db } = requireAdmin();
   const timezone = (await getSiteSettings(database)).timezone;
   const page = Math.max(1, Math.floor(input.page ?? 1));
@@ -106,12 +108,12 @@ export async function onGetCardAdminData(input: CardAdminQuery = {}) {
   };
 }
 
-export async function onCreateCard(input: { productId: number; content: string; batchNo?: string }) {
+async function internalOnCreateCard(input: { productId: number; content: string; batchNo?: string }) {
   const { db } = getAdminDb();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   await assertCardProduct(db, productId);
   const content = input.content.trim();
-  if (!content) throw new Error("CARD_CONTENT_REQUIRED");
+  if (!content) appError("CARD_CONTENT_REQUIRED");
   const batchNo = input.batchNo?.trim() || null;
   const now = new Date();
   const [created] = await db.insert(card).values({
@@ -125,13 +127,13 @@ export async function onCreateCard(input: { productId: number; content: string; 
   return created;
 }
 
-export async function onImportCards(input: { productId: number; content: string; batchNo?: string }) {
+async function internalOnImportCards(input: { productId: number; content: string; batchNo?: string }) {
   const { db } = getAdminDb();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   await assertCardProduct(db, productId);
   const contents = [...new Set(input.content.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))];
-  if (!contents.length) throw new Error("CARD_CONTENT_REQUIRED");
-  if (contents.length > 1000) throw new Error("CARD_IMPORT_LIMIT_EXCEEDED");
+  if (!contents.length) appError("CARD_CONTENT_REQUIRED");
+  if (contents.length > 1000) appError("CARD_IMPORT_LIMIT_EXCEEDED");
 
   const now = new Date();
   const batchNo = input.batchNo?.trim() || null;
@@ -146,17 +148,17 @@ export async function onImportCards(input: { productId: number; content: string;
   return { imported: contents.length };
 }
 
-export async function onDeleteCard(input: { id: number }) {
+async function internalOnDeleteCard(input: { id: number }) {
   const { db } = getAdminDb();
   const id = positiveInteger(input.id, "CARD_ID");
   const [deleted] = await db.delete(card)
     .where(and(eq(card.id, id), eq(card.status, "UNUSED")))
     .returning({ id: card.id });
-  if (!deleted) throw new Error("CARD_DELETE_REJECTED");
+  if (!deleted) appError("CARD_DELETE_REJECTED");
   return deleted;
 }
 
-export async function onDeleteUnusedCards(input: { productId: number }) {
+async function internalOnDeleteUnusedCards(input: { productId: number }) {
   const { db } = getAdminDb();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   await assertCardProduct(db, productId);
@@ -165,3 +167,9 @@ export async function onDeleteUnusedCards(input: { productId: number }) {
     .returning({ id: card.id });
   return { deleted: deleted.length };
 }
+
+export const onGetCardAdminData = telefuncAction(internalOnGetCardAdminData);
+export const onCreateCard = telefuncAction(internalOnCreateCard);
+export const onImportCards = telefuncAction(internalOnImportCards);
+export const onDeleteCard = telefuncAction(internalOnDeleteCard);
+export const onDeleteUnusedCards = telefuncAction(internalOnDeleteUnusedCards);

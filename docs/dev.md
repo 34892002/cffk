@@ -5,9 +5,9 @@
 
 本规范适用于 `vike-cf` 的业务页面、Telefunc 接口和后台管理功能。目标是让页面交互、数据列表和错误反馈保持一致，避免在业务页面重复造 UI 或把临时反馈渲染成常驻内容。
 
-错误信息按 [框架设计规划.md](./框架设计规划.md) 的三层规则处理：前端必须脱敏；数据库业务日志仅移除 `sign` 与密钥；未预期异常的完整接口信息和原始错误输出到 Cloudflare Workers Observability，供 root 在 Cloudflare 控制台排查。
+错误信息按本文第 5 节的三层规则处理：前端必须脱敏；数据库业务日志仅移除 `sign` 与密钥；未预期异常的完整接口信息和原始错误输出到 Cloudflare Workers Observability，供 root 在 Cloudflare 控制台排查。
 
-权限模型以 [框架设计规划.md](./框架设计规划.md) 为准：仅有 `guest`、`user`、`root` 三种身份，且项目只保留一个 `root`。不新增多角色、权限点、审批或审计系统。
+权限模型仅包含 `guest`、`user`、`root` 三种身份，且项目只保留一个 `root`。不新增多角色、权限点、审批或审计系统。
 
 ## 1. UI 组件原则
 
@@ -368,13 +368,13 @@ async function loadData() {
 
 项目同时使用 Telefunc RPC 和少量 Hono HTTP 接口；两者不能混用响应约定。
 
-- **页面到项目服务端的业务调用：使用 Telefunc。** 成功时直接返回业务数据；预期业务失败时抛出 `AppError`/稳定错误码。不要为 Telefunc 添加 `{ code, message, data }` 包装层。
+- **页面到项目服务端的业务调用：使用 Telefunc。** 成功时直接返回业务数据；领域层以 `AppError` 表示预期业务失败，Telefunc 导出入口再通过 `telefuncAction()` 将其转换为携带稳定错误码的 `Abort`。不要直接让普通 `Error` 或 `AppError` 穿过 Telefunc 边界，也不要为 Telefunc 添加 `{ code, message, data }` 包装层。
 - **公开或第三方 HTTP API：使用 HTTP 状态码与 JSON 信封** `{ code, message, data }`。`code: 0` 代表成功；`400/401/403/404/409` 携带稳定业务码；未预期异常返回 `500` 和 `INTERNAL_ERROR`。
 - **协议回调例外：** 支付回调等由第三方协议规定响应格式的路由，保留协议要求的纯文本/签名响应，不能强制套 JSON 信封。
 
 ### 5.2 Telefunc 服务端：稳定错误码，不泄露内部信息
 
-Telefunc 应在权限、输入校验、状态机校验失败时抛出稳定、全大写的业务错误码：
+`AppError` 是项目的领域错误，只用于表示权限、输入校验、状态机校验等预期业务失败。领域代码通过 `appError()` 或 `throw new AppError(code)` 抛出稳定、全大写的业务错误码：
 
 ```ts
 if (!context.user || !context.isAdmin) {
@@ -391,12 +391,26 @@ if (record.status !== "DRAFT") {
 }
 ```
 
+所有 `server/**/*.telefunc.ts` 中导出的 `on*` 入口必须由 `@/server/telefunc-action` 的 `telefuncAction()` 包装：
+
+```ts
+import { telefuncAction } from "@/server/telefunc-action";
+
+async function internalOnDeleteEntity(input: { id: number }) {
+  // 领域服务可抛出 AppError。
+}
+
+export const onDeleteEntity = telefuncAction(internalOnDeleteEntity);
+```
+
+`telefuncAction()` 是领域层与 Telefunc 协议之间唯一的错误转换边界：它只把 `AppError` 转换为 `Abort({ code })`，供客户端通过 `errorCode()` 读取；普通 `Error` 和其他真实异常必须保持原对象并原样抛出，使请求保持 `500` 语义并进入 Workers Observability。不得使用 `throw new Error("STABLE_CODE")` 表示业务失败，也不得在入口捕获真实异常后改造成业务错误码。
+
 规则：
 
 - 错误码使用 `UPPER_SNAKE_CASE`，按资源和语义命名，例如 `CARD_CONTENT_REQUIRED`、`PRODUCT_NOT_CARD_AUTO`、`CARD_DELETE_REJECTED`。
 - 不将数据库异常、SQL、堆栈、第三方支付原始响应或敏感值直接传给客户端。
 - 对“删除/状态切换”等并发敏感操作，将可操作状态写进 `where` 条件；根据 `returning()` 是否返回记录判断结果。
-- 未预期异常必须交给全局错误处理：完整接口信息、原始异常和堆栈输出到 Cloudflare Workers Observability；客户端仍只显示通用错误文案。
+- 未预期异常必须保留原始异常与堆栈并进入 Cloudflare Workers Observability；客户端仍只显示通用错误文案。
 - 数据库业务日志只脱敏 `sign`、密码、token、API key、Secret、私钥和 access key；不要将这些值写回支付、邮件或推送日志。
 
 ### 5.3 前端：必须通过 `runTelefunc()` 统一处理
@@ -438,13 +452,14 @@ try {
 
 ### 5.4 全局服务端错误处理与 Workers Observability
 
-Hono、Telefunc 与 Vike SSR / `+data.server.ts` 的未预期异常必须进入同一个全局错误处理模块。该模块的职责是：
+Hono、Telefunc 与 Vike SSR / `+data.server.ts` 的未预期异常都必须保留 `500` 语义并进入 Cloudflare Workers Observability，但各协议边界按各自机制处理，不能笼统地改写为同一种异常：
 
-1. 将原始 `Error`、堆栈、完整接口路径、查询参数、请求体或表单参数输出到 Cloudflare Workers Observability；此记录不脱敏，仅供 root 通过 Cloudflare 控制台排查。
-2. 按协议返回脱敏结果：HTTP API 返回 `INTERNAL_ERROR` JSON，Telefunc 继续抛出异常供 `runTelefunc()` 映射，支付回调返回 `failure`。
-3. 不把 Observability 的原始内容复制到前端或数据库业务日志。
+1. Hono 与 Vike 服务端边界使用项目的服务端错误处理设施记录原始 `Error`、堆栈和排查上下文，再按协议返回脱敏结果。
+2. Telefunc 的 `telefuncAction()` 不记录或改写普通 `Error`；它原样抛出同一个异常对象，由 Telefunc/Workers 保持 `500` 和 Observability。只有 `AppError` 会转换为 `Abort({ code })`。
+3. HTTP API 返回 `INTERNAL_ERROR` JSON；Telefunc 客户端由 `runTelefunc()` 映射为通用文案；支付回调按第三方协议返回 `failure`。
+4. 不把 Observability 的原始内容复制到前端或数据库业务日志，也不记录 Secret。
 
-预期业务错误码不是未预期异常：它们仍按 `lib/error-messages.ts` 映射并显示给用户，无需伪装为内部错误。
+`AppError` 是预期领域错误，不按未预期异常上报；经 Telefunc 边界转换后的业务错误码按 `lib/error-messages.ts` 映射并显示给用户。
 
 ### 5.5 Workers 日志采样与线上 500 排查
 

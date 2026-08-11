@@ -1,4 +1,6 @@
+import { telefuncAction } from "@/server/telefunc-action";
 import { getContext } from "telefunc";
+import { appError } from "@/lib/app-error";
 import { PaymentFlowService } from "@/server/payment/flow-service";
 
 type TelefuncContext = {
@@ -9,22 +11,25 @@ type TelefuncContext = {
 
 export type PublicOrder = NonNullable<Awaited<ReturnType<PaymentFlowService["query"]>>>;
 
-export async function onResumeOrderPayment(input: {
+async function internalOnResumeOrderPayment(input: {
   orderNo: string;
   queryToken: string;
 }) {
   const context = getContext<TelefuncContext>();
-  if (!context.env?.DB) throw new Error("DATABASE_UNAVAILABLE");
+  if (!context.env?.DB) appError("DATABASE_UNAVAILABLE");
 
   return new PaymentFlowService(context.env.DB, context.env).resume(input.orderNo, input.queryToken);
 }
 
-export async function onQueryOrder(input: {
+async function internalOnQueryOrder(input: {
   orderNo: string;
   queryToken: string;
 }): Promise<PublicOrder | null> {
   const context = getContext<TelefuncContext>();
-  if (!context.env?.DB) throw new Error("DATABASE_UNAVAILABLE");
+  if (!context.env?.DB) appError("DATABASE_UNAVAILABLE");
 
   return new PaymentFlowService(context.env.DB, context.env).query(input.orderNo, input.queryToken);
 }
+
+export const onResumeOrderPayment = telefuncAction(internalOnResumeOrderPayment);
+export const onQueryOrder = telefuncAction(internalOnQueryOrder);

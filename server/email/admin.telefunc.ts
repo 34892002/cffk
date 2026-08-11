@@ -1,8 +1,8 @@
+import { telefuncAction } from "@/server/telefunc-action";
 import { and, asc, count, eq, inArray, ne } from "drizzle-orm";
-import { Abort } from "telefunc";
 
 import { emailTemplate, pushChannelConfig, pushLog } from "@/database/drizzle/schema";
-import { AppError, appError } from "@/lib/app-error";
+import { appError } from "@/lib/app-error";
 import { formatDateInTimezone } from "@/lib/site-timezone";
 import { parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { getEmailTemplateDefinition } from "@/server/email/template-definitions";
@@ -29,21 +29,13 @@ function requiredText(value: unknown, field: string) {
   return normalized;
 }
 
-async function abortAppError<T>(action: () => Promise<T>) {
-  try {
-    return await action();
-  } catch (cause) {
-    if (cause instanceof AppError) throw Abort({ code: cause.code });
-    throw cause;
-  }
-}
 
-export async function onGetEmailProviderDefinitions() {
+async function internalOnGetEmailProviderDefinitions() {
   getAdminContext();
   return emailProviderDefinitions;
 }
 
-export async function onGetEmailProviders() {
+async function internalOnGetEmailProviders() {
   const { db } = getAdminContext();
   const records = await db
     .select({ id: pushChannelConfig.id, provider: pushChannelConfig.provider, name: pushChannelConfig.name, isEnabled: pushChannelConfig.isEnabled, configJson: pushChannelConfig.configJson, updatedAt: pushChannelConfig.updatedAt })
@@ -107,7 +99,7 @@ async function setEmailProviderEnabled(id: number, isEnabled: boolean) {
   return result[0];
 }
 
-export async function onGetEmailTemplates() {
+async function internalOnGetEmailTemplates() {
   const { db } = getAdminContext();
   const records = await db.select({ id: emailTemplate.id, scene: emailTemplate.scene, name: emailTemplate.name, templateJson: emailTemplate.templateJson, updatedAt: emailTemplate.updatedAt }).from(emailTemplate).orderBy(asc(emailTemplate.id));
   return records.map((record) => {
@@ -160,27 +152,8 @@ async function sendTestEmail(input: { to: string; customContent?: string; provid
   return { messageId: result.messageId };
 }
 
-export function onSaveEmailProvider(input: SaveEmailProviderInput) {
-  return abortAppError(() => saveEmailProvider(input));
-}
 
-export function onDeleteEmailProvider(id: number) {
-  return abortAppError(() => deleteEmailProvider(id));
-}
-
-export function onSetEmailProviderEnabled(id: number, isEnabled: boolean) {
-  return abortAppError(() => setEmailProviderEnabled(id, isEnabled));
-}
-
-export function onSaveEmailTemplate(input: { scene: PushScene; name: string; subject: string; body: string; format: "text" | "html" }) {
-  return abortAppError(() => saveEmailTemplate(input));
-}
-
-export function onSendTestEmail(input: { to: string; customContent?: string; providerConfigId?: number }) {
-  return abortAppError(() => sendTestEmail(input));
-}
-
-export async function onGetEmailOverview() {
+async function internalOnGetEmailOverview() {
   const { db } = getAdminContext();
   const [total, success, failed, skipped, pending, test] = await Promise.all([
     db.select({ value: count() }).from(pushLog).where(eq(pushLog.channel, "EMAIL")),
@@ -192,3 +165,13 @@ export async function onGetEmailOverview() {
   ]);
   return { total: total[0]?.value ?? 0, success: success[0]?.value ?? 0, failed: failed[0]?.value ?? 0, skipped: skipped[0]?.value ?? 0, pending: pending[0]?.value ?? 0, test: test[0]?.value ?? 0 };
 }
+
+export const onGetEmailProviderDefinitions = telefuncAction(internalOnGetEmailProviderDefinitions);
+export const onGetEmailProviders = telefuncAction(internalOnGetEmailProviders);
+export const onSaveEmailProvider = telefuncAction(saveEmailProvider);
+export const onDeleteEmailProvider = telefuncAction(deleteEmailProvider);
+export const onSetEmailProviderEnabled = telefuncAction(setEmailProviderEnabled);
+export const onGetEmailTemplates = telefuncAction(internalOnGetEmailTemplates);
+export const onSaveEmailTemplate = telefuncAction(saveEmailTemplate);
+export const onSendTestEmail = telefuncAction(sendTestEmail);
+export const onGetEmailOverview = telefuncAction(internalOnGetEmailOverview);

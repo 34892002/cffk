@@ -1,8 +1,9 @@
+import { telefuncAction } from "@/server/telefunc-action";
 import { asc, count, eq } from "drizzle-orm";
-import { Abort } from "telefunc";
+
 import { requireAdmin } from "@/server/telefunc-context";
 import { paymentLog, paymentProvider, siteSetting } from "@/database/drizzle/schema";
-import { AppError, appError } from "@/lib/app-error";
+import { appError } from "@/lib/app-error";
 import { getPaymentNotifyPath, getPaymentUrlDefaults, getProviderDefinition, paymentProviderDefinitions, parseProviderConfig, type PaymentProviderKind } from "./registry";
 import { paymentRepository } from "./repository";
 
@@ -88,7 +89,7 @@ function getSafeForm(provider: string, name: string, isEnabled: boolean, sort: n
   return { provider, title: definition.title, name, isEnabled, sort, updatedAt: updatedAt?.toISOString() ?? null, valid, schemaVersion: definition.schemaVersion, fields: definition.fields, values, secrets, siteUrl };
 }
 
-export async function onGetPaymentProviders() {
+async function internalOnGetPaymentProviders() {
   const { db } = requireAdmin();
   const [settings] = await db.select({ siteUrl: siteSetting.siteUrl }).from(siteSetting).where(eq(siteSetting.id, 1)).limit(1);
   const records = await db.select().from(paymentProvider).orderBy(asc(paymentProvider.sort), asc(paymentProvider.id));
@@ -99,7 +100,7 @@ export async function onGetPaymentProviders() {
   });
 }
 
-export async function onGetPaymentProviderForm(input: { provider: PaymentProviderKind }) {
+async function internalOnGetPaymentProviderForm(input: { provider: PaymentProviderKind }) {
   const { db } = requireAdmin();
   const [settings] = await db.select({ siteUrl: siteSetting.siteUrl }).from(siteSetting).where(eq(siteSetting.id, 1)).limit(1);
   const [record] = await db.select().from(paymentProvider).where(eq(paymentProvider.provider, input.provider)).limit(1);
@@ -133,7 +134,7 @@ async function savePaymentProvider(input: {
   return { provider: input.provider };
 }
 
-export async function onGetPaymentLogs(input?: { provider?: PaymentProviderKind; page?: number; pageSize?: number }) {
+async function internalOnGetPaymentLogs(input?: { provider?: PaymentProviderKind; page?: number; pageSize?: number }) {
   const { database, db } = requireAdmin();
   const page = Math.max(1, Math.floor(input?.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(input?.pageSize ?? 20)));
@@ -171,23 +172,9 @@ async function setPaymentProviderEnabled(input: { provider: PaymentProviderKind;
   return { provider: input.provider, isEnabled: input.isEnabled };
 }
 
-async function abortAppError<T>(action: () => Promise<T>) {
-  try {
-    return await action();
-  } catch (cause) {
-    if (cause instanceof AppError) throw Abort({ code: cause.code });
-    throw cause;
-  }
-}
-
-export function onSavePaymentProvider(input: Parameters<typeof savePaymentProvider>[0]) {
-  return abortAppError(() => savePaymentProvider(input));
-}
-
-export function onValidatePaymentProviderConfig(input: Parameters<typeof validatePaymentProviderConfig>[0]) {
-  return abortAppError(() => validatePaymentProviderConfig(input));
-}
-
-export function onSetPaymentProviderEnabled(input: Parameters<typeof setPaymentProviderEnabled>[0]) {
-  return abortAppError(() => setPaymentProviderEnabled(input));
-}
+export const onGetPaymentProviders = telefuncAction(internalOnGetPaymentProviders);
+export const onGetPaymentProviderForm = telefuncAction(internalOnGetPaymentProviderForm);
+export const onSavePaymentProvider = telefuncAction(savePaymentProvider);
+export const onGetPaymentLogs = telefuncAction(internalOnGetPaymentLogs);
+export const onValidatePaymentProviderConfig = telefuncAction(validatePaymentProviderConfig);
+export const onSetPaymentProviderEnabled = telefuncAction(setPaymentProviderEnabled);

@@ -1,3 +1,4 @@
+import { telefuncAction } from "@/server/telefunc-action";
 import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import { order, orderDelivery, paymentLog } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
@@ -12,7 +13,7 @@ type OrderStatus = "PENDING" | "PAID" | "DELIVERED" | "CLOSED" | "FAILED";
 type DeliveryStatus = "NOT_DELIVERED" | "DELIVERING" | "DELIVERED" | "FAILED";
 
 
-export async function onGetAdminOrders(input?: { query?: string; status?: OrderStatus; deliveryStatus?: DeliveryStatus; startDate?: string; endDate?: string; page?: number; pageSize?: number }) {
+async function internalOnGetAdminOrders(input?: { query?: string; status?: OrderStatus; deliveryStatus?: DeliveryStatus; startDate?: string; endDate?: string; page?: number; pageSize?: number }) {
   const { database, db } = requireAdmin();
   const page = Math.max(1, Math.floor(input?.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(input?.pageSize ?? 20)));
@@ -33,7 +34,7 @@ export async function onGetAdminOrders(input?: { query?: string; status?: OrderS
   return { orders: orders.map((record) => ({ ...record, amount: formatCentsAsYuan(record.amount) })), total: totalRows[0]?.value ?? 0, page, pageSize };
 }
 
-export async function onGetAdminOrderDetail(input: { orderId: number }) {
+async function internalOnGetAdminOrderDetail(input: { orderId: number }) {
   const { db } = requireAdmin();
   const [record] = await db.select().from(order).where(eq(order.id, input.orderId)).limit(1);
   if (!record) appError("ORDER_NOT_FOUND");
@@ -44,7 +45,7 @@ export async function onGetAdminOrderDetail(input: { orderId: number }) {
   return { order: { ...record, amount: formatCentsAsYuan(record.amount) }, deliveries, payments };
 }
 
-export async function onCloseAdminOrder(input: { orderId: number }) {
+async function internalOnCloseAdminOrder(input: { orderId: number }) {
   const { database, db } = requireAdmin();
   await closePendingOrder(database, input.orderId);
   const [record] = await db.select({ id: order.id, status: order.status }).from(order).where(eq(order.id, input.orderId)).limit(1);
@@ -53,7 +54,7 @@ export async function onCloseAdminOrder(input: { orderId: number }) {
   return record;
 }
 
-export async function onRetryAutomaticDelivery(input: { orderId: number }) {
+async function internalOnRetryAutomaticDelivery(input: { orderId: number }) {
   const { database, runtime, db } = requireAdmin();
   await deliverPaidOrder(database, input.orderId);
   await notifyOrderEmailEvents(database, runtime);
@@ -63,7 +64,7 @@ export async function onRetryAutomaticDelivery(input: { orderId: number }) {
   return record;
 }
 
-export async function onRecordManualDelivery(input: { orderId: number; content: string; failed?: boolean }) {
+async function internalOnRecordManualDelivery(input: { orderId: number; content: string; failed?: boolean }) {
   const { database, runtime, db } = requireAdmin();
   const content = input.content.trim();
   if (!content) appError("DELIVERY_CONTENT_REQUIRED");
@@ -101,3 +102,9 @@ export async function onRecordManualDelivery(input: { orderId: number; content: 
   await notifyOrderEmailEvents(database, runtime);
   return { ...record, deliveryStatus: input.failed ? "FAILED" as const : "DELIVERED" as const };
 }
+
+export const onGetAdminOrders = telefuncAction(internalOnGetAdminOrders);
+export const onGetAdminOrderDetail = telefuncAction(internalOnGetAdminOrderDetail);
+export const onCloseAdminOrder = telefuncAction(internalOnCloseAdminOrder);
+export const onRetryAutomaticDelivery = telefuncAction(internalOnRetryAutomaticDelivery);
+export const onRecordManualDelivery = telefuncAction(internalOnRecordManualDelivery);

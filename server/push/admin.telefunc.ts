@@ -1,3 +1,4 @@
+import { telefuncAction } from "@/server/telefunc-action";
 import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import { emailTemplate, order, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
@@ -64,7 +65,7 @@ async function channelAvailability() {
   };
 }
 
-export async function onGetPushConfig() {
+async function internalOnGetPushConfig() {
   await ensureConfig();
   const { db } = requireAdmin();
   const [[config], records, channels] = await Promise.all([
@@ -76,7 +77,7 @@ export async function onGetPushConfig() {
   return { isEnabled: config?.isEnabled ?? true, policies: defaultPolicies.map((policy) => saved.get(key(policy)) ?? policy), channels };
 }
 
-export async function onSavePushConfig(input: SaveInput) {
+async function internalOnSavePushConfig(input: SaveInput) {
   if (typeof input?.isEnabled !== "boolean" || !Array.isArray(input.policies)) appError("PUSH_POLICY_INVALID");
   const expected = new Set(defaultPolicies.map(key));
   if (input.policies.length !== expected.size || input.policies.some((policy) => !expected.has(key(policy)) || typeof policy.isEnabled !== "boolean" || !Array.isArray(policy.channels))) appError("PUSH_POLICY_INVALID");
@@ -90,10 +91,10 @@ export async function onSavePushConfig(input: SaveInput) {
   const now = new Date();
   await db.insert(pushConfig).values({ id: 1, isEnabled: input.isEnabled, createdAt: now, updatedAt: now }).onConflictDoUpdate({ target: pushConfig.id, set: { isEnabled: input.isEnabled, updatedAt: now } });
   for (const policy of input.policies) await db.insert(pushPolicy).values({ ...policy, channelsJson: JSON.stringify(policy.channels), createdAt: now, updatedAt: now }).onConflictDoUpdate({ target: [pushPolicy.messageType, pushPolicy.scene], set: { channelsJson: JSON.stringify(policy.channels), isEnabled: policy.isEnabled, updatedAt: now } });
-  return onGetPushConfig();
+  return internalOnGetPushConfig();
 }
 
-export async function onRetryPushLog(id: number) {
+async function internalOnRetryPushLog(id: number) {
   if (!Number.isInteger(id) || id <= 0) appError("PUSH_LOG_NOT_RETRYABLE");
   const { database, db, adminUserId } = requireAdmin();
   const [log] = await db.select().from(pushLog).where(eq(pushLog.id, id)).limit(1);
@@ -125,7 +126,7 @@ export async function onRetryPushLog(id: number) {
   return { id };
 }
 
-export async function onGetPushLogs(input?: { page?: number; pageSize?: number; status?: PushStatus; channel?: PushChannel; messageType?: PushMessageType; scene?: PushScene; orderId?: number; orderNo?: string; from?: string; to?: string }) {
+async function internalOnGetPushLogs(input?: { page?: number; pageSize?: number; status?: PushStatus; channel?: PushChannel; messageType?: PushMessageType; scene?: PushScene; orderId?: number; orderNo?: string; from?: string; to?: string }) {
   const { db } = requireAdmin();
   const page = Math.max(1, Math.floor(input?.page ?? 1));
   const pageSize = Math.min(100, Math.max(10, Math.floor(input?.pageSize ?? 20)));
@@ -148,3 +149,8 @@ export async function onGetPushLogs(input?: { page?: number; pageSize?: number; 
   ]);
   return { logs, total: total[0]?.value ?? 0, page, pageSize };
 }
+
+export const onGetPushConfig = telefuncAction(internalOnGetPushConfig);
+export const onSavePushConfig = telefuncAction(internalOnSavePushConfig);
+export const onRetryPushLog = telefuncAction(internalOnRetryPushLog);
+export const onGetPushLogs = telefuncAction(internalOnGetPushLogs);

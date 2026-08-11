@@ -1,20 +1,26 @@
+import { telefuncAction } from "@/server/telefunc-action";
 import { requireAdmin } from "@/server/telefunc-context";
 import { getMediaConfig, listMedia, saveMediaConfig, testMediaStorage } from "./service";
 import type { MediaConfigInput, MediaListQuery } from "./types";
 
-export async function onGetMediaConfig() {
+async function internalOnGetMediaConfig() {
   const { database, runtime } = requireAdmin();
   return getMediaConfig(database, runtime);
 }
-export async function onSaveMediaConfig(input: MediaConfigInput) {
+async function internalOnSaveMediaConfig(input: MediaConfigInput) {
   const { database } = requireAdmin();
   return saveMediaConfig(database, input);
 }
-export async function onTestMediaStorage(input?: MediaConfigInput) {
+async function internalOnTestMediaStorage(input?: MediaConfigInput) {
   const { database, runtime } = requireAdmin();
   return testMediaStorage(database, runtime, input);
 }
-export async function onGetMedia(input: MediaListQuery = {}) {
+async function internalOnGetMedia(input: MediaListQuery = {}) {
   const { database } = requireAdmin();
   return listMedia(database, input);
 }
+
+export const onGetMediaConfig = telefuncAction(internalOnGetMediaConfig);
+export const onSaveMediaConfig = telefuncAction(internalOnSaveMediaConfig);
+export const onTestMediaStorage = telefuncAction(internalOnTestMediaStorage);
+export const onGetMedia = telefuncAction(internalOnGetMedia);

@@ -1,3 +1,4 @@
+import { telefuncAction } from "@/server/telefunc-action";
 import { and, asc, count, eq, like, or } from "drizzle-orm";
 import { pinyin } from "pinyin-pro";
 import { requireAdmin } from "@/server/telefunc-context";
@@ -86,7 +87,7 @@ async function resolveProductCategoryId(
 
 export type ProductListQuery = { keyword?: string; categoryId?: number; status?: ProductStatus; page?: number; pageSize?: number };
 
-export async function onGetCatalogAdminData(input: ProductListQuery = {}) {
+async function internalOnGetCatalogAdminData(input: ProductListQuery = {}) {
   if (!input || typeof input !== "object") appError("PRODUCT_LIST_QUERY_INVALID");
   if (input.keyword !== undefined && typeof input.keyword !== "string") appError("PRODUCT_LIST_QUERY_INVALID");
   if (input.page !== undefined && (!Number.isSafeInteger(input.page) || input.page < 1)) appError("PRODUCT_LIST_QUERY_INVALID");
@@ -111,7 +112,7 @@ export async function onGetCatalogAdminData(input: ProductListQuery = {}) {
   return { categories, items: items.map((item) => ({ ...item, price: formatCentsAsYuan(item.price) })), total: totalRows[0]?.value ?? 0, page, pageSize };
 }
 
-export async function onGetProductAdminDetail(input: { id: number }) {
+async function internalOnGetProductAdminDetail(input: { id: number }) {
   const { db } = getAdminDb();
   if (!input || typeof input !== "object" || !Number.isInteger(input.id) || input.id <= 0) appError("PRODUCT_ID_INVALID");
   const [record] = await db.select().from(product).where(eq(product.id, input.id)).limit(1);
@@ -130,7 +131,7 @@ export async function onGetProductAdminDetail(input: { id: number }) {
   };
 }
 
-export async function onSaveCategory(input: { id?: number; name: string; slug?: string; description?: string; sort: number }) {
+async function internalOnSaveCategory(input: { id?: number; name: string; slug?: string; description?: string; sort: number }) {
   const { db } = getAdminDb();
   const now = new Date();
   const name = requiredText(input.name, "CATEGORY_NAME_REQUIRED", 120, "CATEGORY_NAME_TOO_LONG");
@@ -161,7 +162,7 @@ export async function onSaveCategory(input: { id?: number; name: string; slug?: 
   }
 }
 
-export async function onSetCategoryStatus(input: { id: number; status: "ACTIVE" | "DISABLED" }) {
+async function internalOnSetCategoryStatus(input: { id: number; status: "ACTIVE" | "DISABLED" }) {
   const { db } = getAdminDb();
   if (input.status === "DISABLED") {
     const [activeProductCount] = await db
@@ -181,7 +182,7 @@ export async function onSetCategoryStatus(input: { id: number; status: "ACTIVE" 
   return record;
 }
 
-export async function onSaveProduct(input: {
+async function internalOnSaveProduct(input: {
   id?: number;
   categoryId: number | null;
   name: string;
@@ -261,7 +262,7 @@ export async function onSaveProduct(input: {
   }
 }
 
-export async function onSetProductStatus(input: { id: number; status: ProductStatus }) {
+async function internalOnSetProductStatus(input: { id: number; status: ProductStatus }) {
   const { db } = getAdminDb();
   if (!input || typeof input !== "object" || !Number.isInteger(input.id) || input.id <= 0) appError("PRODUCT_ID_INVALID");
   if (!productStatusSet.has(input.status)) appError("PRODUCT_STATUS_INVALID");
@@ -274,3 +275,10 @@ export async function onSetProductStatus(input: { id: number; status: ProductSta
   if (!result[0]) appError("PRODUCT_STATUS_CHANGED_RETRY");
   return result[0];
 }
+
+export const onGetCatalogAdminData = telefuncAction(internalOnGetCatalogAdminData);
+export const onGetProductAdminDetail = telefuncAction(internalOnGetProductAdminDetail);
+export const onSaveCategory = telefuncAction(internalOnSaveCategory);
+export const onSetCategoryStatus = telefuncAction(internalOnSetCategoryStatus);
+export const onSaveProduct = telefuncAction(internalOnSaveProduct);
+export const onSetProductStatus = telefuncAction(internalOnSetProductStatus);
