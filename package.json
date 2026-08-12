@@ -78,8 +78,7 @@
         "description": "访问后台管理路径。请输入随机值，例如 3q9527ko8。"
       },
       "BETTER_AUTH_SECRET": {
-        "description": "签名秘钥64位长度。例如 f7fee246aee6bab803506bf2bdd194ee33297bdc27f81629ad2b19881c5229d1",
-        "secret": true
+        "description": "签名秘钥64位长度。例如 f7fee246aee6bab803506bf2bdd194ee33297bdc27f81629ad2b19881c5229d1"
       }
     }
   }
