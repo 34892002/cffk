@@ -78,7 +78,7 @@
         "description": "访问后台管理路径。请输入随机值，例如 3q9527ko8。"
       },
       "BETTER_AUTH_SECRET": {
-        "description": "签名秘钥64位长度。"
+        "description": "1签名秘钥64位长度。"
       }
     }
   }
