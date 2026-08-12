@@ -75,22 +75,11 @@
   "cloudflare": {
     "bindings": {
       "ADMIN_PATH": {
-        "description": "访问后台管理路径。请输入随机值，例如 3q9527ko8。",
-        "required": true
+        "description": "访问后台管理路径。请输入随机值，例如 3q9527ko8。"
       },
       "BETTER_AUTH_SECRET": {
         "description": "签名秘钥64位长度。例如 f7fee246aee6bab803506bf2bdd194ee33297bdc27f81629ad2b19881c5229d1",
-        "secret": true,
-        "required": true
-      },
-      "TURNSTILE_SITE_KEY": {
-        "description": "可选。Cloudflare Turnstile 前端站点 Key。",
-        "required": false
-      },
-      "TURNSTILE_SECRET_KEY": {
-        "description": "可选。Cloudflare Turnstile 服务端 Secret Key。",
-        "secret": true,
-        "required": false
+        "secret": true
       }
     }
   }
