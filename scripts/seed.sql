@@ -92,5 +92,12 @@ INSERT INTO `emailTemplate` (
     '{"subject":"[{{siteName}}] 订单 {{orderNo}} 发货失败","body":"订单发货失败，请尽快处理。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n备注：{{buyerNote}}\n失败原因：{{errorMessage}}\n\n查询地址：{{queryUrl}}\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","buyerNote","errorMessage","queryUrl","supportContact"]}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
+  ),
+  (
+    'PAYMENT_EXCEPTION',
+    '支付异常通知',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 支付异常","body":"订单出现支付异常，请及时处理。\n\n订单号：{{orderNo}}\n商品：{{productName}}\n金额：{{amount}}\n异常原因：{{errorMessage}}\n\n查询地址：{{queryUrl}}\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","productName","amount","errorMessage","queryUrl","supportContact"]}',
+    unixepoch('now') * 1000,
+    unixepoch('now') * 1000
   )
 ON CONFLICT(`scene`) DO NOTHING;

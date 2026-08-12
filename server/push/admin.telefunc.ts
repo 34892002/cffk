@@ -3,9 +3,10 @@ import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import { emailTemplate, order, pushChannelConfig, pushConfig, pushLog, pushPolicy, pushRetry } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { formatDateInTimezone } from "@/lib/site-timezone";
-import { parseEmailProviderConfig } from "@/lib/config-schemas";
+import { parseEmailProviderConfig, parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
+import { emailTemplateDefinitions } from "@/server/email/template-definitions";
 
 export type PushScene = "ORDER_PAID" | "DELIVERY_SUCCESS" | "DELIVERY_FAILED" | "PAYMENT_EXCEPTION";
 export type PushChannel = "EMAIL" | "WECHAT" | "TELEGRAM";
@@ -53,11 +54,13 @@ async function channelAvailability() {
   const { db } = requireAdmin();
   const [providers, templates] = await Promise.all([
     db.select({ configJson: pushChannelConfig.configJson }).from(pushChannelConfig).where(and(eq(pushChannelConfig.channel, "EMAIL"), eq(pushChannelConfig.isEnabled, true))).limit(1),
-    db.select({ scene: emailTemplate.scene }).from(emailTemplate),
+    db.select({ scene: emailTemplate.scene, templateJson: emailTemplate.templateJson }).from(emailTemplate),
   ]);
   let emailConfigured = false;
   try { emailConfigured = Boolean(providers[0] && ["cloudflare", "api", "smtp"].includes(parseEmailProviderConfig(providers[0].configJson).kind)); } catch { /* Invalid configuration is unavailable. */ }
-  const templateScenes = new Set(templates.map((item) => item.scene));
+  const templateScenes = new Set(templates.filter((item) => item.scene !== "TEST").filter((item) => {
+    try { parseEmailTemplateConfig(item.templateJson); return emailTemplateDefinitions.some((definition) => definition.scene === item.scene); } catch { return false; }
+  }).map((item) => item.scene));
   return {
     EMAIL: { available: emailConfigured, reason: emailConfigured ? null : "请先在邮件通道配置中启用有效 Provider。", templateScenes: [...templateScenes] },
     WECHAT: { available: false, reason: "微信 Provider 尚未接入。", templateScenes: [] as string[] },

@@ -6,7 +6,7 @@ import { appError } from "@/lib/app-error";
 import { isJsonFormEmail } from "@/lib/json-form-values";
 import { formatDateInTimezone } from "@/lib/site-timezone";
 import { parseEmailTemplateConfig } from "@/lib/config-schemas";
-import { getEmailTemplateDefinition } from "@/server/email/template-definitions";
+import { emailTemplateDefinitions, getEmailTemplateDefinition } from "@/server/email/template-definitions";
 import { dispatchPush } from "@/server/push/service";
 import { getSiteSettings } from "@/server/site/public-settings";
 import {
@@ -109,13 +109,16 @@ async function setEmailProviderEnabled(id: number, isEnabled: boolean) {
 async function internalOnGetEmailTemplates() {
   const { db } = getAdminContext();
   const records = await db.select({ id: emailTemplate.id, scene: emailTemplate.scene, name: emailTemplate.name, templateJson: emailTemplate.templateJson, updatedAt: emailTemplate.updatedAt }).from(emailTemplate).orderBy(asc(emailTemplate.id));
-  return records.map((record) => {
-    const definition = getEmailTemplateDefinition(record.scene);
+  const recordByScene = new Map(records.map((record) => [record.scene, record]));
+  const missing = emailTemplateDefinitions.some((definition) => !recordByScene.has(definition.scene));
+  if (missing) appError("EMAIL_TEMPLATE_CONFIG_UNAVAILABLE");
+  return emailTemplateDefinitions.map((definition) => {
+    const record = recordByScene.get(definition.scene)!;
     try {
       const config = parseEmailTemplateConfig(record.templateJson);
-      return { id: record.id, scene: record.scene, name: record.name, subject: config.subject, body: config.body, format: config.format, description: definition.description, variables: definition.variables, updatedAt: record.updatedAt };
+      return { id: record.id, scene: record.scene, name: record.name, subject: config.subject, body: config.body, format: config.format, description: definition.description, variables: definition.variables, updatedAt: record.updatedAt, configurationError: false, builtIn: true };
     } catch {
-      return { id: record.id, scene: record.scene, name: record.name, subject: "", body: "", format: "text" as const, description: definition.description, variables: definition.variables, updatedAt: record.updatedAt, configurationError: true };
+      return { id: record.id, scene: record.scene, name: record.name, subject: "", body: "", format: "text" as const, description: definition.description, variables: definition.variables, updatedAt: record.updatedAt, configurationError: true, builtIn: true };
     }
   });
 }
@@ -126,6 +129,7 @@ function templateVariables(value: string) {
 
 async function saveEmailTemplate(input: { scene: PushScene; name: string; subject: string; body: string; format: "text" | "html" }) {
   const { db } = getAdminContext();
+  if (!input || !emailTemplateDefinitions.some((definition) => definition.scene === input.scene)) appError("EMAIL_TEMPLATE_NOT_FOUND");
   const name = requiredText(input.name, "EMAIL_TEMPLATE_NAME");
   const definition = getEmailTemplateDefinition(input.scene);
   const subject = input.subject.trim();

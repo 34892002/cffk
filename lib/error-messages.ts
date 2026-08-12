@@ -92,6 +92,7 @@ export const errorMessages: Record<string, string> = {
   EMAIL_RECIPIENT_INVALID: "请输入有效的收件人邮箱。",
   EMAIL_TEMPLATE_NAME_REQUIRED: "请填写邮件模板名称。",
   EMAIL_TEMPLATE_NOT_FOUND: "邮件模板不存在。",
+  EMAIL_TEMPLATE_CONFIG_UNAVAILABLE: "内置邮件模板配置缺失，请先执行数据库种子初始化。",
   EMAIL_TEMPLATE_INVALID: "邮件模板内容无效，请填写主题、正文和格式。",
   EMAIL_TEMPLATE_VARIABLE_INVALID: "变量名只能包含字母、数字、点、下划线或连字符。",
   EMAIL_TEMPLATE_NOT_AVAILABLE: "请先启用 TEST 邮件模板。",

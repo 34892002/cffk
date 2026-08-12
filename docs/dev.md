@@ -532,12 +532,19 @@ return body.data;
 
 ## 7. 新功能完成前检查
 
+验证强度必须与改动范围和风险匹配，禁止每次小改动都机械执行完整生产构建：
+
+- 纯前端展示、Tailwind class、文案或局部交互调整：运行修改文件的 diagnostics；必要时通过开发服务器和目标页面手动确认。默认不运行 `bun run build`、全量 lint 或全量测试。
+- 单个组件或页面的 TypeScript/Vue 逻辑调整：运行修改文件的 diagnostics，并运行该功能已有的针对性测试（如果有）。只有涉及 SSR、路由、构建配置或跨模块契约时才补充 `bun run build`。
+- 服务端、数据库 schema、迁移、依赖、路由或公共类型调整：运行相关 diagnostics 和针对性测试；改动可能影响生产产物时再运行 `bun run build`。
+- 发布前、构建配置修改、依赖升级、跨页面 SSR 改动或用户明确要求时，必须运行 `bun run build`。
+- 本节命令统一使用项目实际脚本 `bun run ...`，不要擅自替换成 `npm run ...`。
+
 提交前至少完成：
 
 1. 对修改的 `.vue` / `.ts` 文件运行 diagnostics。
-2. 运行 `npm run lint`；不能新增 warning 或 error。
-3. 运行 `npm run build`。
-4. 新增或调整后台页时，确认 `adminPages` 的 `title`、`path`、`pageTitle`、`description` 完整，且页面通过 `AdminPageHeader` 或模块布局读取它们。
+2. 按上述改动分级执行针对性测试、lint 或 build；不能新增 warning 或 error。
+3. 新增或调整后台页时，确认 `adminPages` 的 `title`、`path`、`pageTitle`、`description` 完整，且页面通过 `AdminPageHeader` 或模块布局读取它们。
 5. 手动验证至少一个成功路径、一个输入错误路径和一个破坏性操作确认路径。
 6. 运行相关 `tests/**/*.test.ts`：管理授权必须覆盖 guest / user / root，前端错误必须验证未知原始错误不透出，数据库日志必须验证 `sign` 与密钥不入库；未预期异常的测试应验证完整请求与堆栈会交给 Observability 输出。
 7. 检查列表响应和前端错误未泄露敏感字段、原始异常或密钥；数据库日志已移除 `sign` 与密钥；部署后在 Workers Observability 查询完整接口信息，并确认筛选、分页、空状态和 Toast 行为符合本规范。
