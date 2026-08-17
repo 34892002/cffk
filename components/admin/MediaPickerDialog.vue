@@ -26,10 +26,10 @@
         </div>
       </div>
 
-      <ScrollArea ref="scrollAreaRef" class="min-h-[400px]" @scroll="onScroll">
-        <div class="flex min-h-[400px] items-center justify-center px-6 py-5">
+      <ScrollArea ref="scrollAreaRef" class="min-h-100" @scroll="onScroll">
+        <div v-if="items.length === 0" class="flex min-h-100 items-center justify-center px-6 py-5">
           <!-- 加载状态 -->
-          <div v-if="loading && items.length === 0" class="text-center">
+          <div v-if="loading" class="text-center">
             <div class="inline-flex items-center gap-2 text-sm text-muted-foreground">
               <LoaderIcon class="h-4 w-4 animate-spin" />
               加载中...
@@ -37,7 +37,7 @@
           </div>
 
           <!-- 空状态 -->
-          <div v-else-if="!items.length && !loading" class="text-center text-sm text-muted-foreground">
+          <div v-else class="text-center text-sm text-muted-foreground">
             {{ keyword ? '未找到匹配的图片。' : '暂无图片媒体。' }}
           </div>
         </div>

@@ -21,13 +21,11 @@
 
 CFFK 是一个运行在 **Cloudflare Workers** 上的数字商品商城系统，集成商品展示、订单支付、自动发卡、人工与实物发货、用户账户、消息推送及运营后台。项目使用 Cloudflare D1 保存数据，适合部署个人商店或轻量级数字商品销售站点。
 
-CFFK 脱胎于 [EdgeKey](https://github.com/34892002/edgeKey)，是其升级版：在继承 EdgeKey 一体化全栈商城、Cloudflare 边缘部署、商品与卡密管理等核心积累的基础上，重构并扩展了认证、订单履约、支付、推送、媒体管理和后台运营能力。
+[在线预览](https://cffk.deepseek8.de/)
 
-一键免费部署到  **Cloudflare Workers**  3分钟拥有一个发卡站。
+CFFK 脱胎于 [EdgeKey]，是其升级版：在继承 EdgeKey 一体化全栈商城、Cloudflare 边缘部署、商品与卡密管理等核心积累的基础上，重构并扩展了认证、订单履约、支付、推送、媒体管理和后台运营能力。
 
-<a href="https://deploy.workers.cloudflare.com/?url=https://github.com/34892002/cffk">
-<img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare">
-</a>
+[一键免费部署到 Cloudflare Workers，3 分钟拥有一个发卡站。](#-一键部署到-cloudflare-workers)
 
 ## 页面展示
 > 前台商城
@@ -75,6 +73,8 @@ CFFK 延续 EdgeKey 的 Cloudflare 全栈商城定位，并在现有能力上进
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/34892002/cffk)
 
+[查看 Cloudflare 部署图文教程](./docs/imgs/wiki/deploy.jpg)
+
 点击按钮后按部署页面提示创建 D1 数据库，并配置以下变量：
 
 | 变量 | 类型 | 说明 |
@@ -106,6 +106,8 @@ CFFK 延续 EdgeKey 的 Cloudflare 全栈商城定位，并在现有能力上进
 2. 选择 **Update CFFK** 工作流。
 3. 点击 **Run workflow**，确认目标分支后运行。
 4. 工作流会拉取 `34892002/cffk` 的 `main` 分支并推送到你的仓库；Cloudflare 的 Git 集成会自动检测提交并重新部署。
+
+[查看 GitHub Actions 更新图文教程](./docs/imgs/wiki/actions1.jpg)
 
 该工作流会保留你仓库当前的 `wrangler.jsonc`，以避免覆盖 D1 绑定和部署配置；除该文件外，上游同步会覆盖其他未合并的本地改动。对源码做过二次开发时，请先备份或通过分支、PR 合并更新。
 
