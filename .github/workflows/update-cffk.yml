@@ -1,0 +1,51 @@
+name: Update CFFK
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-cffk
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout instance repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync from upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Keep instance-specific Cloudflare bindings and deployment settings.
+          if [ -f wrangler.jsonc ]; then
+            cp wrangler.jsonc "$RUNNER_TEMP/wrangler.current.jsonc"
+          fi
+
+          git fetch https://github.com/34892002/cffk.git main
+          git reset --hard FETCH_HEAD
+          upstream_sha="$(git rev-parse --short HEAD)"
+
+          if [ -f "$RUNNER_TEMP/wrangler.current.jsonc" ]; then
+            cp "$RUNNER_TEMP/wrangler.current.jsonc" wrangler.jsonc
+          fi
+
+          git config user.name "CFFK Updater"
+          git config user.email "actions@github.com"
+
+          if git diff --quiet; then
+            echo "CFFK is already up to date."
+          else
+            git add -A
+            git commit -m "Update CFFK to ${upstream_sha}"
+          fi
+
+          git push --force-with-lease origin "HEAD:${GITHUB_REF_NAME}"

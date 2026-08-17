@@ -1,0 +1,467 @@
+CREATE TABLE `account` (
+	`id` text PRIMARY KEY NOT NULL,
+	`accountId` text NOT NULL,
+	`providerId` text NOT NULL,
+	`userId` text NOT NULL,
+	`accessToken` text,
+	`refreshToken` text,
+	`idToken` text,
+	`accessTokenExpiresAt` integer,
+	`refreshTokenExpiresAt` integer,
+	`scope` text,
+	`password` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `account_userId_idx` ON `account` (`userId`);--> statement-breakpoint
+CREATE TABLE `adminBootstrap` (
+	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`userId` text NOT NULL,
+	`createdAt` integer NOT NULL,
+	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE TABLE `automaticDeliveryJob` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer NOT NULL,
+	`status` text DEFAULT 'PENDING' NOT NULL,
+	`leaseUntil` integer,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
+	`lastError` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `automaticDeliveryJob_orderId_unique` ON `automaticDeliveryJob` (`orderId`);--> statement-breakpoint
+CREATE INDEX `automaticDeliveryJob_status_id_idx` ON `automaticDeliveryJob` (`status`,`id`);--> statement-breakpoint
+CREATE TABLE `card` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`productId` integer NOT NULL,
+	`content` text NOT NULL,
+	`status` text DEFAULT 'UNUSED' NOT NULL,
+	`batchNo` text,
+	`orderId` integer,
+	`soldAt` integer,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`productId`) REFERENCES `product`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE INDEX `card_product_status_idx` ON `card` (`productId`,`status`);--> statement-breakpoint
+CREATE INDEX `card_orderId_idx` ON `card` (`orderId`);--> statement-breakpoint
+CREATE TABLE `category` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`name` text NOT NULL,
+	`slug` text NOT NULL,
+	`description` text,
+	`sort` integer DEFAULT 0 NOT NULL,
+	`status` text DEFAULT 'ACTIVE' NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `category_slug_unique` ON `category` (`slug`);--> statement-breakpoint
+CREATE INDEX `category_status_sort_idx` ON `category` (`status`,`sort`);--> statement-breakpoint
+CREATE TABLE `customerAddress` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`userId` text NOT NULL,
+	`recipientName` text NOT NULL,
+	`phone` text NOT NULL,
+	`country` text DEFAULT '中国' NOT NULL,
+	`province` text NOT NULL,
+	`city` text NOT NULL,
+	`district` text NOT NULL,
+	`addressLine` text NOT NULL,
+	`postalCode` text,
+	`isDefault` integer DEFAULT false NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `customerAddress_userId_createdAt_idx` ON `customerAddress` (`userId`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `customerAddress_userId_default_idx` ON `customerAddress` (`userId`,`isDefault`);--> statement-breakpoint
+CREATE TABLE `discountCode` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`code` text NOT NULL,
+	`type` text NOT NULL,
+	`value` integer NOT NULL,
+	`minAmount` integer,
+	`maxUses` integer,
+	`usedCount` integer DEFAULT 0 NOT NULL,
+	`reservedCount` integer DEFAULT 0 NOT NULL,
+	`productIds` text,
+	`expiresAt` integer,
+	`isActive` integer DEFAULT true NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `discountCode_code_unique` ON `discountCode` (`code`);--> statement-breakpoint
+CREATE INDEX `discountCode_active_idx` ON `discountCode` (`isActive`);--> statement-breakpoint
+CREATE TABLE `emailTemplate` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`scene` text NOT NULL,
+	`name` text NOT NULL,
+	`templateJson` text NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `emailTemplate_scene_unique` ON `emailTemplate` (`scene`);--> statement-breakpoint
+CREATE TABLE `guestOrderRecoveryChallenge` (
+	`id` text PRIMARY KEY NOT NULL,
+	`emailNormalized` text NOT NULL,
+	`codeHash` text NOT NULL,
+	`expiresAt` integer NOT NULL,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
+	`consumedAt` integer,
+	`createdAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `guestRecovery_email_createdAt_idx` ON `guestOrderRecoveryChallenge` (`emailNormalized`,`createdAt`);--> statement-breakpoint
+CREATE TABLE `media` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`originalName` text NOT NULL,
+	`storedName` text NOT NULL,
+	`mimeType` text NOT NULL,
+	`fileSize` integer NOT NULL,
+	`fileKey` text NOT NULL,
+	`url` text NOT NULL,
+	`path` text,
+	`metadataJson` text,
+	`uploadedBy` text NOT NULL,
+	`uploadedAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`uploadedBy`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `media_fileKey_unique` ON `media` (`fileKey`);--> statement-breakpoint
+CREATE INDEX `media_mimeType_idx` ON `media` (`mimeType`);--> statement-breakpoint
+CREATE INDEX `media_path_idx` ON `media` (`path`);--> statement-breakpoint
+CREATE INDEX `media_uploadedAt_id_idx` ON `media` (`uploadedAt`,`id`);--> statement-breakpoint
+CREATE TABLE `order` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderNo` text NOT NULL,
+	`ownerUserId` text,
+	`productId` integer NOT NULL,
+	`productNameSnapshot` text NOT NULL,
+	`unitPrice` integer NOT NULL,
+	`quantity` integer NOT NULL,
+	`amount` integer NOT NULL,
+	`contactType` text DEFAULT 'EMAIL' NOT NULL,
+	`contactValue` text,
+	`contactEmailNormalized` text,
+	`buyerNote` text,
+	`addressSnapshotJson` text,
+	`paymentProvider` text NOT NULL,
+	`paymentChannel` text,
+	`deliveryTypeSnapshot` text NOT NULL,
+	`fixedDeliveryContentSnapshot` text,
+	`physicalStockReserved` integer DEFAULT false NOT NULL,
+	`status` text DEFAULT 'PENDING' NOT NULL,
+	`paymentStatus` text DEFAULT 'UNPAID' NOT NULL,
+	`deliveryStatus` text DEFAULT 'NOT_DELIVERED' NOT NULL,
+	`deliveryToken` text,
+	`deliveryLeaseUntil` integer,
+	`discountCodeId` integer,
+	`discountCodeStr` text,
+	`originalAmount` integer,
+	`discountAmount` integer,
+	`paidAt` integer,
+	`deliveredAt` integer,
+	`closedAt` integer,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`ownerUserId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`productId`) REFERENCES `product`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`discountCodeId`) REFERENCES `discountCode`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `order_orderNo_unique` ON `order` (`orderNo`);--> statement-breakpoint
+CREATE INDEX `order_productId_idx` ON `order` (`productId`);--> statement-breakpoint
+CREATE INDEX `order_ownerUserId_createdAt_idx` ON `order` (`ownerUserId`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `order_guestEmail_createdAt_idx` ON `order` (`contactEmailNormalized`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `order_status_createdAt_idx` ON `order` (`status`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `order_paymentStatus_createdAt_idx` ON `order` (`paymentStatus`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `order_deliveryStatus_createdAt_idx` ON `order` (`deliveryStatus`,`createdAt`);--> statement-breakpoint
+CREATE TABLE `orderDelivery` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer NOT NULL,
+	`deliveryType` text NOT NULL,
+	`attemptToken` text NOT NULL,
+	`contentSnapshot` text,
+	`errorCode` text,
+	`status` text DEFAULT 'SUCCESS' NOT NULL,
+	`createdAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `orderDelivery_attemptToken_unique` ON `orderDelivery` (`attemptToken`);--> statement-breakpoint
+CREATE INDEX `orderDelivery_orderId_createdAt_idx` ON `orderDelivery` (`orderId`,`createdAt`);--> statement-breakpoint
+CREATE TABLE `orderEvent` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`eventKey` text NOT NULL,
+	`orderId` integer NOT NULL,
+	`scene` text NOT NULL,
+	`errorMessage` text,
+	`status` text DEFAULT 'PENDING' NOT NULL,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
+	`availableAt` integer NOT NULL,
+	`leaseUntil` integer,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `orderEvent_eventKey_unique` ON `orderEvent` (`eventKey`);--> statement-breakpoint
+CREATE INDEX `orderEvent_status_availableAt_idx` ON `orderEvent` (`status`,`availableAt`);--> statement-breakpoint
+CREATE TABLE `orderRequestRateLimit` (
+	`keyHash` text PRIMARY KEY NOT NULL,
+	`requestCount` integer DEFAULT 1 NOT NULL,
+	`expiresAt` integer NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `orderRequestRateLimit_expiresAt_idx` ON `orderRequestRateLimit` (`expiresAt`);--> statement-breakpoint
+CREATE TABLE `paymentAttempt` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer NOT NULL,
+	`provider` text NOT NULL,
+	`channel` text,
+	`paymentOrderNo` text,
+	`status` text DEFAULT 'CREATING' NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `paymentAttempt_orderId_createdAt_idx` ON `paymentAttempt` (`orderId`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `paymentAttempt_provider_paymentOrderNo_idx` ON `paymentAttempt` (`provider`,`paymentOrderNo`);--> statement-breakpoint
+CREATE TABLE `paymentLog` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer,
+	`provider` text NOT NULL,
+	`orderNo` text,
+	`paymentOrderNo` text,
+	`eventType` text NOT NULL,
+	`rawPayload` text NOT NULL,
+	`verifyStatus` text DEFAULT 'PENDING' NOT NULL,
+	`message` text,
+	`createdAt` integer NOT NULL,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE INDEX `paymentLog_provider_createdAt_idx` ON `paymentLog` (`provider`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `paymentLog_orderNo_idx` ON `paymentLog` (`orderNo`);--> statement-breakpoint
+CREATE INDEX `paymentLog_orderId_idx` ON `paymentLog` (`orderId`);--> statement-breakpoint
+CREATE TABLE `paymentProvider` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`provider` text NOT NULL,
+	`name` text NOT NULL,
+	`isEnabled` integer DEFAULT false NOT NULL,
+	`sort` integer DEFAULT 0 NOT NULL,
+	`configJson` text NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `paymentProvider_provider_unique` ON `paymentProvider` (`provider`);--> statement-breakpoint
+CREATE INDEX `paymentProvider_enabled_sort_idx` ON `paymentProvider` (`isEnabled`,`sort`);--> statement-breakpoint
+CREATE TABLE `product` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`categoryId` integer,
+	`name` text NOT NULL,
+	`slug` text NOT NULL,
+	`subtitle` text,
+	`description` text,
+	`coverImage` text,
+	`price` integer NOT NULL,
+	`status` text DEFAULT 'DRAFT' NOT NULL,
+	`deliveryType` text DEFAULT 'CARD_AUTO' NOT NULL,
+	`fixedDeliveryContent` text,
+	`manualDeliveryHint` text,
+	`physicalStock` integer,
+	`minBuy` integer DEFAULT 1 NOT NULL,
+	`maxBuy` integer DEFAULT 1 NOT NULL,
+	`sort` integer DEFAULT 0 NOT NULL,
+	`purchaseNote` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`categoryId`) REFERENCES `category`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `product_slug_unique` ON `product` (`slug`);--> statement-breakpoint
+CREATE INDEX `product_categoryId_idx` ON `product` (`categoryId`);--> statement-breakpoint
+CREATE INDEX `product_status_sort_idx` ON `product` (`status`,`sort`);--> statement-breakpoint
+CREATE TABLE `pushChannelConfig` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`channel` text NOT NULL,
+	`provider` text NOT NULL,
+	`name` text NOT NULL,
+	`isEnabled` integer DEFAULT false NOT NULL,
+	`configJson` text NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `pushChannelConfig_channel_provider_idx` ON `pushChannelConfig` (`channel`,`provider`);--> statement-breakpoint
+CREATE INDEX `pushChannelConfig_channel_enabled_idx` ON `pushChannelConfig` (`channel`,`isEnabled`);--> statement-breakpoint
+CREATE TABLE `pushLog` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`orderId` integer,
+	`channelConfigId` integer,
+	`idempotencyKey` text,
+	`messageType` text DEFAULT 'NORMAL' NOT NULL,
+	`channel` text NOT NULL,
+	`provider` text NOT NULL,
+	`scene` text NOT NULL,
+	`recipient` text NOT NULL,
+	`subject` text,
+	`status` text NOT NULL,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
+	`messageId` text,
+	`error` text,
+	`triggeredBy` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer,
+	FOREIGN KEY (`orderId`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`channelConfigId`) REFERENCES `pushChannelConfig`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `pushLog_idempotencyKey_unique` ON `pushLog` (`idempotencyKey`);--> statement-breakpoint
+CREATE INDEX `pushLog_channel_createdAt_idx` ON `pushLog` (`channel`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `pushLog_status_createdAt_idx` ON `pushLog` (`status`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `pushLog_orderId_idx` ON `pushLog` (`orderId`);--> statement-breakpoint
+CREATE TABLE `pushPolicy` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`messageType` text NOT NULL,
+	`scene` text NOT NULL,
+	`channelsJson` text DEFAULT '[]' NOT NULL,
+	`isEnabled` integer DEFAULT true NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `pushPolicy_messageType_scene_unique` ON `pushPolicy` (`messageType`,`scene`);--> statement-breakpoint
+CREATE TABLE `pushRetry` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`pushLogId` integer NOT NULL,
+	`payloadJson` text NOT NULL,
+	`status` text DEFAULT 'PENDING' NOT NULL,
+	`attemptCount` integer DEFAULT 0 NOT NULL,
+	`maxAttempts` integer DEFAULT 3 NOT NULL,
+	`nextAttemptAt` integer NOT NULL,
+	`lastError` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`pushLogId`) REFERENCES `pushLog`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `pushRetry_status_nextAttemptAt_idx` ON `pushRetry` (`status`,`nextAttemptAt`);--> statement-breakpoint
+CREATE UNIQUE INDEX `pushRetry_pushLogId_unique` ON `pushRetry` (`pushLogId`);--> statement-breakpoint
+CREATE TABLE `s3Config` (
+	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`configJson` text NOT NULL,
+	`accessKeyId` text,
+	`secretAccessKey` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `scheduledTaskRun` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`task` text NOT NULL,
+	`status` text NOT NULL,
+	`scannedOrderCount` integer,
+	`closedOrderCount` integer,
+	`pushRetryAttempted` integer,
+	`pushRetrySent` integer,
+	`pushRetryExhausted` integer,
+	`error` text,
+	`startedAt` integer NOT NULL,
+	`completedAt` integer
+);
+--> statement-breakpoint
+CREATE INDEX `scheduledTaskRun_task_startedAt_idx` ON `scheduledTaskRun` (`task`,`startedAt`);--> statement-breakpoint
+CREATE TABLE `session` (
+	`id` text PRIMARY KEY NOT NULL,
+	`expiresAt` integer NOT NULL,
+	`token` text NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	`ipAddress` text,
+	`userAgent` text,
+	`userId` text NOT NULL,
+	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `session_token_unique` ON `session` (`token`);--> statement-breakpoint
+CREATE INDEX `session_userId_idx` ON `session` (`userId`);--> statement-breakpoint
+CREATE TABLE `siteSetting` (
+	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`siteName` text NOT NULL,
+	`siteUrl` text,
+	`siteSubtitle` text,
+	`logo` text,
+	`logoIcon` text,
+	`notice` text,
+	`supportContact` text,
+	`footerText` text,
+	`orderNotice` text,
+	`headCode` text,
+	`footerCode` text,
+	`registrationEnabled` integer DEFAULT false NOT NULL,
+	`timezone` text DEFAULT 'Asia/Shanghai' NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `transactionGuard` (
+	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`value` integer NOT NULL,
+	CONSTRAINT "transactionGuard_value_check" CHECK("transactionGuard"."value" = 1)
+);
+--> statement-breakpoint
+CREATE TABLE `twoFactor` (
+	`id` text PRIMARY KEY NOT NULL,
+	`userId` text NOT NULL,
+	`secret` text NOT NULL,
+	`backupCodes` text NOT NULL,
+	`verified` integer DEFAULT false NOT NULL,
+	`failedVerificationCount` integer DEFAULT 0 NOT NULL,
+	`lockedUntil` integer,
+	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `twoFactor_userId_unique` ON `twoFactor` (`userId`);--> statement-breakpoint
+CREATE TABLE `user` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`email` text NOT NULL,
+	`emailVerified` integer DEFAULT false NOT NULL,
+	`emailChangeRequestedAt` integer,
+	`emailChangePendingEmail` text,
+	`emailChangeLastSentAt` integer,
+	`disabledAt` integer,
+	`image` text,
+	`twoFactorEnabled` integer DEFAULT false NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `user_email_unique` ON `user` (`email`);--> statement-breakpoint
+CREATE UNIQUE INDEX `user_email_lower_unique` ON `user` (lower("email"));--> statement-breakpoint
+CREATE TABLE `verification` (
+	`id` text PRIMARY KEY NOT NULL,
+	`identifier` text NOT NULL,
+	`value` text NOT NULL,
+	`expiresAt` integer NOT NULL,
+	`createdAt` integer,
+	`updatedAt` integer
+);

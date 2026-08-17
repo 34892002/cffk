@@ -1,0 +1,115 @@
+<template>
+  <MailSettingsLayout>
+    <div class="space-y-4">
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div><h2 class="text-xl font-semibold tracking-normal">通道配置</h2><p class="mt-1 text-sm text-muted-foreground">添加并管理邮件邮局。启用一个配置后，其他配置会自动停用。</p></div>
+        <div class="flex gap-2"><Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadProviders"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button><Button size="sm" :disabled="!definitions.length" @click="startCreate">新增邮局</Button></div>
+      </div>
+
+      <Card class="gap-4 py-4">
+        <CardHeader class="px-5"><CardTitle>邮局列表</CardTitle><CardDescription>支持 API、SMTP 及 Cloudflare 模式。Cloudflare 需配置 Wrangler send_email 绑定；发送异常可前往“投递日志”排查。</CardDescription></CardHeader><CardContent class="px-5">
+          <div v-if="!loading && !providers.length" class="py-6 text-center text-sm text-muted-foreground">暂无邮局配置，请点击“新增邮局”。</div>
+          <div v-else class="grid gap-2">
+            <div v-for="item in providers" :key="item.id" class="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+              <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="font-medium">{{ providerLabel(item.provider) }}</span><Badge :variant="item.isEnabled ? 'secondary' : 'outline'">{{ item.isEnabled ? '已启用' : '未启用' }}</Badge><Badge v-if="item.configurationError" variant="outline" class="border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400">配置不完整</Badge></div><p class="mt-0.5 text-sm text-muted-foreground">{{ item.name }}</p></div>
+              <div class="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" @click="editProvider(item)">编辑</Button><Button size="sm" variant="outline" :disabled="sendingTest || item.configurationError" @click="selectTestProvider(item)">测试</Button><Button size="sm" variant="outline" class="border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300" :disabled="item.isEnabled" @click="requestDelete(item)">删除</Button><Switch :model-value="item.isEnabled" :disabled="changingProviderId === item.id || item.provider === 'CLOUDFLARE' || (item.configurationError && !item.isEnabled)" :aria-label="`${providerLabel(item.provider)}启用状态`" @update:model-value="toggleProvider(item, $event === true)" /></div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    <Dialog v-model:open="formVisible">
+      <DialogContent class="max-h-[calc(100dvh-2rem)] sm:max-w-215 grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0" @interact-outside.prevent @escape-key-down.prevent>
+        <DialogHeader class="border-b px-6 py-5 pr-14">
+          <DialogTitle>{{ editingId ? '编辑邮局' : '新增邮局' }}</DialogTitle><DialogDescription>敏感字段保存后不会回显原文；留空可保留现有配置。</DialogDescription>
+        </DialogHeader>
+        <form v-if="currentDefinition" class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" novalidate @submit.prevent="saveProvider">
+          <div class="overflow-y-auto px-6 py-5">
+            <div class="grid gap-6">
+              <FieldSet class="gap-4">
+                <FieldLegend>基础设置</FieldLegend>
+                <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+                  <Field><FieldLabel for="provider-name"><span class="text-destructive">*</span> 邮局名称</FieldLabel><Input id="provider-name" v-model="name" required /></Field>
+                  <Field><FieldLabel for="provider-kind"><span class="text-destructive">*</span> 邮件类型</FieldLabel><Select v-model="provider" :disabled="Boolean(editingId)" @update:model-value="resetValues"><SelectTrigger id="provider-kind"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="definition in definitions" :key="definition.provider" :value="definition.provider">{{ definition.title }}</SelectItem></SelectContent></Select></Field>
+                  <Field orientation="horizontal" class="h-9 whitespace-nowrap sm:w-40"><FieldLabel for="provider-enabled">保存后启用</FieldLabel><Switch id="provider-enabled" v-model="isEnabled" /></Field>
+                </div>
+              </FieldSet>
+              <FieldSet class="gap-4">
+                <FieldLegend>连接参数</FieldLegend>
+                <div class="grid gap-y-5">
+                  <JsonFormFields :fields="currentDefinition.fields" :values="values" :configured-secrets="configuredSecrets" :errors="fieldErrors" @update:values="replaceRecord(values, $event)" />
+                </div>
+              </FieldSet>
+            </div>
+          </div>
+          <DialogFooter class="border-t px-6 py-4"><Button type="submit" :disabled="saving">{{ saving ? '保存中...' : '保存配置' }}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="testDialogOpen">
+      <DialogContent @interact-outside.prevent>
+        <DialogHeader class="pr-8"><DialogTitle>发送测试邮件</DialogTitle><DialogDescription>测试邮件不受业务推送策略影响，结果会写入统一投递历史。</DialogDescription></DialogHeader>
+        <form class="grid gap-4" novalidate @submit.prevent="sendTestEmail">
+          <Field><FieldLabel>使用邮局</FieldLabel><div class="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">{{ testProviderName }}</div></Field>
+          <Field><FieldLabel for="test-recipient"><span class="text-destructive">*</span> 收件人邮箱</FieldLabel><Input id="test-recipient" v-model="testForm.to" type="email" required /></Field>
+          <Field><FieldLabel for="test-content">测试内容</FieldLabel><Textarea id="test-content" v-model="testForm.customContent" rows="4" /></Field>
+          <DialogFooter><DialogClose as-child><Button type="button" variant="outline" :disabled="sendingTest">取消</Button></DialogClose><Button type="submit" :disabled="sendingTest || !testProviderId">{{ sendingTest ? '发送中...' : '发送测试邮件' }}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="deleteDialogOpen">
+      <DialogContent class="max-w-md">
+        <DialogHeader class="pr-8"><DialogTitle>删除邮件 Provider？</DialogTitle><DialogDescription>将永久删除“{{ providerToDelete?.name }}”及其配置。此操作不可恢复，已启用的配置不能删除。</DialogDescription></DialogHeader>
+        <DialogFooter><DialogClose as-child><Button variant="outline">取消</Button></DialogClose><Button variant="destructive" :disabled="deleting" @click="removeProvider">{{ deleting ? '删除中...' : '确认删除' }}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </MailSettingsLayout>
+</template>
+
+<script lang="ts" setup>
+import { RefreshCwIcon } from "@lucide/vue";
+import { computed, onMounted, reactive, ref } from "vue";
+
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import JsonFormFields from "@/components/admin/JsonFormFields.vue";
+import MailSettingsLayout from "@/components/admin/MailSettingsLayout.vue";
+import { buildJsonFormSubmission, getJsonFormErrors, type JsonFormValues } from "@/lib/json-form-values";
+import { runTelefunc } from "@/lib/telefunc-client";
+import { onDeleteEmailProvider, onGetEmailProviderDefinitions, onGetEmailProviders, onSaveEmailProvider, onSendTestEmail, onSetEmailProviderEnabled } from "@/server/email/admin.telefunc";
+
+type EmailProvidersResponse = Awaited<ReturnType<typeof onGetEmailProviders>>;
+type Provider = EmailProvidersResponse["providers"][number];
+type Definition = Awaited<ReturnType<typeof onGetEmailProviderDefinitions>>[number];
+type Kind = Definition["provider"];
+const providers = ref<Provider[]>([]); const definitions = ref<Definition[]>([]); const adminEmail = ref(""); const loading = ref(false); const saving = ref(false); const sendingTest = ref(false); const deleting = ref(false); const changingProviderId = ref<number | null>(null); const formVisible = ref(false); const editingId = ref<number | undefined>(); const testProviderId = ref<number | undefined>(); const testDialogOpen = ref(false); const deleteDialogOpen = ref(false); const providerToDelete = ref<Provider | null>(null);
+const name = ref(""); const isEnabled = ref(false); const provider = ref<Kind>("API"); const values = reactive<JsonFormValues>({}); const configuredSecrets = ref<string[]>([]); const fieldErrors = ref<Record<string, string>>({});
+const testForm = reactive({ to: "", customContent: "" });
+const currentDefinition = computed(() => definitions.value.find((item) => item.provider === provider.value));
+const testProviderName = computed(() => providers.value.find((item) => item.id === testProviderId.value)?.name ?? "");
+function replaceRecord<T>(target: Record<string, T>, source: Record<string, T>) { for (const key of Object.keys(target)) delete target[key]; Object.assign(target, source); }
+function resetValues() { const definition = currentDefinition.value; if (!definition) return; replaceRecord(values, { ...definition.defaults } as JsonFormValues); configuredSecrets.value = []; fieldErrors.value = {}; }
+function startCreate() { name.value = ""; isEnabled.value = false; editingId.value = undefined; provider.value = definitions.value[0]?.provider ?? "API"; resetValues(); formVisible.value = true; }
+function editProvider(item: Provider) { if (item.provider !== "API" && item.provider !== "SMTP" && item.provider !== "CLOUDFLARE") return; editingId.value = item.id; name.value = item.name; isEnabled.value = item.isEnabled; provider.value = item.provider; replaceRecord(values, item.values as JsonFormValues); configuredSecrets.value = item.configuredSecrets; fieldErrors.value = {}; formVisible.value = true; }
+function providerLabel(provider: Provider["provider"]) { return provider === "API" ? "API" : provider === "SMTP" ? "SMTP" : provider === "CLOUDFLARE" ? "Cloudflare Email Sending" : provider; }
+
+
+async function loadProviders() { loading.value = true; try { const result = await runTelefunc(() => onGetEmailProviders()); providers.value = result.providers; adminEmail.value = result.adminEmail; if (!providers.value.some((item) => item.id === testProviderId.value)) testProviderId.value = providers.value.find((item) => item.isEnabled)?.id ?? providers.value[0]?.id; } finally { loading.value = false; } }
+async function loadDefinitions() { definitions.value = await runTelefunc(() => onGetEmailProviderDefinitions()); }
+async function saveProvider() { const definition = currentDefinition.value; if (!definition) return; fieldErrors.value = getJsonFormErrors(definition.fields, values, configuredSecrets.value); if (Object.keys(fieldErrors.value).length) return; saving.value = true; try { const submittedValues = buildJsonFormSubmission(definition.fields, values); await runTelefunc(() => onSaveEmailProvider({ id: editingId.value, channel: "EMAIL", provider: provider.value, name: name.value, isEnabled: isEnabled.value, values: submittedValues }), { successMessage: "邮件邮局已保存。" }); formVisible.value = false; await loadProviders(); } catch { /* runTelefunc owns feedback */ } finally { saving.value = false; } }
+async function toggleProvider(item: Provider, enabled: boolean) { changingProviderId.value = item.id; try { await runTelefunc(() => onSetEmailProviderEnabled(item.id, enabled), { successMessage: enabled ? "邮件 Provider 已启用。" : "邮件 Provider 已停用。" }); await loadProviders(); } catch { /* runTelefunc owns feedback */ } finally { changingProviderId.value = null; } }
+function requestDelete(item: Provider) { providerToDelete.value = item; deleteDialogOpen.value = true; }
+async function removeProvider() { const item = providerToDelete.value; if (!item) return; deleting.value = true; try { await runTelefunc(() => onDeleteEmailProvider(item.id), { successMessage: "邮件 Provider 已删除。" }); deleteDialogOpen.value = false; providerToDelete.value = null; await loadProviders(); } catch { /* runTelefunc owns feedback */ } finally { deleting.value = false; } }
+function selectTestProvider(item: Provider) { testProviderId.value = item.id; testForm.to = adminEmail.value; testForm.customContent = "这是一封测试邮件"; testDialogOpen.value = true; }
+async function sendTestEmail() { if (!testProviderId.value) return; sendingTest.value = true; try { await runTelefunc(() => onSendTestEmail({ to: testForm.to, providerConfigId: testProviderId.value, customContent: testForm.customContent }), { successMessage: "测试邮件已发送。" }); testDialogOpen.value = false; } catch { /* runTelefunc owns feedback */ } finally { sendingTest.value = false; } }
+onMounted(async () => { try { await loadDefinitions(); await loadProviders(); } catch { /* runTelefunc owns feedback */ } });
+</script>

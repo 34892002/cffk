@@ -1,0 +1,11 @@
+* text eol=lf
+
+# Binary assets must not receive text or line-ending normalization.
+*.jpg  -text -eol
+*.jpeg -text -eol
+*.png  -text -eol
+*.gif  -text -eol
+*.webp -text -eol
+*.bmp  -text -eol
+*.ico  -text -eol
+*.svg  -text -eol

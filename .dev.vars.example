@@ -1,0 +1,7 @@
+# 复制为 .dev.vars 用于本地开发；不要提交真实值。 / Copy to .dev.vars for local development; do not commit the real value.
+# 后台管理入口的随机路径段；生产环境请使用不可预测的值，它只用于减少扫描，不替代 root 权限校验。 / Random path segment for the admin entry; use an unpredictable production value. It reduces scanning only and does not replace root authorization.
+ADMIN_PATH=
+
+# Deploy to Cloudflare 会将此文件中的变量作为 Secret 收集。/ Deploy to Cloudflare collects variables in this file as Secrets.
+# Better Auth 会话签名密钥；请用 openssl rand -base64 32 生成随机值。/ Better Auth session signing secret; generate one with openssl rand -base64 32.
+BETTER_AUTH_SECRET=
