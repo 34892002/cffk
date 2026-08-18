@@ -9,6 +9,7 @@ import { Hono, type Context } from "hono";
 import type { PaymentProviderKind } from "./payment/registry";
 import { PaymentLogService } from "./payment/log-service";
 import { getTurnstileConfig } from "@/lib/turnstile-config";
+import { env } from "./env";
 
 function getApp() {
   const app = new Hono<{ Bindings: Record<string, unknown> & { DB: D1Database } }>();
@@ -41,7 +42,7 @@ function getApp() {
   }
   registerMediaRoutes(app);
   app.get("/api/security/turnstile", (context) => {
-    const config = getTurnstileConfig(context.env);
+    const config = getTurnstileConfig(env);
     return context.json({ enabled: config.enabled, siteKey: config.enabled ? config.siteKey : null });
   });
   vike(app, [betterAuthSessionMiddleware, betterAuthHandler, telefuncHandler]);
