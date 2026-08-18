@@ -1,71 +1,73 @@
 <template>
-  <main class="flex min-h-screen flex-col bg-muted/30">
+  <main class="flex h-dvh flex-col overflow-hidden bg-muted/30">
     <header class="fixed inset-x-0 top-0 z-50 border-b bg-background/95 backdrop-blur"><div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between px-5"><StorefrontBrand /><PublicNav /></div></header>
-    <section class="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-5 pb-10 pt-26 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <article>
-        <div class="overflow-hidden rounded-xl border bg-muted"><img :src="data.coverImage || defaultProductImage" :alt="data.name" class="max-h-96 w-full object-cover" /></div>
-        <div class="mt-5">
-          <Badge variant="secondary">{{ data.categoryName || messages.productCheckout.defaultCategory }}</Badge>
-          <h1 class="mt-3 text-2xl font-semibold tracking-normal sm:text-3xl">{{ data.name }}</h1>
-          <p v-if="data.subtitle" class="mt-2 text-sm leading-6 text-muted-foreground">{{ data.subtitle }}</p>
-        </div>
-        <section v-if="data.description" class="mt-6 rounded-xl border bg-card p-5 sm:p-6">
-          <h2 class="text-base font-semibold">{{ messages.productCheckout.productDetails }}</h2>
-          <!-- `description` is sanitized server-side by sanitizeProductDescription(). -->
-          <!-- eslint-disable vue/no-v-html -->
-          <div ref="descriptionRef" class="product-rich-content mt-4 text-sm leading-7 text-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:my-2 [&_blockquote]:border-l-[3px] [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-[1.1rem] [&_h3]:font-semibold [&_img]:my-4 [&_img]:block [&_img]:max-w-full [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:border [&_img]:transition-opacity [&_img]:hover:opacity-90 [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6" @click="previewDescriptionImage" v-html="data.description" />
+    <div class="mt-16 flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <section class="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-5 pb-10 pt-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <article>
+          <div class="overflow-hidden rounded-xl border bg-muted"><img :src="data.coverImage || defaultProductImage" :alt="data.name" class="max-h-96 w-full object-cover" /></div>
+          <div class="mt-5">
+            <Badge variant="secondary">{{ data.categoryName || messages.productCheckout.defaultCategory }}</Badge>
+            <h1 class="mt-3 text-2xl font-semibold tracking-normal sm:text-3xl">{{ data.name }}</h1>
+            <p v-if="data.subtitle" class="mt-2 text-sm leading-6 text-muted-foreground">{{ data.subtitle }}</p>
+          </div>
+          <section v-if="data.description" class="mt-6 rounded-xl border bg-card p-5 sm:p-6">
+            <h2 class="text-base font-semibold">{{ messages.productCheckout.productDetails }}</h2>
+            <!-- `description` is sanitized server-side by sanitizeProductDescription(). -->
+            <!-- eslint-disable vue/no-v-html -->
+            <div ref="descriptionRef" class="product-rich-content mt-4 text-sm leading-7 text-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:my-2 [&_blockquote]:border-l-[3px] [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-[1.1rem] [&_h3]:font-semibold [&_img]:my-4 [&_img]:block [&_img]:max-w-full [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:border [&_img]:transition-opacity [&_img]:hover:opacity-90 [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6" @click="previewDescriptionImage" v-html="data.description" />
           <!-- eslint-enable vue/no-v-html -->
-        </section>
-        <section class="mt-6 rounded-xl border bg-muted/30 p-5 text-sm leading-6 sm:p-6">
-          <h2 class="font-semibold">{{ messages.productCheckout.purchaseInstructions }}</h2>
-          <div class="mt-3 grid gap-3 text-muted-foreground"><p class="whitespace-pre-wrap">{{ purchaseNote }}</p><p v-if="deliveryHint" class="whitespace-pre-wrap">{{ deliveryHint }}</p></div>
-        </section>
-      </article>
-      <aside class="h-fit lg:sticky lg:top-6">
-        <Card>
-          <CardHeader><CardDescription>{{ messages.productCheckout.currentPrice }}</CardDescription><CardTitle class="text-3xl text-orange-600">¥{{ data.price }}</CardTitle></CardHeader><form class="grid min-w-0 gap-6" novalidate @submit.prevent="submit">
-            <CardContent class="grid min-w-0 gap-4">
-              <p v-if="requiresPayment && !methods.length" class="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{{ messages.productCheckout.noPaymentMethod }}</p>
-              <label class="grid min-w-0 gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> {{ messages.productCheckout.contactEmail }}</span><Input v-model="contactValue" type="email" autocomplete="email" required /></label>
-              <label class="grid min-w-0 gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> {{ messages.productCheckout.quantity }}</span><Input v-model.number="quantity" type="number" :min="data.minBuy" :max="purchaseLimit" required /><span v-if="isStockLimited" class="text-xs font-normal text-muted-foreground">{{ t(messages.productCheckout.availableStock, { count: availableStock }) }}</span></label>
-              <FieldSet v-if="data.deliveryType === 'EXPRESS'" class="min-w-0 gap-4">
-                <FieldLegend>{{ messages.productCheckout.shippingAddress }}</FieldLegend>
-                <Field v-if="addresses.length" class="min-w-0"><FieldLabel for="checkout-address">{{ messages.productCheckout.selectSavedAddress }}</FieldLabel><Select :model-value="selectedAddress" class="block w-full min-w-0" @update:model-value="onAddressSelectionChange"><SelectTrigger id="checkout-address" class="w-full! min-w-0 max-w-full **:data-[slot=select-value]:min-w-0 **:data-[slot=select-value]:flex-1 **:data-[slot=select-value]:truncate"><SelectValue :placeholder="messages.productCheckout.selectShippingAddress" /></SelectTrigger><SelectContent><SelectItem v-for="item in addresses" :key="String(item.id)" :value="String(item.id)">{{ item.recipientName }} · {{ item.phone }} · {{ addressSummary(item) }}</SelectItem><SelectItem value="new">{{ messages.productCheckout.enterNewAddress }}</SelectItem><SelectItem v-if="!user" value="clear-local-addresses" class="text-destructive focus:text-destructive">{{ messages.productCheckout.clearBrowserAddresses }}</SelectItem></SelectContent></Select></Field>
-                <p v-else-if="addressesLoading" class="text-sm text-muted-foreground">{{ messages.productCheckout.loadingSavedAddresses }}</p>
-                <div v-if="selectedAddress === 'new' || !addresses.length" class="grid gap-4 sm:grid-cols-2">
-                  <VeeField v-for="field in addressFieldsWithoutPostalCode" :key="field.name" v-slot="{ componentField, errors }" :name="field.name" :validate-on-input="true"><Field :class="'wide' in field && field.wide ? 'sm:col-span-2' : ''" :data-invalid="errors.length > 0"><FieldLabel :for="`checkout-${field.name}`"><span v-if="field.required" class="text-destructive">*</span> {{ field.label }}</FieldLabel><Input :id="`checkout-${field.name}`" v-bind="componentField" :autocomplete="field.autocomplete" :aria-invalid="errors.length > 0" /><FieldError v-if="errors.length" :errors="errors" /></Field></VeeField>
-                  <div class="grid gap-4 sm:col-span-2">
-                    <VeeField v-slot="{ componentField, errors }" name="postalCode" :validate-on-input="true"><Field :data-invalid="errors.length > 0"><FieldLabel for="checkout-postalCode">{{ messages.productCheckout.address.postalCode }}</FieldLabel><Input id="checkout-postalCode" v-bind="componentField" autocomplete="postal-code" :aria-invalid="errors.length > 0" /><FieldError v-if="errors.length" :errors="errors" /></Field></VeeField>
-                    <Button type="button" variant="outline" class="w-full" :disabled="savingAddress" @click="saveCurrentAddress">{{ savingAddress ? messages.productCheckout.savingAddress : messages.productCheckout.saveAddress }}</Button>
+          </section>
+          <section class="mt-6 rounded-xl border bg-muted/30 p-5 text-sm leading-6 sm:p-6">
+            <h2 class="font-semibold">{{ messages.productCheckout.purchaseInstructions }}</h2>
+            <div class="mt-3 grid gap-3 text-muted-foreground"><p class="whitespace-pre-wrap">{{ purchaseNote }}</p><p v-if="deliveryHint" class="whitespace-pre-wrap">{{ deliveryHint }}</p></div>
+          </section>
+        </article>
+        <aside class="h-fit lg:sticky lg:top-0">
+          <Card>
+            <CardHeader><CardDescription>{{ messages.productCheckout.currentPrice }}</CardDescription><CardTitle class="text-3xl text-orange-600">¥{{ data.price }}</CardTitle></CardHeader><form class="grid min-w-0 gap-6" novalidate @submit.prevent="submit">
+              <CardContent class="grid min-w-0 gap-4">
+                <p v-if="requiresPayment && !methods.length" class="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{{ messages.productCheckout.noPaymentMethod }}</p>
+                <label class="grid min-w-0 gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> {{ messages.productCheckout.contactEmail }}</span><Input v-model="contactValue" type="email" autocomplete="email" required /></label>
+                <label class="grid min-w-0 gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> {{ messages.productCheckout.quantity }}</span><Input v-model.number="quantity" type="number" :min="data.minBuy" :max="purchaseLimit" required /><span v-if="isStockLimited" class="text-xs font-normal text-muted-foreground">{{ t(messages.productCheckout.availableStock, { count: availableStock }) }}</span></label>
+                <FieldSet v-if="data.deliveryType === 'EXPRESS'" class="min-w-0 gap-4">
+                  <FieldLegend>{{ messages.productCheckout.shippingAddress }}</FieldLegend>
+                  <Field v-if="addresses.length" class="min-w-0"><FieldLabel for="checkout-address">{{ messages.productCheckout.selectSavedAddress }}</FieldLabel><Select :model-value="selectedAddress" class="block w-full min-w-0" @update:model-value="onAddressSelectionChange"><SelectTrigger id="checkout-address" class="w-full! min-w-0 max-w-full **:data-[slot=select-value]:min-w-0 **:data-[slot=select-value]:flex-1 **:data-[slot=select-value]:truncate"><SelectValue :placeholder="messages.productCheckout.selectShippingAddress" /></SelectTrigger><SelectContent><SelectItem v-for="item in addresses" :key="String(item.id)" :value="String(item.id)">{{ item.recipientName }} · {{ item.phone }} · {{ addressSummary(item) }}</SelectItem><SelectItem value="new">{{ messages.productCheckout.enterNewAddress }}</SelectItem><SelectItem v-if="!user" value="clear-local-addresses" class="text-destructive focus:text-destructive">{{ messages.productCheckout.clearBrowserAddresses }}</SelectItem></SelectContent></Select></Field>
+                  <p v-else-if="addressesLoading" class="text-sm text-muted-foreground">{{ messages.productCheckout.loadingSavedAddresses }}</p>
+                  <div v-if="selectedAddress === 'new' || !addresses.length" class="grid gap-4 sm:grid-cols-2">
+                    <VeeField v-for="field in addressFieldsWithoutPostalCode" :key="field.name" v-slot="{ componentField, errors }" :name="field.name" :validate-on-input="true"><Field :class="'wide' in field && field.wide ? 'sm:col-span-2' : ''" :data-invalid="errors.length > 0"><FieldLabel :for="`checkout-${field.name}`"><span v-if="field.required" class="text-destructive">*</span> {{ field.label }}</FieldLabel><Input :id="`checkout-${field.name}`" v-bind="componentField" :autocomplete="field.autocomplete" :aria-invalid="errors.length > 0" /><FieldError v-if="errors.length" :errors="errors" /></Field></VeeField>
+                    <div class="grid gap-4 sm:col-span-2">
+                      <VeeField v-slot="{ componentField, errors }" name="postalCode" :validate-on-input="true"><Field :data-invalid="errors.length > 0"><FieldLabel for="checkout-postalCode">{{ messages.productCheckout.address.postalCode }}</FieldLabel><Input id="checkout-postalCode" v-bind="componentField" autocomplete="postal-code" :aria-invalid="errors.length > 0" /><FieldError v-if="errors.length" :errors="errors" /></Field></VeeField>
+                      <Button type="button" variant="outline" class="w-full" :disabled="savingAddress" @click="saveCurrentAddress">{{ savingAddress ? messages.productCheckout.savingAddress : messages.productCheckout.saveAddress }}</Button>
+                    </div>
+                  </div>
+                </FieldSet>
+                <div v-if="methods.length" class="grid gap-2 text-sm font-medium">
+                  <span>{{ messages.productCheckout.paymentMethod }}</span>
+                  <div class="grid grid-cols-2 gap-2" role="group" :aria-label="messages.productCheckout.paymentMethod">
+                    <Button
+                      v-for="item in methods"
+                      :key="item.key"
+                      type="button"
+                      :variant="selectedMethod === item.key ? 'default' : 'outline'"
+                      class="h-auto min-h-10 justify-start whitespace-normal px-3 py-2 text-left text-sm leading-5"
+                      :aria-pressed="selectedMethod === item.key"
+                      @click="selectedMethod = item.key"
+                    >
+                      {{ item.name }}{{ item.channel ? `（${channelLabel(item.channel)}）` : "" }}
+                    </Button>
                   </div>
                 </div>
-              </FieldSet>
-              <div v-if="methods.length" class="grid gap-2 text-sm font-medium">
-                <span>{{ messages.productCheckout.paymentMethod }}</span>
-                <div class="grid grid-cols-2 gap-2" role="group" :aria-label="messages.productCheckout.paymentMethod">
-                  <Button
-                    v-for="item in methods"
-                    :key="item.key"
-                    type="button"
-                    :variant="selectedMethod === item.key ? 'default' : 'outline'"
-                    class="h-auto min-h-10 justify-start whitespace-normal px-3 py-2 text-left text-sm leading-5"
-                    :aria-pressed="selectedMethod === item.key"
-                    @click="selectedMethod = item.key"
-                  >
-                    {{ item.name }}{{ item.channel ? `（${channelLabel(item.channel)}）` : "" }}
-                  </Button>
-                </div>
-              </div>
-              <div class="grid gap-2 text-sm font-medium"><span>{{ messages.productCheckout.discountCode }}</span><div class="flex gap-2"><Input v-model="discountCode" autocomplete="off" @keydown.enter.prevent="onApplyDiscount" /><Button type="button" variant="outline" :disabled="discountApplying || !discountCode.trim()" @click="onApplyDiscount">{{ discountApplying ? messages.productCheckout.applyingDiscount : messages.productCheckout.applyDiscount }}</Button></div></div>
-              <div v-if="discountPreview" class="grid gap-1 rounded-md border bg-muted/30 p-3 text-sm"><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.productCheckout.originalAmount }}</span><span>¥{{ discountPreview.originalAmount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ t(messages.productCheckout.appliedDiscount, { code: discountPreview.code }) }}</span><span class="text-destructive">-¥{{ discountPreview.discountAmount }}</span></div><div class="flex justify-between gap-4 border-t pt-2 font-medium"><span>{{ messages.productCheckout.amountDue }}</span><span>¥{{ discountPreview.finalAmount }}</span></div></div>
-              <label class="grid gap-2 text-sm font-medium">{{ messages.productCheckout.buyerNote }}<Textarea v-model="buyerNote" rows="3" /></label>
-            </CardContent><CardFooter class="flex-col items-stretch gap-3"><Button type="submit" :disabled="loading || isOutOfStock || (requiresPayment && !methods.length)">{{ loading ? messages.productCheckout.processingOrder : isOutOfStock ? messages.storefront.outOfStock : requiresPayment ? messages.productCheckout.submitAndPay : messages.productCheckout.createFreeOrder }}</Button><p class="text-xs text-muted-foreground">{{ messages.productCheckout.paymentAmountNotice }}</p></CardFooter>
-          </form>
-        </Card>
-      </aside>
-    </section>
+                <div class="grid gap-2 text-sm font-medium"><span>{{ messages.productCheckout.discountCode }}</span><div class="flex gap-2"><Input v-model="discountCode" autocomplete="off" @keydown.enter.prevent="onApplyDiscount" /><Button type="button" variant="outline" :disabled="discountApplying || !discountCode.trim()" @click="onApplyDiscount">{{ discountApplying ? messages.productCheckout.applyingDiscount : messages.productCheckout.applyDiscount }}</Button></div></div>
+                <div v-if="discountPreview" class="grid gap-1 rounded-md border bg-muted/30 p-3 text-sm"><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.productCheckout.originalAmount }}</span><span>¥{{ discountPreview.originalAmount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ t(messages.productCheckout.appliedDiscount, { code: discountPreview.code }) }}</span><span class="text-destructive">-¥{{ discountPreview.discountAmount }}</span></div><div class="flex justify-between gap-4 border-t pt-2 font-medium"><span>{{ messages.productCheckout.amountDue }}</span><span>¥{{ discountPreview.finalAmount }}</span></div></div>
+                <label class="grid gap-2 text-sm font-medium">{{ messages.productCheckout.buyerNote }}<Textarea v-model="buyerNote" rows="3" /></label>
+              </CardContent><CardFooter class="flex-col items-stretch gap-3"><Button type="submit" :disabled="loading || isOutOfStock || (requiresPayment && !methods.length)">{{ loading ? messages.productCheckout.processingOrder : isOutOfStock ? messages.storefront.outOfStock : requiresPayment ? messages.productCheckout.submitAndPay : messages.productCheckout.createFreeOrder }}</Button><p class="text-xs text-muted-foreground">{{ messages.productCheckout.paymentAmountNotice }}</p></CardFooter>
+            </form>
+          </Card>
+        </aside>
+      </section>
 
-    <StorefrontFooter />
+      <StorefrontFooter />
+    </div>
 
     <Dialog :open="Boolean(previewImage)" @update:open="(open) => { if (!open) previewImage = null; }">
       <DialogContent :show-close-button="false" class="w-fit! max-w-[calc(100vw-2rem)]! border-0 bg-transparent p-0 shadow-none sm:max-w-[calc(100vw-4rem)]!" @interact-outside="previewImage = null">
