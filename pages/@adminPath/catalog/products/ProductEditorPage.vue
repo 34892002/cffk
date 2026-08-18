@@ -1,11 +1,11 @@
 <template>
   <section class="flex w-full flex-col gap-6">
     <AdminPageHeader>
-      <template #actions><Button variant="outline" @click="goBack">返回商品列表</Button></template>
+      <template #actions><div class="flex items-center gap-2"><Button variant="outline" :disabled="saving" @click="goBack">返回商品列表</Button><Button type="submit" form="product-editor-form" :disabled="saving || loading">{{ saving ? "保存中..." : loading ? "加载中..." : editing ? "保存商品" : "创建商品" }}</Button></div></template>
     </AdminPageHeader>
     <Alert v-if="error" variant="destructive"><AlertTitle>操作未完成</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
 
-    <form class="border-t" novalidate @submit.prevent="submit">
+    <form id="product-editor-form" class="border-t" novalidate @submit.prevent="submit">
       <div class="grid gap-8 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <FieldGroup class="gap-6">
           <FieldSet class="gap-4"><FieldLegend><span class="text-destructive">*</span> 商品名称</FieldLegend><VeeField v-slot="{ componentField, errors }" name="name"><Field :data-invalid="errors.length > 0"><Input id="product-name" v-bind="componentField" placeholder="例如：Pro 会员月卡" aria-label="商品名称" :aria-invalid="errors.length > 0" /><FieldError v-if="errors.length" :errors="errors" /></Field></VeeField></FieldSet>
