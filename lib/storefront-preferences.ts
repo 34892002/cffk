@@ -28,6 +28,17 @@ function isTheme(value: string | null): value is StorefrontTheme {
   return value === "light" || value === "dark";
 }
 
+export function detectBrowserLocale(browserLocales: readonly string[]): StorefrontLocale {
+  for (const browserLocale of browserLocales) {
+    const normalizedLocale = browserLocale.toLowerCase();
+    if (normalizedLocale === "zh-tw" || normalizedLocale.startsWith("zh-hant") || normalizedLocale.startsWith("zh-hk") || normalizedLocale.startsWith("zh-mo")) return "zh-TW";
+    if (normalizedLocale.startsWith("en")) return "en-US";
+    if (normalizedLocale.startsWith("zh")) return "zh-CN";
+  }
+
+  return "zh-CN";
+}
+
 function applyDocumentPreferences() {
   document.documentElement.classList.toggle("dark", theme.value === "dark");
   document.documentElement.lang = locale.value;
@@ -39,7 +50,12 @@ function initialize() {
 
   const savedLocale = window.localStorage.getItem(localeStorageKey);
   const savedTheme = window.localStorage.getItem(themeStorageKey);
-  if (isLocale(savedLocale)) locale.value = savedLocale;
+  if (isLocale(savedLocale)) {
+    locale.value = savedLocale;
+  } else {
+    locale.value = detectBrowserLocale(navigator.languages.length > 0 ? navigator.languages : [navigator.language]);
+    window.localStorage.setItem(localeStorageKey, locale.value);
+  }
   if (isTheme(savedTheme)) theme.value = savedTheme;
   applyDocumentPreferences();
 }
