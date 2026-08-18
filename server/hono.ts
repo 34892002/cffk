@@ -8,6 +8,7 @@ import vike from "@vikejs/hono";
 import { Hono, type Context } from "hono";
 import type { PaymentProviderKind } from "./payment/registry";
 import { PaymentLogService } from "./payment/log-service";
+import { getTurnstileConfig } from "@/lib/turnstile-config";
 
 function getApp() {
   const app = new Hono<{ Bindings: Record<string, unknown> & { DB: D1Database } }>();
@@ -40,9 +41,8 @@ function getApp() {
   }
   registerMediaRoutes(app);
   app.get("/api/security/turnstile", (context) => {
-    const siteKey = String(context.env.TURNSTILE_SITE_KEY ?? "").trim();
-    const secretKey = String(context.env.TURNSTILE_SECRET_KEY ?? "").trim();
-    return context.json({ enabled: Boolean(siteKey && secretKey), siteKey: siteKey && secretKey ? siteKey : null });
+    const config = getTurnstileConfig(context.env);
+    return context.json({ enabled: config.enabled, siteKey: config.enabled ? config.siteKey : null });
   });
   vike(app, [betterAuthSessionMiddleware, betterAuthHandler, telefuncHandler]);
   return app;

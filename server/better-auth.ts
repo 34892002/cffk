@@ -1,4 +1,5 @@
 import { env } from "./env";
+import { getTurnstileConfig } from "@/lib/turnstile-config";
 import type { RuntimeAdapter } from "@universal-middleware/core";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
@@ -24,6 +25,7 @@ const EMAIL_CHANGE_RESEND_INTERVAL_MS = 60 * 1000;
 
 export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, options: AuthConfigOptions = {}): BetterAuthOptions {
   const runtimeEnv = (runtime && "env" in runtime ? runtime.env : undefined) as AuthRuntimeEnv | undefined;
+  const turnstile = getTurnstileConfig(env);
   const deliverAuthEmail = async (scene: "EMAIL_VERIFICATION" | "PASSWORD_RESET", recipient: string, actionUrl: string) => {
     const database = runtimeEnv?.DB;
     if (!database) {
@@ -130,7 +132,7 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, o
     appName: APP_NAME,
     plugins: [
       twoFactor({ issuer: "CFFK 发卡" }),
-      ...(env.TURNSTILE_SECRET_KEY?.trim() ? [captcha({ provider: "cloudflare-turnstile", secretKey: env.TURNSTILE_SECRET_KEY.trim(), endpoints: ["/sign-in/email"] })] : []),
+      ...(turnstile.enabled ? [captcha({ provider: "cloudflare-turnstile", secretKey: turnstile.secretKey!, endpoints: ["/sign-in/email"] })] : []),
     ],
   };
 }

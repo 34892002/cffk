@@ -5,22 +5,22 @@ import { appError } from "@/lib/app-error";
 
 import { requireAdmin } from "@/server/telefunc-context";
 import { env } from "@/server/env";
+import { getTurnstileConfig } from "@/lib/turnstile-config";
 
 async function internalOnGetSecurityStatus() {
   const { db, adminUserId } = requireAdmin();
   const [admin] = await db.select({ email: user.email, twoFactorEnabled: user.twoFactorEnabled }).from(user).where(eq(user.id, adminUserId)).limit(1);
   if (!admin) appError("ADMIN_NOT_FOUND");
 
-  const turnstileSiteKey = env.TURNSTILE_SITE_KEY?.trim() || null;
-  const turnstileSecretConfigured = Boolean(env.TURNSTILE_SECRET_KEY?.trim());
+  const turnstile = getTurnstileConfig(env);
   return {
     email: admin.email,
     twoFactorEnabled: admin.twoFactorEnabled,
     turnstile: {
-      siteKey: turnstileSiteKey,
-      enabled: Boolean(turnstileSiteKey && turnstileSecretConfigured),
-      siteKeyConfigured: Boolean(turnstileSiteKey),
-      secretConfigured: turnstileSecretConfigured,
+      siteKey: turnstile.siteKey,
+      enabled: turnstile.enabled,
+      siteKeyConfigured: Boolean(turnstile.siteKey),
+      secretConfigured: Boolean(turnstile.secretKey),
     },
   };
 }

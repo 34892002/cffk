@@ -5,3 +5,9 @@ ADMIN_PATH=
 # Deploy to Cloudflare 会将此文件中的变量作为 Secret 收集。/ Deploy to Cloudflare collects variables in this file as Secrets.
 # Better Auth 会话签名密钥；请用 openssl rand -base64 32 生成随机值。/ Better Auth session signing secret; generate one with openssl rand -base64 32.
 BETTER_AUTH_SECRET=
+
+# TURNSTILE_SECRET_KEY
+# 前端站点 Key
+TURNSTILE_SITE_KEY=
+# 服务端 Secret Key
+TURNSTILE_SECRET_KEY=
