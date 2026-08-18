@@ -8,7 +8,8 @@ import { reportUnexpectedServerError } from "@/server/error-handling";
 import { enqueueOrderEvent } from "@/server/email/order-events";
 import { closePendingOrder, confirmOrderPayment, createOrder, type CreateOrderInput } from "@/server/order/service";
 import { getEnabledPaymentProvider } from "./config";
-import { getProviderDefinition } from "./registry";
+import { getSiteSettings } from "@/server/site/public-settings";
+import { getProviderDefinition, resolvePaymentUrls } from "./registry";
 import { PaymentLogService } from "./log-service";
 import { paymentRepository } from "./repository";
 import type { PaymentCreateInput, PaymentCreateResult } from "./types";
@@ -71,8 +72,10 @@ export class PaymentFlowService {
     }
     try {
       const config = JSON.parse(provider.configJson) as Record<string, unknown>;
+      const site = await getSiteSettings(this.database);
+      const urls = resolvePaymentUrls(provider.provider, site.siteUrl, config);
       const adapter = definition.createAdapter(config);
-      const result = await adapter.create({ orderNo: created.orderNo, amount: created.amount, subject: `订单 ${created.orderNo}`, channel, notifyUrl: String(config.notifyUrl ?? ""), returnUrl: paymentReturnUrl(config.returnUrl, created.orderNo) });
+      const result = await adapter.create({ orderNo: created.orderNo, amount: created.amount, subject: `订单 ${created.orderNo}`, channel, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, created.orderNo) });
       await repository.completeAttempt(attemptId, result.paymentOrderNo);
       await logs.writeBestEffort({ orderId: created.id, provider: provider.provider, orderNo: created.orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "CREATE", verifyStatus: "PENDING", payload: result });
       return { ...created, payment: result };
@@ -113,7 +116,9 @@ export class PaymentFlowService {
     if (attemptId === null) appError("PAYMENT_CREATE_FAILED");
     try {
       const config = JSON.parse(provider.configJson) as Record<string, unknown>;
-      const payment = await definition.createAdapter(config).create({ orderNo: record.orderNo, amount: record.amount, subject: `订单 ${record.orderNo}`, channel: record.paymentChannel as PaymentChannel | undefined, notifyUrl: String(config.notifyUrl ?? ""), returnUrl: paymentReturnUrl(config.returnUrl, record.orderNo) });
+      const site = await getSiteSettings(this.database);
+      const urls = resolvePaymentUrls(provider.provider, site.siteUrl, config);
+      const payment = await definition.createAdapter(config).create({ orderNo: record.orderNo, amount: record.amount, subject: `订单 ${record.orderNo}`, channel: record.paymentChannel as PaymentChannel | undefined, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, record.orderNo) });
       await repository.completeAttempt(attemptId, payment.paymentOrderNo);
       await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: provider.provider, orderNo: record.orderNo, paymentOrderNo: payment.paymentOrderNo, eventType: "RESUME", verifyStatus: "PENDING", payload: payment });
       return { orderNo: record.orderNo, amount: record.amount, paymentStatus: "UNPAID", payment };

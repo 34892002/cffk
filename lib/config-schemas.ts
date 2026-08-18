@@ -130,6 +130,19 @@ function parseJsonObject(json: string, name: string) {
   return value;
 }
 
+function requirePaymentUrl(value: unknown, field: string, allowEmpty = false) {
+  const text = allowEmpty && value === "" ? "" : requireString(value, field);
+  if (text) {
+    try {
+      if (text.startsWith("/")) new URL(text, "https://payment.invalid");
+      else requireUrl(text, field);
+    } catch {
+      throw new Error(`Invalid configuration: ${field} must be a URL or absolute path`);
+    }
+  }
+  return text;
+}
+
 export function parseAlipayConfig(json: string): AlipayConfig {
   const value = parseJsonObject(json, "Alipay");
   requireSchemaVersion(value, "schemaVersion");
@@ -142,8 +155,8 @@ export function parseAlipayConfig(json: string): AlipayConfig {
     sellerId: requireString(value.sellerId, "sellerId"),
     privateKey: requireString(value.privateKey, "privateKey"),
     alipayPublicKey: requireString(value.alipayPublicKey, "alipayPublicKey"),
-    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
-    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+    notifyUrl: requirePaymentUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requirePaymentUrl(value.returnUrl, "returnUrl", true),
   };
 }
 
@@ -156,8 +169,8 @@ export function parseEpayConfig(json: string): EpayConfig {
     pid: requireString(value.pid, "pid"),
     key: requireString(value.key, "key"),
     epayChannels: requireStringArray(value.epayChannels, "epayChannels", ["alipay", "wxpay"], 1) as EpayConfig["epayChannels"],
-    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
-    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+    notifyUrl: requirePaymentUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requirePaymentUrl(value.returnUrl, "returnUrl", true),
   };
 }
 
@@ -168,8 +181,8 @@ export function parseBepusdtConfig(json: string): BepusdtConfig {
     schemaVersion: 1,
     baseUrl: requireUrl(value.baseUrl, "baseUrl"),
     appSecret: requireString(value.appSecret, "appSecret"),
-    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
-    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+    notifyUrl: requirePaymentUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requirePaymentUrl(value.returnUrl, "returnUrl", true),
   };
 }
 
@@ -181,8 +194,8 @@ export function parseStripeConfig(json: string): StripeConfig {
     secretKey: requireString(value.secretKey, "secretKey"),
     webhookSecret: requireString(value.webhookSecret, "webhookSecret"),
     currency: requireString(value.currency, "currency").toLowerCase(),
-    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
-    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+    notifyUrl: requirePaymentUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requirePaymentUrl(value.returnUrl, "returnUrl", true),
   };
 }
 
@@ -195,8 +208,8 @@ export function parseHashpayConfig(json: string): HashpayConfig {
     merchantId: requireString(value.merchantId, "merchantId"),
     privateKey: requireString(value.privateKey, "privateKey"),
     currency: requireString(value.currency, "currency").toUpperCase(),
-    notifyUrl: requireUrl(value.notifyUrl, "notifyUrl", true),
-    returnUrl: requireUrl(value.returnUrl, "returnUrl", true),
+    notifyUrl: requirePaymentUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requirePaymentUrl(value.returnUrl, "returnUrl", true),
   };
 }
 

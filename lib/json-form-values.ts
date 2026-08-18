@@ -49,6 +49,7 @@ function jsonFormValidationIssue(field: JsonFormFieldDefinition, value: unknown,
   if (field.type === "select" && !field.options?.some((option) => option.value === value)) return "invalid";
   if (field.type === "email" && !isJsonFormEmail(value)) return "invalid";
   if (field.type === "url") {
+    if ((field.key === "notifyUrl" || field.key === "returnUrl") && value.startsWith("/")) return null;
     try {
       const url = new URL(value);
       if (url.protocol !== "http:" && url.protocol !== "https:") return "invalid";

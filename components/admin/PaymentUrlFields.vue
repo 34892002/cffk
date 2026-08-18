@@ -75,15 +75,15 @@ function pathOf(value: string) {
 }
 
 function setUrl(field: "notify" | "return", value: string) {
-  if (!origin.value) return;
   const path = value.trim() ? (value.startsWith("/") ? value : `/${value}`) : "/";
-  if (field === "notify") emit("update:notifyUrl", `${origin.value}${path}`);
-  else emit("update:returnUrl", `${origin.value}${path}`);
+  if (field === "notify") emit("update:notifyUrl", path);
+  else emit("update:returnUrl", path);
 }
 
 async function copyUrl(field: "notify" | "return", value: string) {
   if (!value || !navigator.clipboard) return;
-  await navigator.clipboard.writeText(value);
+  const url = origin.value ? new URL(pathOf(value), `${origin.value}/`).toString() : value;
+  await navigator.clipboard.writeText(url);
   copiedField.value = field;
   if (resetTimer) clearTimeout(resetTimer);
   resetTimer = setTimeout(() => { copiedField.value = null; }, 2_000);

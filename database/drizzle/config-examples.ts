@@ -1,7 +1,8 @@
 import type { AlipayConfig, EmailProviderConfig, EmailTemplateConfig } from "@/lib/config-schemas";
 
 // Persist these values with JSON.stringify() in D1. Payment credentials are
-// entered by the administrator and are never returned to the browser.
+// entered by the administrator and are never returned to the browser. Payment
+// URLs are paths; the current site origin is added when a payment is created.
 export const alipayConfig = {
   schemaVersion: 1,
   modes: ["web", "face_to_face"],
@@ -10,8 +11,8 @@ export const alipayConfig = {
   sellerId: "2088xxxxxxxxxxxx",
   privateKey: "-----BEGIN PRIVATE KEY-----\n...",
   alipayPublicKey: "-----BEGIN PUBLIC KEY-----\n...",
-  notifyUrl: "https://shop.example.com/api/payments/alipay/notify",
-  returnUrl: "https://shop.example.com/payment-result",
+  notifyUrl: "/api/payments/alipay/notify",
+  returnUrl: "/payment-result",
 } satisfies AlipayConfig;
 
 export const smtpEmailConfig = {

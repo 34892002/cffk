@@ -4,11 +4,11 @@ import { createHash, createHmac, generateKeyPairSync, sign as signData } from "n
 import { test } from "bun:test";
 import { AppError } from "../../lib/app-error";
 import { canonicalizeAlipayParameters } from "../../lib/payment-utils";
-import { mergePaymentProviderConfig, mergePaymentUrls } from "../../server/payment/admin.telefunc";
+import { mergePaymentProviderConfig, mergePaymentUrls, rebasePaymentUrl } from "../../server/payment/admin.telefunc";
 import { createProviderAdapter } from "../../server/payment/providers";
 import { normalizePaymentCallbackPayload } from "../../server/payment/callback-payload";
 import { paymentCallbackResponse } from "../../server/payment/callback-service";
-import { getPaymentUrlDefaults } from "../../server/payment/registry";
+import { getPaymentUrlDefaults, resolvePaymentUrls } from "../../server/payment/registry";
 
 const testKeyPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const testPrivateKey = testKeyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -93,6 +93,25 @@ test("payment callback payloads reject ambiguous and oversized input", () => {
     () => normalizePaymentCallbackPayload("POST", "https://shop.example/api/payments/stripe/notify", "x".repeat(64 * 1024 + 1)),
     /PAYMENT_CALLBACK_PAYLOAD_INVALID/,
   );
+});
+
+test("rebases stored payment URLs after the site domain changes", () => {
+  assert.equal(
+    rebasePaymentUrl("https://old.example/payment-result?orderNo=1#done", "https://new.example/payment-result", "https://new.example"),
+    "https://new.example/payment-result?orderNo=1#done",
+  );
+  assert.equal(rebasePaymentUrl("", "https://new.example/payment-result", "https://new.example"), "https://new.example/payment-result");
+});
+
+test("payment URLs use the current site origin for legacy and path values", () => {
+  assert.deepEqual(resolvePaymentUrls("EPAY", "https://new.example.com", { notifyUrl: "https://old.example.com/api/payments/epay/notify", returnUrl: "https://old.example.com/payment-result" }), {
+    notifyUrl: "https://new.example.com/api/payments/epay/notify",
+    returnUrl: "https://new.example.com/payment-result",
+  });
+  assert.deepEqual(resolvePaymentUrls("EPAY", "https://new.example.com", { returnUrl: "/payment-result" }), {
+    notifyUrl: "https://new.example.com/api/payments/epay/notify",
+    returnUrl: "https://new.example.com/payment-result",
+  });
 });
 
 test("payment URL validation identifies the invalid field", () => {

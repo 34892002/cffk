@@ -5,7 +5,7 @@ import { requireAdmin } from "@/server/telefunc-context";
 import { paymentLog, paymentProvider, siteSetting } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { mergeJsonFormValues, redactJsonFormValues, type JsonFormSubmitValues, type JsonFormValues } from "@/lib/json-form-values";
-import { getPaymentNotifyPath, getPaymentUrlDefaults, getProviderDefinition, paymentProviderDefinitions, parseProviderConfig, type PaymentProviderKind } from "./registry";
+import { getPaymentUrlDefaults, getPaymentUrlPaths, getProviderDefinition, paymentProviderDefinitions, parseProviderConfig, type PaymentProviderKind } from "./registry";
 import { paymentRepository } from "./repository";
 
 
@@ -13,24 +13,35 @@ function now() {
   return new Date();
 }
 
+export function rebasePaymentUrl(value: unknown, fallback: string, siteUrl: string | null) {
+  if (!siteUrl || typeof value !== "string" || !value.trim()) return fallback;
+  try {
+    const currentOrigin = new URL(siteUrl).origin;
+    const url = new URL(value, `${currentOrigin}/`);
+    return `${currentOrigin}${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
 export function mergePaymentUrls(provider: PaymentProviderKind, siteUrl: string | null | undefined, values: Record<string, unknown>): Record<string, string> {
   const defaults = getPaymentUrlDefaults(provider, siteUrl);
+  const paths = getPaymentUrlPaths(provider);
   const hasNotifyUrl = getProviderDefinition(provider)?.fields.some((field) => field.key === "notifyUrl") ?? false;
   if (!defaults.returnUrl || (hasNotifyUrl && !defaults.notifyUrl)) appError("PAYMENT_SITE_URL_REQUIRED");
   const origin = new URL(siteUrl!).origin;
-  const returnUrl = typeof values.returnUrl === "string" ? values.returnUrl : defaults.returnUrl;
-  const notifyUrl = typeof values.notifyUrl === "string" ? values.notifyUrl : defaults.notifyUrl;
+  const rawReturnUrl = typeof values.returnUrl === "string" && values.returnUrl.trim() ? values.returnUrl.trim() : defaults.returnUrl;
   let parsedReturnUrl: URL;
-  try { parsedReturnUrl = new URL(returnUrl); } catch { appError("PAYMENT_RETURN_URL_INVALID"); }
-  if (parsedReturnUrl.origin !== origin || parsedReturnUrl.username || parsedReturnUrl.password) appError("PAYMENT_RETURN_URL_INVALID");
+  try { parsedReturnUrl = new URL(rawReturnUrl, `${origin}/`); } catch { appError("PAYMENT_RETURN_URL_INVALID"); }
+  if (parsedReturnUrl.origin !== origin || parsedReturnUrl.username || parsedReturnUrl.password || !parsedReturnUrl.pathname.startsWith("/")) appError("PAYMENT_RETURN_URL_INVALID");
   if (hasNotifyUrl) {
+    const rawNotifyUrl = typeof values.notifyUrl === "string" && values.notifyUrl.trim() ? values.notifyUrl.trim() : defaults.notifyUrl;
     let parsedNotifyUrl: URL;
-    try { parsedNotifyUrl = new URL(notifyUrl); } catch { appError("PAYMENT_NOTIFY_URL_INVALID"); }
-    const notifyPath = getPaymentNotifyPath(provider);
-    if (parsedNotifyUrl.origin !== origin || parsedNotifyUrl.username || parsedNotifyUrl.password || parsedNotifyUrl.pathname !== notifyPath || parsedNotifyUrl.search || parsedNotifyUrl.hash) appError("PAYMENT_NOTIFY_URL_INVALID");
+    try { parsedNotifyUrl = new URL(rawNotifyUrl, `${origin}/`); } catch { appError("PAYMENT_NOTIFY_URL_INVALID"); }
+    if (parsedNotifyUrl.origin !== origin || parsedNotifyUrl.username || parsedNotifyUrl.password || parsedNotifyUrl.pathname !== paths.notifyUrl || parsedNotifyUrl.search || parsedNotifyUrl.hash) appError("PAYMENT_NOTIFY_URL_INVALID");
   }
-  const result: Record<string, string> = { returnUrl };
-  if (hasNotifyUrl) result.notifyUrl = notifyUrl;
+  const result: Record<string, string> = { returnUrl: `${parsedReturnUrl.pathname}${parsedReturnUrl.search}${parsedReturnUrl.hash}` };
+  if (hasNotifyUrl) result.notifyUrl = paths.notifyUrl;
   return result;
 }
 
@@ -69,7 +80,12 @@ function getSafeForm(provider: string, name: string, isEnabled: boolean, sort: n
   try { parseProviderConfig(provider, configJson); } catch { valid = false; }
 
   const urlDefaults = getPaymentUrlDefaults(provider as PaymentProviderKind, siteUrl);
-  const displayValues = { ...definition.defaults, ...parsed, notifyUrl: parsed.notifyUrl || urlDefaults.notifyUrl, returnUrl: parsed.returnUrl || urlDefaults.returnUrl };
+  const displayValues = {
+    ...definition.defaults,
+    ...parsed,
+    notifyUrl: urlDefaults.notifyUrl,
+    returnUrl: rebasePaymentUrl(parsed.returnUrl, urlDefaults.returnUrl, siteUrl),
+  };
   const { values, configuredSecrets } = redactJsonFormValues(definition.fields, displayValues);
   return { provider, title: definition.title, name, isEnabled, sort, updatedAt: updatedAt?.toISOString() ?? null, valid, schemaVersion: definition.schemaVersion, fields: definition.fields, values: values as JsonFormValues, configuredSecrets, siteUrl };
 }

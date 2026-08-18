@@ -122,12 +122,38 @@ export function getProviderDefinition(provider: string) {
   return paymentProviderDefinitions[provider as PaymentProviderKind];
 }
 
+export function getPaymentUrlPaths(provider: PaymentProviderKind) {
+  return {
+    notifyUrl: paymentNotifyPaths[provider] ?? "",
+    returnUrl: "/payment-result",
+  };
+}
+
 export function getPaymentUrlDefaults(provider: PaymentProviderKind, siteUrl: string | null | undefined) {
   if (!siteUrl) return { notifyUrl: "", returnUrl: "" };
   const origin = new URL(siteUrl).origin;
+  const paths = getPaymentUrlPaths(provider);
   return {
-    notifyUrl: `${origin}${paymentNotifyPaths[provider] ?? ""}`,
-    returnUrl: `${origin}/payment-result`,
+    notifyUrl: `${origin}${paths.notifyUrl}`,
+    returnUrl: `${origin}${paths.returnUrl}`,
+  };
+}
+
+export function resolvePaymentUrls(provider: PaymentProviderKind, siteUrl: string | null | undefined, values: Record<string, unknown>) {
+  if (!siteUrl) return { notifyUrl: "", returnUrl: "" };
+  const origin = new URL(siteUrl).origin;
+  const paths = getPaymentUrlPaths(provider);
+  const rawReturnUrl = typeof values.returnUrl === "string" && values.returnUrl.trim() ? values.returnUrl.trim() : paths.returnUrl;
+  let returnPath: string;
+  try {
+    const url = new URL(rawReturnUrl, `${origin}/`);
+    returnPath = `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    returnPath = paths.returnUrl;
+  }
+  return {
+    notifyUrl: `${origin}${paths.notifyUrl}`,
+    returnUrl: new URL(returnPath, `${origin}/`).toString(),
   };
 }
 
