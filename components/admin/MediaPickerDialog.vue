@@ -1,6 +1,6 @@
 <template>
   <Dialog :open="props.open" @update:open="emit('update:open', $event)">
-    <DialogContent class="grid max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-3xl grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden p-0">
+    <DialogContent class="grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-6xl grid-rows-[auto_auto_auto_auto] overflow-hidden p-0 sm:w-[calc(100%-4rem)]">
       <DialogHeader class="border-b px-6 py-5 pr-8">
         <DialogTitle>选择媒体图片</DialogTitle>
         <DialogDescription>仅显示媒体库中的图片；也可以继续手工填写 URL。</DialogDescription>
@@ -26,7 +26,7 @@
         </div>
       </div>
 
-      <ScrollArea ref="scrollAreaRef" class="min-h-100" @scroll="onScroll">
+      <ScrollArea ref="scrollAreaRef" class="h-[min(30rem,calc(100dvh-18rem))]" @scroll="onScroll">
         <div v-if="items.length === 0" class="flex min-h-100 items-center justify-center px-6 py-5">
           <!-- 加载状态 -->
           <div v-if="loading" class="text-center">
@@ -44,7 +44,7 @@
 
         <!-- 图片网格 -->
         <div v-if="items.length > 0" class="px-6 py-5">
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             <button
               v-for="item in items"
               :key="item.id"

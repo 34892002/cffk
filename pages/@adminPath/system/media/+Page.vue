@@ -17,14 +17,36 @@
     <Card>
       <CardHeader class="items-center text-center"><CardTitle>上传媒体</CardTitle><CardDescription>支持 JPEG、PNG、WebP、GIF 和 PDF；图片最大 3 MiB，PDF 最大 10 MiB。</CardDescription></CardHeader>
       <CardContent>
-        <div class="mx-auto max-w-4xl rounded-lg border border-dashed p-6 text-center" :class="dragging ? 'border-primary bg-muted/50' : 'border-border'" @dragenter.prevent="dragging = true" @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false" @drop.prevent="dropFile">
-          <div class="flex flex-wrap items-center justify-center gap-3">
-            <Input class="max-w-xl" type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" :disabled="!canUpload || uploading" @change="selectFile" />
-            <Button :disabled="!selectedFile || !canUpload || uploading" @click="upload">{{ uploading ? `${progress}% 上传中` : '上传文件' }}</Button>
+        <div class="mx-auto max-w-4xl p-6 text-center">
+          <input ref="fileInput" class="hidden" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" :disabled="!canUpload || uploading" @change="selectFiles" />
+          <div
+            class="mx-auto flex min-h-44 max-w-2xl cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-5 transition-colors"
+            :class="dragging ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'"
+            role="button"
+            tabindex="0"
+            @dragenter.prevent="!uploading && (dragging = true)"
+            @dragover.prevent="!uploading && (dragging = true)"
+            @dragleave.prevent="dragging = false"
+            @drop.prevent="dropFile"
+            @click="openFilePicker"
+            @keydown.enter.prevent="openFilePicker"
+            @keydown.space.prevent="openFilePicker"
+          >
+            <FolderOpenIcon class="mb-3 size-14 text-primary" :class="{ 'opacity-50': !canUpload || uploading }" :stroke-width="1.5" />
+            <p class="text-lg font-semibold" :class="{ 'opacity-50': !canUpload || uploading }">点击或拖拽上传图片或 PDF</p>
+            <p class="mt-3 inline-flex items-center gap-1.5 text-sm text-primary" :class="{ 'opacity-50': !canUpload || uploading }"><ClipboardPasteIcon class="size-4" />也可以使用 Ctrl+V 粘贴剪贴板中的图片</p>
           </div>
-          <label class="mt-4 inline-flex items-center gap-2 text-sm"><Checkbox v-model="webpEnabled" :disabled="!webpSupported || uploading" />自动压缩 JPEG、PNG 为 WebP</label>
-          <p class="mt-2 text-xs text-muted-foreground">也可将单个文件拖入此区域。转换失败或文件变大时会自动上传原文件。</p>
-          <p v-if="selectedFile" class="mt-3 text-sm text-muted-foreground">{{ selectedFile.name }} · {{ formatSize(selectedFile.size) }}</p>
+          <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <Button :disabled="!pendingCount || !canUpload || uploading" @click="upload">{{ uploading ? `${completedCount}/${batchTotal} 个文件，${progress}%` : `上传 ${pendingCount} 个文件` }}</Button>
+            <label class="inline-flex items-center gap-2 text-sm"><Checkbox v-model="webpEnabled" :disabled="!webpSupported || uploading" />自动压缩 JPEG、PNG 为 WebP</label>
+          </div>
+          <p class="mt-2 text-xs text-muted-foreground">可一次选择或拖入多个文件，系统会按顺序上传。转换失败或文件变大时会自动上传原文件。</p>
+          <div v-if="queue.length" class="mx-auto mt-4 max-w-xl space-y-1 text-left text-sm">
+            <div v-for="item in queue" :key="item.id" class="flex items-center justify-between gap-3 rounded border px-3 py-2">
+              <span class="min-w-0 truncate">{{ item.file.name }} · {{ formatSize(item.file.size) }}</span>
+              <span class="shrink-0 text-xs text-muted-foreground">{{ item.id === currentUploadId && uploading ? `${progress}% 上传中` : uploadStatusText(item.status) }}</span>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -74,11 +96,19 @@
         </form>
       </DialogContent>
     </Dialog>
-    <Dialog :open="Boolean(preview)" @update:open="(open) => { if (!open) preview = null }">
+    <Dialog :open="Boolean(preview && preview.mimeType.startsWith('image/'))" @update:open="(open) => { if (!open) preview = null }">
+      <DialogContent :show-close-button="false" class="w-fit! max-w-[calc(100vw-2rem)]! border-0 bg-transparent p-0 shadow-none sm:max-w-[calc(100vw-4rem)]!" @interact-outside="preview = null">
+        <DialogTitle class="sr-only">{{ preview?.originalName }}</DialogTitle>
+        <div class="relative inline-flex">
+          <img v-if="preview" :src="preview.url" :alt="preview.originalName" class="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] rounded-lg object-contain sm:max-w-[calc(100vw-4rem)]" />
+          <DialogClose as-child><Button type="button" variant="ghost" size="icon" class="absolute right-2 top-2 size-10 rounded-full bg-black/55 text-white hover:bg-black/75 hover:text-white" aria-label="关闭图片预览"><XIcon /></Button></DialogClose>
+        </div>
+      </DialogContent>
+    </Dialog>
+    <Dialog :open="Boolean(preview && !preview.mimeType.startsWith('image/'))" @update:open="(open) => { if (!open) preview = null }">
       <DialogContent class="w-[calc(100%-2rem)] max-w-3xl">
         <DialogHeader><DialogTitle>{{ preview?.originalName }}</DialogTitle></DialogHeader>
-        <img v-if="preview?.mimeType.startsWith('image/')" :src="preview.url" :alt="preview.originalName" class="max-h-[70vh] w-full object-contain" />
-        <iframe v-else-if="preview" :src="preview.url" class="h-[70vh] w-full" title="媒体预览" />
+        <iframe v-if="preview" :src="preview.url" class="h-[70vh] w-full" title="媒体预览" />
         <DialogFooter><Button type="button" @click="preview = null">关闭</Button></DialogFooter>
       </DialogContent>
     </Dialog>
@@ -91,9 +121,9 @@
   </section>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
-import { RefreshCwIcon } from "@lucide/vue";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { ClipboardPasteIcon, FolderOpenIcon, RefreshCwIcon, XIcon } from "@lucide/vue";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -116,11 +146,14 @@ import type { MediaConfigInput } from "@/server/media/types";
 import { onGetMedia, onGetMediaConfig, onSaveMediaConfig, onTestMediaStorage } from "@/server/media/admin.telefunc";
 
 type Row = Awaited<ReturnType<typeof onGetMedia>>["items"][number];
+type UploadStatus = "queued" | "uploading" | "success" | "error";
+type UploadItem = { id: string; file: File; status: UploadStatus };
 const columns: AdminTableColumn<Row>[] = [{ key: "preview", label: "预览" }, { key: "originalName", label: "文件名" }, { key: "mimeType", label: "类型" }, { key: "fileSize", label: "大小" }, { key: "uploadedAt", label: "上传时间" }];
 const data = reactive<Awaited<ReturnType<typeof onGetMedia>>>({ items: [], total: 0, page: 1, pageSize: 10 });
 const config = reactive<Awaited<ReturnType<typeof onGetMediaConfig>>>({ configured: false, values: null, credentialStatus: { accessKeyConfigured: false, secretKeyConfigured: false }, updatedAt: null });
-const loading = ref(false), configOpen = ref(false), uploading = ref(false), saving = ref(false), deleting = ref(false), progress = ref(0), selectedFile = ref<File | null>(null), draftKeyword = ref(""), draftMimeType = ref("all"), keyword = ref(""), mimeType = ref("all"), preview = ref<Row | null>(null), toDelete = ref<Row | null>(null), dragging = ref(false), webpSupported = ref(false), webpEnabled = ref(false);
+const loading = ref(false), configOpen = ref(false), uploading = ref(false), saving = ref(false), deleting = ref(false), progress = ref(0), completedCount = ref(0), batchTotal = ref(0), currentUploadId = ref(""), queue = ref<UploadItem[]>([]), fileInput = ref<HTMLInputElement | null>(null), draftKeyword = ref(""), draftMimeType = ref("all"), keyword = ref(""), mimeType = ref("all"), preview = ref<Row | null>(null), toDelete = ref<Row | null>(null), dragging = ref(false), webpSupported = ref(false), webpEnabled = ref(false);
 const canUpload = computed(() => config.configured && config.credentialStatus.accessKeyConfigured && config.credentialStatus.secretKeyConfigured);
+const pendingCount = computed(() => queue.value.filter((item) => item.status !== "success").length);
 const timezone = useSiteTimezone();
 const { handleSubmit, resetForm, values } = useForm({ validationSchema: toTypedSchema(z.object({ endpoint: z.string().url(), bucket: z.string().min(1), accessKeyId: z.string().optional(), secretAccessKey: z.string().optional(), region: z.string().min(1), pathPrefix: z.string().min(1), cacheControl: z.string().min(1), forcePathStyle: z.boolean() })), initialValues: { endpoint: "", bucket: "", accessKeyId: "", secretAccessKey: "", region: "auto", pathPrefix: "media", cacheControl: "public, max-age=31536000, s-maxage=31536000, immutable", forcePathStyle: false } });
 async function loadAll() { loading.value = true; try { const [c, list] = await Promise.all([runTelefunc(() => onGetMediaConfig(), { notifyError: false }), runTelefunc(() => onGetMedia({ keyword: keyword.value || undefined, mimeType: mimeType.value === "all" ? undefined : mimeType.value as "image/" | "application/pdf", page: data.page, pageSize: data.pageSize }), { notifyError: false })]); Object.assign(config, c); Object.assign(data, list); if (c.values) resetForm({ values: { ...c.values, accessKeyId: "", secretAccessKey: "" } }); } catch { /* runTelefunc 已显示脱敏错误。 */ } finally { loading.value = false; } }
@@ -128,16 +161,99 @@ function search() { keyword.value = draftKeyword.value; mimeType.value = draftMi
 function resetFilters() { draftKeyword.value = ""; draftMimeType.value = "all"; search(); }
 function goPage(page: number) { data.page = page; void loadAll(); }
 function changePageSize(pageSize: number) { data.pageSize = pageSize; data.page = 1; void loadAll(); }
-function setFile(file: File | null) { selectedFile.value = file; }
-function selectFile(event: Event) { setFile((event.target as HTMLInputElement).files?.[0] ?? null); }
-function dropFile(event: DragEvent) { dragging.value = false; setFile(event.dataTransfer?.files[0] ?? null); }
+function openFilePicker() {
+  if (!canUpload.value || uploading.value) return;
+  fileInput.value?.click();
+}
+function addFiles(files: File[]) {
+  if (uploading.value) return;
+  const uniqueFiles = new Map<string, File>();
+  for (const file of files) uniqueFiles.set(`${file.name}:${file.size}:${file.lastModified}`, file);
+  queue.value = Array.from(uniqueFiles.values()).map((file) => ({ id: `${file.name}:${file.size}:${file.lastModified}:${crypto.randomUUID()}`, file, status: "queued" }));
+}
+function selectFiles(event: Event) {
+  addFiles(Array.from((event.target as HTMLInputElement).files ?? []));
+  (event.target as HTMLInputElement).value = "";
+}
+function dropFile(event: DragEvent) {
+  dragging.value = false;
+  if (uploading.value) return;
+  addFiles(Array.from(event.dataTransfer?.files ?? []));
+}
+function uploadStatusText(status: UploadStatus) {
+  return { queued: "等待上传", uploading: "上传中", success: "已完成", error: "失败" }[status];
+}
+function setQueueStatus(id: string, status: UploadStatus) {
+  queue.value = queue.value.map((item) => item.id === id ? { ...item, status } : item);
+}
 async function optimizeFile(file: File) { if (!webpEnabled.value || !["image/jpeg", "image/png"].includes(file.type)) return file; try { const bitmap = await createImageBitmap(file); const canvas = document.createElement("canvas"); canvas.width = bitmap.width; canvas.height = bitmap.height; canvas.getContext("2d")?.drawImage(bitmap, 0, 0); bitmap.close(); const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.7)); if (!blob || blob.size >= file.size) return file; return new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.webp`, { type: "image/webp" }); } catch { toast.info("图片压缩失败，已上传原文件。"); return file; } }
-async function upload() { if (!selectedFile.value || !canUpload.value) return; uploading.value = true; progress.value = 0; const file = await optimizeFile(selectedFile.value); const xhr = new XMLHttpRequest(); xhr.open("POST", "/api/media/upload"); xhr.upload.onprogress = (event) => { if (event.lengthComputable) progress.value = Math.round(event.loaded / event.total * 100); }; xhr.onload = async () => { uploading.value = false; if (xhr.status >= 200 && xhr.status < 300) { toast.success("文件上传成功。"); selectedFile.value = null; void loadAll(); } else { const response = new Response(xhr.responseText, { status: xhr.status, headers: { "content-type": xhr.getResponseHeader("content-type") ?? "text/plain" } }); toast.error(mediaApiUserError(await mediaApiError(response))); } }; xhr.onerror = () => { uploading.value = false; toast.error("接口异常，请稍后重试。"); }; const form = new FormData(); form.append("file", file); xhr.send(form); }
+function uploadOne(file: File): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/media/upload");
+    xhr.upload.onprogress = (event) => { if (event.lengthComputable) progress.value = Math.round(event.loaded / event.total * 100); };
+    xhr.onload = async () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else {
+        const response = new Response(xhr.responseText, { status: xhr.status, headers: { "content-type": xhr.getResponseHeader("content-type") ?? "text/plain" } });
+        reject(await mediaApiError(response));
+      }
+    };
+    xhr.onerror = () => reject(new Error("接口异常，请稍后重试。"));
+    const form = new FormData();
+    form.append("file", file);
+    xhr.send(form);
+  });
+}
+async function upload() {
+  if (!queue.value.length || !canUpload.value) return;
+  uploading.value = true;
+  const pendingItems = queue.value.filter((item) => item.status !== "success");
+  batchTotal.value = pendingItems.length;
+  completedCount.value = 0;
+  let successCount = 0;
+  let errorCount = 0;
+  try {
+    for (const item of pendingItems) {
+      currentUploadId.value = item.id;
+      setQueueStatus(item.id, "uploading");
+      progress.value = 0;
+      try {
+        await uploadOne(await optimizeFile(item.file));
+        setQueueStatus(item.id, "success");
+        completedCount.value += 1;
+        successCount += 1;
+      } catch (cause) {
+        setQueueStatus(item.id, "error");
+        completedCount.value += 1;
+        errorCount += 1;
+        toast.error(`${item.file.name}: ${mediaApiUserError(cause)}`);
+      }
+    }
+    if (successCount > 0) toast.success(`${successCount} 个文件上传成功${errorCount ? `，${errorCount} 个失败` : "。"}`);
+    await loadAll();
+  } finally {
+    uploading.value = false;
+    progress.value = 0;
+    currentUploadId.value = "";
+  }
+}
 const saveConfig = handleSubmit(async (input) => { saving.value = true; try { await runTelefunc(() => onSaveMediaConfig(input), { successMessage: "媒体存储配置已保存。" }); configOpen.value = false; await loadAll(); } catch { /* runTelefunc 已显示脱敏错误。 */ } finally { saving.value = false; } });
 async function testConfig() { try { await runTelefunc(() => onTestMediaStorage(values as MediaConfigInput), { successMessage: "存储连接测试成功。" }); } catch { /* runTelefunc 已显示脱敏错误。 */ } }
 async function remove() { if (!toDelete.value) return; deleting.value = true; try { await deleteMedia(toDelete.value.id); toast.success("媒体文件已删除。"); toDelete.value = null; await loadAll(); } catch (cause) { toast.error(mediaApiUserError(cause)); } finally { deleting.value = false; } }
 async function copy(url: string) { await navigator.clipboard.writeText(url); toast.success("URL 已复制。"); }
 function formatSize(value: number) { return value < 1048576 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1048576).toFixed(2)} MB`; }
 function formatDate(value: Date | string) { return formatDateInTimezone(value, timezone.value); }
-onMounted(() => { const canvas = document.createElement("canvas"); webpSupported.value = canvas.toDataURL("image/webp").startsWith("data:image/webp"); webpEnabled.value = webpSupported.value; void loadAll(); });
+function handleDocumentPaste(event: ClipboardEvent) {
+  if (uploading.value) return;
+  addFiles(Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith("image/")));
+}
+onMounted(() => {
+  const canvas = document.createElement("canvas");
+  webpSupported.value = canvas.toDataURL("image/webp").startsWith("data:image/webp");
+  webpEnabled.value = webpSupported.value;
+  document.addEventListener("paste", handleDocumentPaste);
+  void loadAll();
+});
+onBeforeUnmount(() => document.removeEventListener("paste", handleDocumentPaste));
 </script>
