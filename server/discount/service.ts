@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { appError } from "@/lib/app-error";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
-import { discountCode, product } from "@/database/drizzle/schema";
+import { discountCode, productSku } from "@/database/drizzle/schema";
 
 type DiscountCandidate = {
   id: number;
@@ -72,7 +72,7 @@ export async function previewDiscount(database: D1Database, input: { productId: 
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   const requestedQuantity = positiveInteger(input.quantity, "QUANTITY");
   const db = createDrizzleDb(database);
-  const [item] = await db.select({ id: product.id, price: product.price, minBuy: product.minBuy, maxBuy: product.maxBuy }).from(product).where(and(eq(product.id, productId), eq(product.status, "ACTIVE"))).limit(1);
+  const [item] = await db.select({ id: productSku.productId, price: productSku.price, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy }).from(productSku).where(and(eq(productSku.productId, productId), eq(productSku.status, "ACTIVE"))).orderBy(productSku.sort, productSku.id).limit(1);
   if (!item) appError("PRODUCT_NOT_AVAILABLE");
 
   const quantity = Math.max(item.minBuy, Math.min(item.maxBuy, requestedQuantity));

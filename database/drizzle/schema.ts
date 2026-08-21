@@ -132,15 +132,8 @@ export const product = sqliteTable(
     subtitle: text("subtitle"),
     description: text("description"),
     coverImage: text("coverImage"),
-    price: integer("price").notNull(),
     status: text("status", { enum: ["DRAFT", "ACTIVE", "INACTIVE"] }).notNull().default("DRAFT"),
-    deliveryType: text("deliveryType", { enum: ["CARD_AUTO", "FIXED_CARD", "MANUAL", "EXPRESS"] }).notNull().default("CARD_AUTO"),
-    fixedDeliveryContent: text("fixedDeliveryContent"),
     manualDeliveryHint: text("manualDeliveryHint"),
-
-    physicalStock: integer("physicalStock"),
-    minBuy: integer("minBuy").notNull().default(1),
-    maxBuy: integer("maxBuy").notNull().default(1),
     sort: integer("sort").notNull().default(0),
 
     purchaseNote: text("purchaseNote"),
@@ -151,6 +144,29 @@ export const product = sqliteTable(
     uniqueIndex("product_slug_unique").on(table.slug),
     index("product_categoryId_idx").on(table.categoryId),
     index("product_status_sort_idx").on(table.status, table.sort),
+  ],
+);
+
+export const productSku = sqliteTable(
+  "productSku",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    productId: integer("productId").notNull().references(() => product.id),
+    name: text("name").notNull().default("默认规格"),
+    price: integer("price").notNull(),
+    status: text("status", { enum: ["ACTIVE", "INACTIVE"] }).notNull().default("ACTIVE"),
+    deliveryType: text("deliveryType", { enum: ["CARD_AUTO", "FIXED_CARD", "MANUAL", "EXPRESS"] }).notNull(),
+    fixedDeliveryContent: text("fixedDeliveryContent"),
+    physicalStock: integer("physicalStock"),
+    minBuy: integer("minBuy").notNull().default(1),
+    maxBuy: integer("maxBuy").notNull().default(1),
+    sort: integer("sort").notNull().default(0),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("productSku_product_name_unique").on(table.productId, table.name),
+    index("productSku_product_status_sort_idx").on(table.productId, table.status, table.sort),
   ],
 );
 
@@ -204,7 +220,9 @@ export const order = sqliteTable(
     orderNo: text("orderNo").notNull(),
     ownerUserId: text("ownerUserId").references(() => user.id),
     productId: integer("productId").notNull().references(() => product.id),
+    productSkuId: integer("productSkuId").references(() => productSku.id),
     productNameSnapshot: text("productNameSnapshot").notNull(),
+    productSkuNameSnapshot: text("productSkuNameSnapshot"),
     unitPrice: integer("unitPrice").notNull(),
     quantity: integer("quantity").notNull(),
     amount: integer("amount").notNull(),
@@ -249,6 +267,7 @@ export const card = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     productId: integer("productId").notNull().references(() => product.id),
+    productSkuId: integer("productSkuId").references(() => productSku.id),
     content: text("content").notNull(),
     status: text("status", { enum: ["UNUSED", "SOLD", "DISABLED"] }).notNull().default("UNUSED"),
     batchNo: text("batchNo"),
@@ -539,6 +558,7 @@ export const schema = {
   siteSetting,
   category,
   product,
+  productSku,
   discountCode,
   order,
   card,

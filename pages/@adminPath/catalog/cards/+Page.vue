@@ -48,8 +48,8 @@ const filters = reactive({
   startDate: "",
   endDate: "",
 });
-const singleForm = reactive({ productId: undefined as number | undefined, batchNo: "", content: "" });
-const importForm = reactive({ productId: undefined as number | undefined, batchNo: "", content: "" });
+const singleForm = reactive({ productId: undefined as number | undefined, productSkuId: undefined as number | undefined, batchNo: "", content: "" });
+const importForm = reactive({ productId: undefined as number | undefined, productSkuId: undefined as number | undefined, batchNo: "", content: "" });
 const page = ref(1);
 const pageSize = ref(10);
 const loading = ref(false);
@@ -119,6 +119,7 @@ async function createCard() {
   
   try {
     await runTelefunc(() => onCreateCard({ ...singleForm, productId: singleForm.productId! }), { successMessage: "卡密已新增。" });
+    singleForm.productSkuId = undefined;
     singleForm.batchNo = "";
     singleForm.content = "";
     addDialogOpen.value = false;
@@ -136,6 +137,7 @@ async function importCards() {
   
   try {
     await runTelefunc(() => onImportCards({ ...importForm, productId: importForm.productId! }), { successMessage: "卡密已导入。" });
+    importForm.productSkuId = undefined;
     importForm.batchNo = "";
     importForm.content = "";
     importDialogOpen.value = false;
@@ -265,7 +267,8 @@ function formatDate(value: Date) {
         <form class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" @submit.prevent="createCard">
           <div class="min-h-0 overflow-y-auto px-6 py-5">
             <div class="grid gap-4">
-              <label class="grid gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> 商品</span><Select :model-value="singleForm.productId === undefined ? undefined : String(singleForm.productId)" @update:model-value="singleForm.productId = Number($event)"><SelectTrigger><SelectValue placeholder="选择自动卡密商品" /></SelectTrigger><SelectContent><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent></Select></label>
+              <label class="grid gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> 商品</span><Select :model-value="singleForm.productId === undefined ? undefined : String(singleForm.productId)" @update:model-value="singleForm.productId = Number($event); singleForm.productSkuId = undefined"><SelectTrigger><SelectValue placeholder="选择自动卡密商品" /></SelectTrigger><SelectContent><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent></Select></label>
+              <label class="grid gap-2 text-sm font-medium">SKU<Select :model-value="singleForm.productSkuId === undefined ? 'all' : String(singleForm.productSkuId)" @update:model-value="singleForm.productSkuId = $event === 'all' ? undefined : Number($event)"><SelectTrigger><SelectValue placeholder="选择 SKU" /></SelectTrigger><SelectContent><SelectItem value="all">默认 SKU</SelectItem><SelectItem v-for="sku in data.products.find((item) => item.id === singleForm.productId)?.skus ?? []" :key="sku.id" :value="String(sku.id)">{{ sku.name }}</SelectItem></SelectContent></Select></label>
               <label class="grid gap-2 text-sm font-medium">批次号（可选）<Input v-model="singleForm.batchNo" placeholder="例如：20260806" /><span class="text-xs font-normal text-muted-foreground">用于按批次筛选和追踪同一次入库的卡密；留空则不归类。</span></label>
               <label class="grid gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> 卡密内容</span><Textarea v-model="singleForm.content" required class="min-h-28" placeholder="输入一条卡密" /></label>
             </div>
@@ -281,7 +284,8 @@ function formatDate(value: Date) {
         <form class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" @submit.prevent="importCards">
           <div class="min-h-0 overflow-y-auto px-6 py-5">
             <div class="grid gap-4">
-              <label class="grid gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> 商品</span><Select :model-value="importForm.productId === undefined ? undefined : String(importForm.productId)" @update:model-value="importForm.productId = Number($event)"><SelectTrigger><SelectValue placeholder="选择自动卡密商品" /></SelectTrigger><SelectContent><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent></Select></label>
+              <label class="grid gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> 商品</span><Select :model-value="importForm.productId === undefined ? undefined : String(importForm.productId)" @update:model-value="importForm.productId = Number($event); importForm.productSkuId = undefined"><SelectTrigger><SelectValue placeholder="选择自动卡密商品" /></SelectTrigger><SelectContent><SelectItem v-for="item in data.products" :key="item.id" :value="String(item.id)">{{ item.name }}</SelectItem></SelectContent></Select></label>
+              <label class="grid gap-2 text-sm font-medium">SKU<Select :model-value="importForm.productSkuId === undefined ? 'all' : String(importForm.productSkuId)" @update:model-value="importForm.productSkuId = $event === 'all' ? undefined : Number($event)"><SelectTrigger><SelectValue placeholder="选择 SKU" /></SelectTrigger><SelectContent><SelectItem value="all">默认 SKU</SelectItem><SelectItem v-for="sku in data.products.find((item) => item.id === importForm.productId)?.skus ?? []" :key="sku.id" :value="String(sku.id)">{{ sku.name }}</SelectItem></SelectContent></Select></label>
               <label class="grid gap-2 text-sm font-medium">批次号（可选）<Input v-model="importForm.batchNo" placeholder="例如：20260806" /><span class="text-xs font-normal text-muted-foreground">用于按批次筛选和追踪同一次入库的卡密；留空则不归类。</span></label>
               <label class="grid gap-2 text-sm font-medium"><span class="flex items-center gap-1"><span class="text-destructive">*</span> 卡密内容</span><Textarea v-model="importForm.content" required class="min-h-48" placeholder="每行输入一条卡密" /></label>
             </div>
