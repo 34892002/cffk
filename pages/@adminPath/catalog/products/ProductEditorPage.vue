@@ -3,7 +3,6 @@
     <AdminPageHeader>
       <template #actions><div class="flex items-center gap-2"><Button variant="outline" :disabled="saving" @click="goBack">返回商品列表</Button><Button type="submit" form="product-editor-form" :disabled="saving || loading">{{ saving ? "保存中..." : loading ? "加载中..." : editing ? "保存商品" : "创建商品" }}</Button></div></template>
     </AdminPageHeader>
-    <Alert v-if="error" variant="destructive"><AlertTitle>操作未完成</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
 
     <form id="product-editor-form" class="border-t" novalidate @submit.prevent="submit">
       <div class="grid gap-8 px-6 py-6 lg:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)]">
@@ -73,7 +72,7 @@ import { toTypedSchema } from "@vee-validate/zod";
 import { Field as VeeField, useForm } from "vee-validate";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog.vue";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -85,7 +84,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 import { formatCentsAsYuan } from "@/lib/payment-utils";
-import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
+import { runTelefunc } from "@/lib/telefunc-client";
 import { onDeleteProductSku, onGetCatalogAdminData, onGetProductAdminDetail, onSaveProduct, onSaveProductSku } from "@/server/catalog/admin.telefunc";
 import ProductRichTextEditor from "./ProductRichTextEditor.vue";
 import { defaultProductForm, formToSaveInput, productDetailToForm, productFormSchema, slugifyProductName, type ProductDeliveryType, type ProductForm } from "./product-form";
@@ -100,7 +99,7 @@ const cardInventory = ref<{ available: number } | null>(null);
 type ProductSkuSaveInput = { id?: number; productId: number; name: string; price: string; status: "ACTIVE" | "INACTIVE"; deliveryType: ProductDeliveryType; fixedDeliveryContent?: string; physicalStock: number | null; minBuy: number; maxBuy: number; sort: number };
 type SkuDraft = ProductSkuSaveInput & { clientKey: string; fixedDeliveryContent: string };
 const skuDrafts = ref<SkuDraft[]>([]); const skuSaving = ref(false);
-const saving = ref(false); const loading = ref(false); const error = ref<string | null>(null); const mediaPickerOpen = ref(false); const slugTouched = ref(Boolean(props.productId));
+const saving = ref(false); const loading = ref(false); const mediaPickerOpen = ref(false); const slugTouched = ref(Boolean(props.productId));
 const { values, handleSubmit, resetForm, setFieldValue } = useForm<ProductForm>({ validationSchema: toTypedSchema(productFormSchema), initialValues: defaultProductForm(), keepValuesOnUnmount: true });
 const activeCategories = computed(() => categories.value.filter((item) => item.status === "ACTIVE"));
 const editing = computed(() => Boolean(props.productId));
@@ -115,9 +114,9 @@ function onSlug() { slugTouched.value = true; }
 watch(() => values.name, (name) => { if (!slugTouched.value && !props.productId) setFieldValue("slug", slugifyProductName(name)); });
 
 function goBack() { void navigate(listPath); }
-function addSku() { skuDrafts.value.push({ clientKey: crypto.randomUUID(), productId: props.productId ?? 0, name: "新规格", price: "0.00", status: "ACTIVE", deliveryType: deliveryType.value, fixedDeliveryContent: "", physicalStock: null, minBuy: 1, maxBuy: 1, sort: skuDrafts.value.length }); }
+function addSku() { skuDrafts.value.push({ clientKey: crypto.randomUUID(), productId: props.productId ?? 0, name: `新规格${skuDrafts.value.length + 1}`, price: "0.01", status: "ACTIVE", deliveryType: deliveryType.value, fixedDeliveryContent: "", physicalStock: null, minBuy: 1, maxBuy: 1, sort: skuDrafts.value.length }); }
 function hasConfiguredSku() {
-  return skuDrafts.value.some((sku) => Boolean(sku.id) || sku.name.trim() !== "新规格" || sku.price !== "0.00" || sku.fixedDeliveryContent.trim() !== "" || sku.physicalStock !== null || sku.minBuy !== 1 || sku.maxBuy !== 1);
+  return skuDrafts.value.some((sku) => Boolean(sku.id) || !/^新规格\d*$/.test(sku.name.trim()) || sku.price !== "0.01" || sku.fixedDeliveryContent.trim() !== "" || sku.physicalStock !== null || sku.minBuy !== 1 || sku.maxBuy !== 1);
 }
 
 function changeDeliveryType(next: unknown) {
@@ -162,10 +161,10 @@ function confirmDeliveryTypeChange() {
     deliveryChanging.value = false;
   }
 }
-async function saveSku(sku: SkuDraft) { if (!props.productId) return; skuSaving.value = true; try { const input: ProductSkuSaveInput = { id: sku.id, productId: props.productId, name: sku.name, price: sku.price, status: sku.status, deliveryType: deliveryType.value, fixedDeliveryContent: sku.fixedDeliveryContent, physicalStock: sku.physicalStock, minBuy: sku.minBuy, maxBuy: sku.maxBuy, sort: sku.sort }; const saved = await runTelefunc(() => onSaveProductSku(input), { successMessage: sku.id ? "SKU 已保存。" : "SKU 已创建。" }); Object.assign(sku, { ...saved, clientKey: sku.clientKey, price: formatCentsAsYuan(saved.price), fixedDeliveryContent: saved.fixedDeliveryContent ?? "" }); } catch (cause) { error.value = userErrorMessage(cause, "SKU 保存失败。"); } finally { skuSaving.value = false; } }
-async function removeSku(sku: SkuDraft) { if (!sku.id) return; skuSaving.value = true; try { await runTelefunc(() => onDeleteProductSku({ id: sku.id! }), { successMessage: "SKU 已删除。" }); skuDrafts.value = skuDrafts.value.filter((item) => item !== sku); } catch (cause) { error.value = userErrorMessage(cause, "SKU 删除失败；已使用的 SKU 不能删除，请改为停用。"); } finally { skuSaving.value = false; } }
+async function saveSku(sku: SkuDraft) { if (!props.productId) return; skuSaving.value = true; try { const input: ProductSkuSaveInput = { id: sku.id, productId: props.productId, name: sku.name, price: sku.price, status: sku.status, deliveryType: deliveryType.value, fixedDeliveryContent: sku.fixedDeliveryContent, physicalStock: sku.physicalStock, minBuy: sku.minBuy, maxBuy: sku.maxBuy, sort: sku.sort }; const saved = await runTelefunc(() => onSaveProductSku(input), { successMessage: sku.id ? "SKU 已保存。" : "SKU 已创建。" }); Object.assign(sku, { ...saved, clientKey: sku.clientKey, price: formatCentsAsYuan(saved.price), fixedDeliveryContent: saved.fixedDeliveryContent ?? "" }); } catch { /* runTelefunc 已显示统一错误提示。 */ } finally { skuSaving.value = false; } }
+async function removeSku(sku: SkuDraft) { if (!sku.id) return; skuSaving.value = true; try { await runTelefunc(() => onDeleteProductSku({ id: sku.id! }), { successMessage: "SKU 已删除。" }); skuDrafts.value = skuDrafts.value.filter((item) => item !== sku); } catch { /* runTelefunc 已显示统一错误提示。 */ } finally { skuSaving.value = false; } }
 function discardSku(sku: SkuDraft) { skuDrafts.value = skuDrafts.value.filter((item) => item !== sku); }
-async function load() { loading.value = true; error.value = null; try { const catalog = await runTelefunc(() => onGetCatalogAdminData(), { notifyError: false }); categories.value = catalog.categories; if (props.productId) { const detail = await runTelefunc(() => onGetProductAdminDetail({ id: props.productId! }), { notifyError: false }); resetForm({ values: productDetailToForm(detail.product) }); cardInventory.value = detail.cardInventory; deliveryType.value = detail.skus[0]?.deliveryType ?? "CARD_AUTO"; skuDrafts.value = detail.skus.map((sku) => ({ ...sku, productId: props.productId!, clientKey: `sku-${sku.id}`, fixedDeliveryContent: sku.fixedDeliveryContent ?? "" })); } else { resetForm({ values: defaultProductForm(activeCategories.value[0]?.id ?? null) }); deliveryType.value = "CARD_AUTO"; skuDrafts.value = []; addSku(); } } catch (cause) { error.value = userErrorMessage(cause, "无法读取商品信息。"); } finally { loading.value = false; } }
-const submit = handleSubmit(async (form) => { saving.value = true; error.value = null; try { await runTelefunc(() => onSaveProduct(formToSaveInput(form, skuDrafts.value.map(({ id, productId: _productId, clientKey: _clientKey, ...sku }) => ({ ...sku, deliveryType: deliveryType.value, ...(editing.value && id ? { id } : {}) })), deliveryType.value)), { successMessage: props.productId ? "商品已保存。" : "商品已创建。" }); goBack(); } catch (cause) { error.value = userErrorMessage(cause); } finally { saving.value = false; } }, () => toast.error("请检查标记的必填项和输入格式。"));
+async function load() { loading.value = true; try { const catalog = await runTelefunc(() => onGetCatalogAdminData()); categories.value = catalog.categories; if (props.productId) { const detail = await runTelefunc(() => onGetProductAdminDetail({ id: props.productId! })); resetForm({ values: productDetailToForm(detail.product) }); cardInventory.value = detail.cardInventory; deliveryType.value = detail.skus[0]?.deliveryType ?? "CARD_AUTO"; skuDrafts.value = detail.skus.map((sku) => ({ ...sku, productId: props.productId!, clientKey: `sku-${sku.id}`, fixedDeliveryContent: sku.fixedDeliveryContent ?? "" })); } else { resetForm({ values: defaultProductForm(activeCategories.value[0]?.id ?? null) }); deliveryType.value = "CARD_AUTO"; skuDrafts.value = []; addSku(); } } catch { /* runTelefunc 已显示统一错误提示。 */ } finally { loading.value = false; } }
+const submit = handleSubmit(async (form) => { saving.value = true; try { await runTelefunc(() => onSaveProduct(formToSaveInput(form, skuDrafts.value.map(({ id, productId: _productId, clientKey: _clientKey, ...sku }) => ({ ...sku, deliveryType: deliveryType.value, ...(editing.value && id ? { id } : {}) })), deliveryType.value)), { successMessage: props.productId ? "商品已保存。" : "商品已创建。" }); goBack(); } catch { /* runTelefunc 已显示统一错误提示。 */ } finally { saving.value = false; } }, () => toast.error("请检查标记的必填项和输入格式。"));
 onMounted(load);
 </script>
