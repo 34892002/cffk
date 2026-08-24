@@ -76,7 +76,16 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
   const skus = await Promise.all(skuRows.map(async (sku) => ({ ...sku, price: formatCentsAsYuan(sku.price), availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.physicalStock })));
   const primary = skus[0];
   if (!primary) return null;
-  return { ...item, ...primary, skus };
+  return {
+    ...item,
+    price: primary.price,
+    deliveryType: primary.deliveryType,
+    physicalStock: primary.physicalStock,
+    availableStock: primary.availableStock,
+    minBuy: primary.minBuy,
+    maxBuy: primary.maxBuy,
+    skus,
+  };
 }
 
 async function countAvailableCardStockBySku(db: ReturnType<typeof createDrizzleDb>, skuId: number) {
