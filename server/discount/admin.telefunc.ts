@@ -5,7 +5,7 @@ import { appError } from "@/lib/app-error";
 import { dateTimeInTimezone } from "@/lib/site-timezone";
 import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
-import { discountCode, product } from "@/database/drizzle/schema";
+import { discountCode, productV2 } from "@/database/drizzle/schema";
 
 
 type DiscountType = "FIXED" | "PERCENT";
@@ -28,9 +28,9 @@ async function internalOnGetDiscountCodes() {
 async function internalOnGetDiscountProductOptions() {
   const { db } = getAdminDb();
   return db
-    .select({ id: product.id, name: product.name, slug: product.slug, status: product.status })
-    .from(product)
-    .orderBy(asc(product.sort), asc(product.id));
+    .select({ id: productV2.id, name: productV2.name, slug: productV2.slug, status: productV2.status })
+    .from(productV2)
+    .orderBy(asc(productV2.sort), asc(productV2.id));
 }
 
 async function internalOnSaveDiscountCode(input: { id?: number; code: string; type: DiscountType; value: string; minAmount?: string | null; maxUses?: number | null; productIds?: string; expiresAt?: string | null; isActive: boolean }) {

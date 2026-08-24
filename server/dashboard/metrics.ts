@@ -1,6 +1,6 @@
 import { eq, gte, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { card, order, product } from "@/database/drizzle/schema";
+import { card, order, productV2 } from "@/database/drizzle/schema";
 import { getSiteSettings } from "@/server/site/public-settings";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { buildDashboardOrderTrend, dashboardTrendStart, type DashboardOrderTrendPoint } from "@/lib/dashboard-trend";
@@ -28,7 +28,7 @@ export async function getDashboardData(database: D1Database): Promise<DashboardD
       paidOrders: sql<number>`sum(case when ${order.paymentStatus} = 'PAID' then 1 else 0 end)`,
       paidAmount: sql<number>`sum(case when ${order.paymentStatus} = 'PAID' then ${order.amount} else 0 end)`,
     }).from(order),
-    db.select({ activeProducts: sql<number>`count(*)` }).from(product).where(eq(product.status, "ACTIVE")),
+    db.select({ activeProducts: sql<number>`count(*)` }).from(productV2).where(eq(productV2.status, "ACTIVE")),
     db.select({ count: sql<number>`count(*)` }).from(card).where(eq(card.status, "UNUSED")),
     db
       .select({

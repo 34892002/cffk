@@ -1,7 +1,7 @@
 import { and, count, eq, isNull } from "drizzle-orm";
 import { getContext } from "telefunc";
 import { createDrizzleDb } from "@/database/drizzle";
-import { card, order, product } from "@/database/drizzle/schema";
+import { card, order, productSku } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { normalizeOrderEmail } from "@/lib/local-orders";
 import { reportUnexpectedServerError } from "@/server/error-handling";
@@ -93,18 +93,20 @@ export class PaymentFlowService {
     if (!orderNo.trim() || !access) appError("ORDER_NOT_FOUND");
     const db = createDrizzleDb(this.database);
     const [record] = await db
-      .select({ id: order.id, orderNo: order.orderNo, amount: order.amount, quantity: order.quantity, productId: order.productId, deliveryType: order.deliveryTypeSnapshot, physicalStockReserved: order.physicalStockReserved, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel })
+      .select({ id: order.id, orderNo: order.orderNo, amount: order.amount, quantity: order.quantity, productId: order.productId, productSkuId: order.productSkuId, deliveryType: order.deliveryTypeSnapshot, physicalStockReserved: order.physicalStockReserved, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel })
       .from(order)
       .where(and(eq(order.orderNo, orderNo.trim()), access, eq(order.status, "PENDING"), eq(order.paymentStatus, "UNPAID")))
       .limit(1);
     if (!record) appError("ORDER_NOT_FOUND");
 
     if (record.deliveryType === "CARD_AUTO") {
-      const [stock] = await db.select({ available: count() }).from(card).where(and(eq(card.productId, record.productId), eq(card.status, "UNUSED")));
+      if (record.productSkuId === null) appError("PRODUCT_SKU_NOT_AVAILABLE");
+      const [stock] = await db.select({ available: count() }).from(card).where(and(eq(card.productSkuId, record.productSkuId), eq(card.status, "UNUSED")));
       if ((stock?.available ?? 0) < record.quantity) appError("PRODUCT_STOCK_NOT_ENOUGH");
     } else if ((record.deliveryType === "MANUAL" || record.deliveryType === "EXPRESS") && !record.physicalStockReserved) {
-      const [item] = await db.select({ physicalStock: product.physicalStock }).from(product).where(eq(product.id, record.productId)).limit(1);
-      if (item?.physicalStock !== null && (item?.physicalStock ?? 0) < record.quantity) appError("PRODUCT_STOCK_NOT_ENOUGH");
+      if (record.productSkuId === null) appError("PRODUCT_SKU_NOT_AVAILABLE");
+      const [sku] = await db.select({ physicalStock: productSku.physicalStock }).from(productSku).where(eq(productSku.id, record.productSkuId)).limit(1);
+      if (sku?.physicalStock !== null && (sku?.physicalStock ?? 0) < record.quantity) appError("PRODUCT_STOCK_NOT_ENOUGH");
     }
 
     const provider = await getEnabledPaymentProvider(this.database, record.paymentProvider as PaymentProviderKind);

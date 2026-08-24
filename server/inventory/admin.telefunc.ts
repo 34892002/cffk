@@ -3,7 +3,8 @@ import { and, asc, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import type { createDrizzleDb } from "@/database/drizzle";
 import { appError } from "@/lib/app-error";
 import { requireAdmin } from "@/server/telefunc-context";
-import { card, product } from "@/database/drizzle/schema";
+import { card, productV2, productSku } from "@/database/drizzle/schema";
+
 import { getSiteSettings } from "@/server/site/public-settings";
 import { dateBoundaryInTimezone } from "@/lib/site-timezone";
 
@@ -38,14 +39,26 @@ function parseDateBoundary(value: string, timezone: string, isEnd: boolean) {
   return dateBoundaryInTimezone(value, timezone, isEnd);
 }
 
-async function assertCardProduct(db: ReturnType<typeof createDrizzleDb>, productId: number) {
+async function assertCardProduct(db: ReturnType<typeof createDrizzleDb>, productId: number, productSkuId?: number) {
   const [target] = await db
-    .select({ id: product.id, deliveryType: product.deliveryType })
-    .from(product)
-    .where(eq(product.id, productId))
+    .select({ id: productV2.id })
+    .from(productV2)
+    .where(eq(productV2.id, productId))
     .limit(1);
   if (!target) appError("PRODUCT_NOT_FOUND");
-  if (target.deliveryType !== "CARD_AUTO") appError("PRODUCT_NOT_CARD_AUTO");
+
+  if (productSkuId !== undefined) {
+    const [sku] = await db.select({ id: productSku.id, deliveryType: productSku.deliveryType })
+      .from(productSku).where(and(eq(productSku.id, productSkuId), eq(productSku.productId, productId))).limit(1);
+    if (!sku) appError("PRODUCT_SKU_NOT_FOUND");
+    if (sku.deliveryType !== "CARD_AUTO") appError("PRODUCT_SKU_DELIVERY_TYPE_INVALID");
+  }
+}
+
+async function resolveCardSku(db: ReturnType<typeof createDrizzleDb>, productId: number, productSkuId: number | undefined) {
+  if (productSkuId === undefined) appError("PRODUCT_SKU_NOT_AVAILABLE");
+  await assertCardProduct(db, productId, productSkuId);
+  return productSkuId;
 }
 
 
@@ -69,7 +82,8 @@ async function internalOnGetCardAdminData(input: CardAdminQuery = {}) {
       .select({
         id: card.id,
         productId: card.productId,
-        productName: product.name,
+        productName: productV2.name,
+        productSkuName: productSku.name,
         content: card.content,
         status: card.status,
         batchNo: card.batchNo,
@@ -78,17 +92,18 @@ async function internalOnGetCardAdminData(input: CardAdminQuery = {}) {
         createdAt: card.createdAt,
       })
       .from(card)
-      .innerJoin(product, eq(card.productId, product.id))
+      .innerJoin(productV2, eq(card.productId, productV2.id))
+      .leftJoin(productSku, eq(card.productSkuId, productSku.id))
       .where(where)
       .orderBy(desc(card.id))
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     db.select({ count: count() }).from(card).where(where),
     db
-      .select({ id: product.id, name: product.name })
-      .from(product)
-      .where(eq(product.deliveryType, "CARD_AUTO"))
-      .orderBy(asc(product.sort), asc(product.id)),
+      .selectDistinct({ id: productV2.id, name: productV2.name })
+      .from(productV2)
+      .innerJoin(productSku, and(eq(productSku.productId, productV2.id), eq(productSku.deliveryType, "CARD_AUTO"), eq(productSku.status, "ACTIVE")))
+      .orderBy(asc(productV2.sort), asc(productV2.id)),
     db.select({ count: count() }).from(card),
     db.select({ count: count() }).from(card).where(eq(card.status, "UNUSED")),
     db.select({ count: count() }).from(card).where(eq(card.status, "SOLD")),
@@ -99,7 +114,12 @@ async function internalOnGetCardAdminData(input: CardAdminQuery = {}) {
     total: totals[0]?.count ?? 0,
     page,
     pageSize,
-    products,
+    products: await Promise.all(products.map(async (item) => ({
+      ...item,
+      skus: await db.select({ id: productSku.id, name: productSku.name })
+        .from(productSku).where(and(eq(productSku.productId, item.id), eq(productSku.deliveryType, "CARD_AUTO"), eq(productSku.status, "ACTIVE")))
+        .orderBy(asc(productSku.sort), asc(productSku.id)),
+    }))),
     overview: {
       total: allCards[0]?.count ?? 0,
       available: availableCards[0]?.count ?? 0,
@@ -108,16 +128,17 @@ async function internalOnGetCardAdminData(input: CardAdminQuery = {}) {
   };
 }
 
-async function internalOnCreateCard(input: { productId: number; content: string; batchNo?: string }) {
+async function internalOnCreateCard(input: { productId: number; productSkuId: number; content: string; batchNo?: string }) {
   const { db } = getAdminDb();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
-  await assertCardProduct(db, productId);
+  const productSkuId = await resolveCardSku(db, productId, input.productSkuId);
   const content = input.content.trim();
   if (!content) appError("CARD_CONTENT_REQUIRED");
   const batchNo = input.batchNo?.trim() || null;
   const now = new Date();
   const [created] = await db.insert(card).values({
     productId,
+    productSkuId,
     content,
     status: "UNUSED",
     batchNo,
@@ -127,10 +148,10 @@ async function internalOnCreateCard(input: { productId: number; content: string;
   return created;
 }
 
-async function internalOnImportCards(input: { productId: number; content: string; batchNo?: string }) {
+async function internalOnImportCards(input: { productId: number; productSkuId: number; content: string; batchNo?: string }) {
   const { db } = getAdminDb();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
-  await assertCardProduct(db, productId);
+  const productSkuId = await resolveCardSku(db, productId, input.productSkuId);
   const contents = [...new Set(input.content.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))];
   if (!contents.length) appError("CARD_CONTENT_REQUIRED");
   if (contents.length > 1000) appError("CARD_IMPORT_LIMIT_EXCEEDED");
@@ -139,6 +160,7 @@ async function internalOnImportCards(input: { productId: number; content: string
   const batchNo = input.batchNo?.trim() || null;
   await db.insert(card).values(contents.map((content) => ({
     productId,
+    productSkuId,
     content,
     status: "UNUSED" as const,
     batchNo,

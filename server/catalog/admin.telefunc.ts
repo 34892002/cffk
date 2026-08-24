@@ -1,11 +1,12 @@
 import { telefuncAction } from "@/server/telefunc-action";
-import { and, asc, count, eq, like, or } from "drizzle-orm";
+import { and, asc, count, eq, inArray, like, or } from "drizzle-orm";
 import { requireAdmin } from "@/server/telefunc-context";
 import { appError } from "@/lib/app-error";
 import { slugify } from "@/lib/slugify";
 import { formatCentsAsYuan, parseAmountToCents } from "@/lib/payment-utils";
 import { sanitizeProductDescription } from "./product-description";
-import { card, category, order, product } from "@/database/drizzle/schema";
+import { card, category, order, productV2, productSku } from "@/database/drizzle/schema";
+
 
 
 type DeliveryType = "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS";
@@ -95,35 +96,37 @@ async function internalOnGetCatalogAdminData(input: ProductListQuery = {}) {
   if (input.categoryId !== undefined && (!Number.isInteger(input.categoryId) || input.categoryId <= 0)) appError("PRODUCT_CATEGORY_INVALID");
   const keyword = input.keyword?.trim().slice(0, 120) ?? "";
   const conditions = [
-    keyword ? or(like(product.name, `%${keyword}%`), like(product.slug, `%${keyword}%`)) : undefined,
-    input.categoryId ? eq(product.categoryId, input.categoryId) : undefined,
-    input.status ? eq(product.status, input.status) : undefined,
+    keyword ? or(like(productV2.name, `%${keyword}%`), like(productV2.slug, `%${keyword}%`)) : undefined,
+    input.categoryId ? eq(productV2.categoryId, input.categoryId) : undefined,
+    input.status ? eq(productV2.status, input.status) : undefined,
   ].filter(Boolean) as Array<ReturnType<typeof eq>>;
   const where = conditions.length ? and(...conditions) : undefined;
   const [categories, items, totalRows] = await Promise.all([
     db.select({ id: category.id, name: category.name, slug: category.slug, description: category.description, sort: category.sort, status: category.status }).from(category).orderBy(asc(category.sort), asc(category.id)),
-    db.select({ id: product.id, categoryId: product.categoryId, name: product.name, slug: product.slug, price: product.price, status: product.status, deliveryType: product.deliveryType, physicalStock: product.physicalStock, minBuy: product.minBuy, maxBuy: product.maxBuy, sort: product.sort, categoryName: category.name }).from(product).leftJoin(category, eq(product.categoryId, category.id)).where(where).orderBy(asc(product.sort), asc(product.id)).limit(pageSize).offset((page - 1) * pageSize),
-    db.select({ value: count() }).from(product).where(where),
+    db.select({ id: productV2.id, categoryId: productV2.categoryId, name: productV2.name, slug: productV2.slug, status: productV2.status, sort: productV2.sort, categoryName: category.name }).from(productV2).leftJoin(category, eq(productV2.categoryId, category.id)).where(where).orderBy(asc(productV2.sort), asc(productV2.id)).limit(pageSize).offset((page - 1) * pageSize),
+    db.select({ value: count() }).from(productV2).where(where),
   ]);
-  return { categories, items: items.map((item) => ({ ...item, price: formatCentsAsYuan(item.price) })), total: totalRows[0]?.value ?? 0, page, pageSize };
+  const itemIds = items.map((item) => item.id);
+    const primarySkus = itemIds.length ? await db.select({ productId: productSku.productId, price: productSku.price, deliveryType: productSku.deliveryType }).from(productSku).where(and(inArray(productSku.productId, itemIds), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id)) : [];
+    const primaryByProduct = new Map<number, typeof primarySkus[number]>();
+    for (const sku of primarySkus) if (!primaryByProduct.has(sku.productId)) primaryByProduct.set(sku.productId, sku);
+    return { categories, items: items.map((item) => ({ ...item, price: formatCentsAsYuan(primaryByProduct.get(item.id)?.price ?? 0), deliveryType: primaryByProduct.get(item.id)?.deliveryType ?? "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1 })), total: totalRows[0]?.value ?? 0, page, pageSize };
 }
 
 async function internalOnGetProductAdminDetail(input: { id: number }) {
   const { db } = getAdminDb();
   if (!input || typeof input !== "object" || !Number.isInteger(input.id) || input.id <= 0) appError("PRODUCT_ID_INVALID");
-  const [record] = await db.select().from(product).where(eq(product.id, input.id)).limit(1);
+  const [record] = await db.select().from(productV2).where(eq(productV2.id, input.id)).limit(1);
   if (!record) appError("PRODUCT_NOT_FOUND");
-  const [inventory] = record.deliveryType === "CARD_AUTO"
-    ? await db
-        .select({ available: count() })
-        .from(card)
-        .where(and(eq(card.productId, record.id), eq(card.status, "UNUSED")))
+  const [sku] = await db.select({ id: productSku.id, name: productSku.name, deliveryType: productSku.deliveryType }).from(productSku).where(and(eq(productSku.productId, record.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id)).limit(1);
+  const skus = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, status: productSku.status, deliveryType: productSku.deliveryType, fixedDeliveryContent: productSku.fixedDeliveryContent, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy, sort: productSku.sort }).from(productSku).where(eq(productSku.productId, record.id)).orderBy(asc(productSku.sort), asc(productSku.id));
+  const [inventory] = sku?.deliveryType === "CARD_AUTO"
+    ? await db.select({ available: count() }).from(card).where(and(eq(card.productSkuId, sku.id), eq(card.status, "UNUSED")))
     : [];
   return {
-    product: { ...record, price: formatCentsAsYuan(record.price) },
-    cardInventory: record.deliveryType === "CARD_AUTO"
-      ? { available: inventory?.available ?? 0 }
-      : null,
+    product: record,
+    skus: skus.map((item) => ({ ...item, price: formatCentsAsYuan(item.price) })),
+    cardInventory: sku ? { available: inventory?.available ?? 0 } : null,
   };
 }
 
@@ -166,8 +169,8 @@ async function internalOnSetCategoryStatus(input: { id: number; status: "ACTIVE"
   if (input.status === "DISABLED") {
     const [activeProductCount] = await db
       .select({ value: count() })
-      .from(product)
-      .where(and(eq(product.categoryId, input.id), eq(product.status, "ACTIVE")));
+      .from(productV2)
+      .where(and(eq(productV2.categoryId, input.id), eq(productV2.status, "ACTIVE")));
     if ((activeProductCount?.value ?? 0) > 0) appError("CATEGORY_HAS_ACTIVE_PRODUCTS");
   }
   const result = await db
@@ -181,6 +184,19 @@ async function internalOnSetCategoryStatus(input: { id: number; status: "ACTIVE"
   return record;
 }
 
+type ProductSkuInput = {
+  id?: number;
+  name: string;
+  price: string;
+  status: "ACTIVE" | "INACTIVE";
+  deliveryType: DeliveryType;
+  fixedDeliveryContent?: string;
+  physicalStock: number | null;
+  minBuy: number;
+  maxBuy: number;
+  sort: number;
+};
+
 async function internalOnSaveProduct(input: {
   id?: number;
   categoryId: number | null;
@@ -189,41 +205,43 @@ async function internalOnSaveProduct(input: {
   subtitle?: string;
   coverImage?: string;
   description?: string;
-  fixedDeliveryContent?: string;
   manualDeliveryHint?: string;
   purchaseNote?: string;
-
-  price: string;
   status: ProductStatus;
-  deliveryType: DeliveryType;
-  physicalStock: number | null;
-  minBuy: number;
-  maxBuy: number;
   sort: number;
+  skus: ProductSkuInput[];
+  deliveryType: DeliveryType;
 }) {
   const { db } = getAdminDb();
   if (!input || typeof input !== "object") appError("PRODUCT_INPUT_INVALID");
+  if (!Array.isArray(input.skus) || input.skus.length < 1) appError("PRODUCT_SKU_REQUIRED");
+  if (input.skus.length > 100) appError("PRODUCT_SKU_LIMIT_EXCEEDED");
   if (input.id !== undefined && (!Number.isInteger(input.id) || input.id <= 0)) appError("PRODUCT_ID_INVALID");
-  if (!deliveryTypeSet.has(input.deliveryType)) appError("PRODUCT_DELIVERY_TYPE_INVALID");
   if (!productStatusSet.has(input.status)) appError("PRODUCT_STATUS_INVALID");
-  const now = new Date();
-  let existingDeliveryType: DeliveryType | null = null;
-  if (input.id) {
-    const [existing] = await db.select({ deliveryType: product.deliveryType }).from(product).where(eq(product.id, input.id)).limit(1);
-    if (!existing) appError("PRODUCT_NOT_FOUND");
-    existingDeliveryType = existing.deliveryType as DeliveryType;
-    if (existingDeliveryType !== input.deliveryType) appError("PRODUCT_DELIVERY_TYPE_IMMUTABLE");
-  }
-  const requestedMinBuy = nonNegativeInteger(input.minBuy, "PRODUCT_BUY_RANGE_INVALID");
-  const requestedMaxBuy = nonNegativeInteger(input.maxBuy, "PRODUCT_BUY_RANGE_INVALID");
-  const minBuy = input.deliveryType === "FIXED_CARD" ? 1 : requestedMinBuy;
-  const maxBuy = input.deliveryType === "FIXED_CARD" ? 1 : requestedMaxBuy;
-  if (minBuy < 1 || maxBuy < minBuy) appError("PRODUCT_BUY_RANGE_INVALID");
-  const physicalStock = input.deliveryType === "MANUAL" || input.deliveryType === "EXPRESS"
-    ? (input.physicalStock === null ? appError("PHYSICAL_STOCK_REQUIRED") : nonNegativeInteger(input.physicalStock, "PHYSICAL_STOCK_INVALID"))
-    : null;
-  const fixedDeliveryContent = optionalText(input.fixedDeliveryContent, 10_000, "FIXED_DELIVERY_CONTENT_INVALID");
-  if (input.deliveryType === "FIXED_CARD" && input.status === "ACTIVE" && !fixedDeliveryContent) appError("FIXED_DELIVERY_CONTENT_REQUIRED");
+  if (!deliveryTypeSet.has(input.deliveryType)) appError("PRODUCT_DELIVERY_TYPE_INVALID");
+
+  // 上游和履约流程目前按商品选择发货方式；SKU 保留该字段是为了支持未来供应商绑定，但同一商品不能混用方式。
+  const normalizedSkus = input.skus.map((sku) => {
+    if (sku.deliveryType !== input.deliveryType) appError("PRODUCT_SKU_DELIVERY_TYPE_CONFLICT");
+    if (!deliveryTypeSet.has(sku.deliveryType)) appError("PRODUCT_DELIVERY_TYPE_INVALID");
+    if (sku.id !== undefined && (!Number.isInteger(sku.id) || sku.id < 1)) appError("PRODUCT_SKU_ID_INVALID");
+    const name = requiredText(sku.name, "PRODUCT_SKU_NAME_REQUIRED", 120, "PRODUCT_SKU_NAME_TOO_LONG");
+    const cents = parseAmountToCents(sku.price);
+    if (!cents || cents < 1) appError("PRODUCT_PRICE_INVALID");
+    const minBuy = sku.deliveryType === "FIXED_CARD" ? 1 : nonNegativeInteger(sku.minBuy, "PRODUCT_BUY_RANGE_INVALID");
+    const maxBuy = sku.deliveryType === "FIXED_CARD" ? 1 : nonNegativeInteger(sku.maxBuy, "PRODUCT_BUY_RANGE_INVALID");
+    if (minBuy < 1 || maxBuy < minBuy) appError("PRODUCT_BUY_RANGE_INVALID");
+    const physicalStock = sku.deliveryType === "MANUAL" || sku.deliveryType === "EXPRESS"
+      ? (sku.physicalStock === null ? appError("PHYSICAL_STOCK_REQUIRED") : nonNegativeInteger(sku.physicalStock, "PHYSICAL_STOCK_INVALID"))
+      : null;
+    const fixedDeliveryContent = optionalText(sku.fixedDeliveryContent, 10_000, "FIXED_DELIVERY_CONTENT_INVALID");
+    if (sku.deliveryType === "FIXED_CARD" && sku.status === "ACTIVE" && !fixedDeliveryContent) appError("FIXED_DELIVERY_CONTENT_REQUIRED");
+    if (sku.status !== "ACTIVE" && sku.status !== "INACTIVE") appError("PRODUCT_SKU_STATUS_INVALID");
+    return { id: sku.id, name, price: cents, status: sku.status, deliveryType: sku.deliveryType, fixedDeliveryContent: sku.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null, physicalStock, minBuy, maxBuy, sort: nonNegativeInteger(sku.sort, "PRODUCT_SORT_INVALID") };
+  });
+  if (new Set(normalizedSkus.map((sku) => sku.name)).size !== normalizedSkus.length) appError("PRODUCT_SKU_NAME_CONFLICT");
+
+
   if (input.categoryId !== null && (!Number.isInteger(input.categoryId) || input.categoryId <= 0)) appError("PRODUCT_CATEGORY_INVALID");
   const categoryId = await resolveProductCategoryId(db, input.categoryId);
   const name = requiredText(input.name, "PRODUCT_NAME_REQUIRED", 120, "PRODUCT_NAME_TOO_LONG");
@@ -234,36 +252,34 @@ async function internalOnSaveProduct(input: {
     subtitle: optionalText(input.subtitle, 300, "PRODUCT_SUBTITLE_INVALID"),
     coverImage: resolveCoverImage(input.coverImage),
     description: sanitizeProductDescription(requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG")) ?? (appError("PRODUCT_DESCRIPTION_REQUIRED"), null),
-    fixedDeliveryContent: input.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null,
-    manualDeliveryHint: (input.deliveryType === "MANUAL" || input.deliveryType === "EXPRESS") ? optionalText(input.manualDeliveryHint, 2_000, "PRODUCT_MANUAL_DELIVERY_HINT_INVALID") : null,
+    manualDeliveryHint: optionalText(input.manualDeliveryHint, 2_000, "PRODUCT_MANUAL_DELIVERY_HINT_INVALID"),
     purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"),
-
-    price: (() => { const cents = parseAmountToCents(input.price); return cents && cents > 0 ? cents : (appError("PRODUCT_PRICE_INVALID"), 0); })(),
     status: input.status,
-    deliveryType: input.deliveryType,
-
-    physicalStock,
-    minBuy,
-    maxBuy,
     sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"),
-    updatedAt: now,
+    updatedAt: new Date(),
   };
 
   try {
-    if (input.id) {
-      const result = await db.update(product).set(values).where(eq(product.id, input.id)).returning();
-      const record = result[0];
-      if (!record) appError("PRODUCT_NOT_FOUND");
-
-      return record;
+    const now = new Date();
+    const record = input.id
+      ? (await db.update(productV2).set(values).where(eq(productV2.id, input.id)).returning())[0]
+      : (await db.insert(productV2).values({ ...values, createdAt: now }).returning())[0];
+    if (!record) appError(input.id ? "PRODUCT_NOT_FOUND" : "PRODUCT_CREATE_FAILED");
+    for (const sku of normalizedSkus) {
+      const { id: skuId, ...skuValues } = sku;
+      const skuRecord = { ...skuValues, productId: record.id, updatedAt: now };
+      if (skuId) {
+        const updated = await db.update(productSku).set(skuRecord).where(and(eq(productSku.id, skuId), eq(productSku.productId, record.id))).returning({ id: productSku.id });
+        if (!updated[0]) appError("PRODUCT_SKU_NOT_FOUND");
+      } else {
+        await db.insert(productSku).values({ ...skuRecord, createdAt: now });
+      }
     }
-
-    const result = await db.insert(product).values({ ...values, createdAt: now }).returning();
-    const record = result[0];
-
     return record;
   } catch (error) {
-    if (String(error).includes("UNIQUE constraint failed")) appError("PRODUCT_SLUG_CONFLICT");
+    const message = String(error);
+    if (message.includes("productSku.productId, productSku.name")) appError("PRODUCT_SKU_NAME_CONFLICT");
+    if (message.includes("product_v2.slug")) appError("PRODUCT_SLUG_CONFLICT");
     throw error;
   }
 }
@@ -272,13 +288,13 @@ async function internalOnDeleteProduct(input: { id: number }) {
   const { db } = getAdminDb();
   if (!input || typeof input !== "object" || !Number.isInteger(input.id) || input.id <= 0) appError("PRODUCT_ID_INVALID");
   const [target, cardCount, orderCount] = await Promise.all([
-    db.select({ id: product.id }).from(product).where(eq(product.id, input.id)).limit(1),
+    db.select({ id: productV2.id }).from(productV2).where(eq(productV2.id, input.id)).limit(1),
     db.select({ value: count() }).from(card).where(eq(card.productId, input.id)),
     db.select({ value: count() }).from(order).where(eq(order.productId, input.id)),
   ]);
   if (!target[0]) appError("PRODUCT_NOT_FOUND");
   if ((cardCount[0]?.value ?? 0) > 0 || (orderCount[0]?.value ?? 0) > 0) appError("PRODUCT_DELETE_REJECTED");
-  const [deleted] = await db.delete(product).where(eq(product.id, input.id)).returning({ id: product.id });
+  const [deleted] = await db.delete(productV2).where(eq(productV2.id, input.id)).returning({ id: productV2.id });
   if (!deleted) appError("PRODUCT_NOT_FOUND");
   return deleted;
 }
@@ -287,12 +303,13 @@ async function internalOnSetProductStatus(input: { id: number; status: ProductSt
   const { db } = getAdminDb();
   if (!input || typeof input !== "object" || !Number.isInteger(input.id) || input.id <= 0) appError("PRODUCT_ID_INVALID");
   if (!productStatusSet.has(input.status)) appError("PRODUCT_STATUS_INVALID");
-  const [current] = await db.select().from(product).where(eq(product.id, input.id)).limit(1);
+  const [current] = await db.select().from(productV2).where(eq(productV2.id, input.id)).limit(1);
   if (!current) appError("PRODUCT_NOT_FOUND");
   if (input.status === "ACTIVE") {
-    if (!current.categoryId || !current.slug || current.price < 0 || current.minBuy < 1 || current.maxBuy < current.minBuy || (current.deliveryType === "FIXED_CARD" && !current.fixedDeliveryContent?.trim())) appError("PRODUCT_PUBLISH_REJECTED");
+    const [activeSku] = await db.select({ price: productSku.price, deliveryType: productSku.deliveryType, fixedDeliveryContent: productSku.fixedDeliveryContent, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy }).from(productSku).where(and(eq(productSku.productId, current.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id)).limit(1);
+    if (!current.categoryId || !current.slug || !activeSku || activeSku.price < 1 || activeSku.minBuy < 1 || activeSku.maxBuy < activeSku.minBuy || (activeSku.deliveryType === "FIXED_CARD" && !activeSku.fixedDeliveryContent?.trim())) appError("PRODUCT_PUBLISH_REJECTED");
   }
-  const result = await db.update(product).set({ status: input.status, updatedAt: new Date() }).where(and(eq(product.id, input.id), eq(product.status, current.status))).returning();
+  const result = await db.update(productV2).set({ status: input.status, updatedAt: new Date() }).where(and(eq(productV2.id, input.id), eq(productV2.status, current.status))).returning();
   if (!result[0]) appError("PRODUCT_STATUS_CHANGED_RETRY");
   return result[0];
 }
@@ -303,4 +320,52 @@ export const onSaveCategory = telefuncAction(internalOnSaveCategory);
 export const onSetCategoryStatus = telefuncAction(internalOnSetCategoryStatus);
 export const onSaveProduct = telefuncAction(internalOnSaveProduct);
 export const onDeleteProduct = telefuncAction(internalOnDeleteProduct);
+async function internalOnSaveProductSku(input: { id?: number; productId: number; name: string; price: string; status: "ACTIVE" | "INACTIVE"; deliveryType: DeliveryType; fixedDeliveryContent?: string; physicalStock: number | null; minBuy: number; maxBuy: number; sort: number }) {
+  const { db } = getAdminDb();
+  if (!Number.isInteger(input.productId) || input.productId < 1) appError("PRODUCT_ID_INVALID");
+  const [item] = await db.select().from(productV2).where(eq(productV2.id, input.productId)).limit(1);
+  if (!item) appError("PRODUCT_NOT_FOUND");
+  if (input.id !== undefined && (!Number.isInteger(input.id) || input.id < 1)) appError("PRODUCT_SKU_ID_INVALID");
+  if (!deliveryTypeSet.has(input.deliveryType)) appError("PRODUCT_DELIVERY_TYPE_INVALID");
+  const existingSkus = await db.select({ id: productSku.id, deliveryType: productSku.deliveryType }).from(productSku).where(eq(productSku.productId, input.productId));
+  if (input.id !== undefined && !existingSkus.some((sku) => sku.id === input.id)) appError("PRODUCT_SKU_NOT_FOUND");
+  // 更新当前 SKU 时忽略自身，只要同商品的其他 SKU 使用了不同方式就拒绝，保证商品维度的统一履约方式。
+  if (existingSkus.some((sku) => sku.id !== input.id && sku.deliveryType !== input.deliveryType)) appError("PRODUCT_SKU_DELIVERY_TYPE_CONFLICT");
+  const name = requiredText(input.name, "PRODUCT_SKU_NAME_REQUIRED", 120, "PRODUCT_SKU_NAME_TOO_LONG");
+  const price = parseAmountToCents(input.price);
+  if (!price || price < 1) appError("PRODUCT_PRICE_INVALID");
+  const minBuy = input.deliveryType === "FIXED_CARD" ? 1 : nonNegativeInteger(input.minBuy, "PRODUCT_BUY_RANGE_INVALID");
+  const maxBuy = input.deliveryType === "FIXED_CARD" ? 1 : nonNegativeInteger(input.maxBuy, "PRODUCT_BUY_RANGE_INVALID");
+  if (minBuy < 1 || maxBuy < minBuy) appError("PRODUCT_BUY_RANGE_INVALID");
+  const physicalStock = input.deliveryType === "MANUAL" || input.deliveryType === "EXPRESS" ? (input.physicalStock === null ? appError("PHYSICAL_STOCK_REQUIRED") : nonNegativeInteger(input.physicalStock, "PHYSICAL_STOCK_INVALID")) : null;
+  const fixedDeliveryContent = optionalText(input.fixedDeliveryContent, 10_000, "FIXED_DELIVERY_CONTENT_INVALID");
+  if (input.deliveryType === "FIXED_CARD" && input.status === "ACTIVE" && !fixedDeliveryContent) appError("FIXED_DELIVERY_CONTENT_REQUIRED");
+  const values = { name, price, status: input.status, deliveryType: input.deliveryType, fixedDeliveryContent: input.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null, physicalStock, minBuy, maxBuy, sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"), updatedAt: new Date() };
+  try {
+    if (input.id !== undefined) {
+      const result = await db.update(productSku).set(values).where(and(eq(productSku.id, input.id), eq(productSku.productId, input.productId))).returning();
+      if (!result[0]) appError("PRODUCT_SKU_NOT_FOUND");
+      return result[0];
+    }
+    const [created] = await db.insert(productSku).values({ productId: input.productId, ...values, createdAt: new Date() }).returning();
+    return created;
+  } catch (error) {
+    if (String(error).includes("UNIQUE constraint failed")) appError("PRODUCT_SKU_NAME_CONFLICT");
+    throw error;
+  }
+}
+
+async function internalOnDeleteProductSku(input: { id: number }) {
+  const { db } = getAdminDb();
+  const [target] = await db.select({ id: productSku.id }).from(productSku).where(eq(productSku.id, input.id)).limit(1);
+  if (!target) appError("PRODUCT_SKU_NOT_FOUND");
+  const [cards] = await db.select({ value: count() }).from(card).where(eq(card.productSkuId, input.id));
+  const [orders] = await db.select({ value: count() }).from(order).where(eq(order.productSkuId, input.id));
+  if ((cards?.value ?? 0) > 0 || (orders?.value ?? 0) > 0) appError("PRODUCT_SKU_DELETE_REJECTED");
+  await db.delete(productSku).where(eq(productSku.id, input.id));
+  return { id: input.id };
+}
+
 export const onSetProductStatus = telefuncAction(internalOnSetProductStatus);
+export const onSaveProductSku = telefuncAction(internalOnSaveProductSku);
+export const onDeleteProductSku = telefuncAction(internalOnDeleteProductSku);

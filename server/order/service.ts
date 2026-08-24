@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { automaticDeliveryJob, customerAddress, discountCode, order, orderDelivery, product } from "@/database/drizzle/schema";
+import { automaticDeliveryJob, customerAddress, discountCode, order, orderDelivery, productV2, productSku } from "@/database/drizzle/schema";
+import { getProductSku } from "@/server/catalog/sku";
 import { appError } from "@/lib/app-error";
 import { isJsonFormEmail } from "@/lib/json-form-values";
 import { normalizeOrderEmail } from "@/lib/local-orders";
@@ -21,6 +22,7 @@ type PaymentProvider = "ALIPAY" | "EPAY" | "BEPUSDT" | "STRIPE" | "HASHPAY";
 
 export type CreateOrderInput = {
   productId: number;
+  productSkuId: number;
   quantity: number;
   paymentProvider: PaymentProvider;
   paymentChannel?: string;
@@ -104,48 +106,49 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   const requestedQuantity = positiveInteger(input.quantity, "QUANTITY");
   const contactValue = normalizeOrderContact(input.contactType, input.contactValue);
-  const [item] = await db.select().from(product).where(and(eq(product.id, productId), eq(product.status, "ACTIVE"))).limit(1);
+  const [item] = await db.select().from(productV2).where(and(eq(productV2.id, productId), eq(productV2.status, "ACTIVE"))).limit(1);
   if (!item) fail("PRODUCT_NOT_AVAILABLE");
+  const sku = await getProductSku(db, item.id, positiveInteger(input.productSkuId, "PRODUCT_SKU_ID"));
 
-  if (item.deliveryType === "FIXED_CARD" && requestedQuantity !== 1) fail("PRODUCT_QUANTITY_INVALID");
-  if (requestedQuantity < item.minBuy || requestedQuantity > item.maxBuy) fail("PRODUCT_QUANTITY_INVALID");
-  const quantity = item.deliveryType === "FIXED_CARD" ? 1 : requestedQuantity;
-  if (item.deliveryType === "CARD_AUTO" && (await countAvailableCards(database, item.id)) < quantity) fail("PRODUCT_STOCK_NOT_ENOUGH");
-  if (item.deliveryType === "FIXED_CARD" && !item.fixedDeliveryContent?.trim()) fail("PRODUCT_FIXED_CONTENT_MISSING");
-  const addressSnapshotJson = item.deliveryType === "EXPRESS"
+  if (sku.deliveryType === "FIXED_CARD" && requestedQuantity !== 1) fail("PRODUCT_QUANTITY_INVALID");
+  if (requestedQuantity < sku.minBuy || requestedQuantity > sku.maxBuy) fail("PRODUCT_QUANTITY_INVALID");
+  const quantity = sku.deliveryType === "FIXED_CARD" ? 1 : requestedQuantity;
+  if (sku.deliveryType === "CARD_AUTO" && (await countAvailableCards(database, sku.id)) < quantity) fail("PRODUCT_STOCK_NOT_ENOUGH");
+  if (sku.deliveryType === "FIXED_CARD" && !sku.fixedDeliveryContent?.trim()) fail("PRODUCT_FIXED_CONTENT_MISSING");
+  const addressSnapshotJson = sku.deliveryType === "EXPRESS"
     ? JSON.stringify(await resolveAddressSnapshot(db, input, ownerUserId))
     : null;
 
-  const originalAmount = item.price * quantity;
+  const originalAmount = sku.price * quantity;
   let discountId: number | null = null;
   let discountCodeValue: string | null = null;
   let discountAmount = 0;
   if (input.discountCode?.trim()) {
-    const validated = await validateDiscountForItem(db, item, quantity, input.discountCode);
+    const validated = await validateDiscountForItem(db, sku, quantity, input.discountCode);
     discountId = validated.id;
     discountCodeValue = validated.code;
     discountAmount = validated.discountAmount;
   }
 
-  const reservePhysical = (item.deliveryType === "MANUAL" || item.deliveryType === "EXPRESS") && item.physicalStock !== null;
+  const reservePhysical = (sku.deliveryType === "MANUAL" || sku.deliveryType === "EXPRESS") && sku.physicalStock !== null;
   const now = Date.now();
   const amount = Math.max(0, originalAmount - discountAmount);
   if (amount > 0 && input.allowPendingPayment === false) fail("PAYMENT_ADAPTER_NOT_AVAILABLE");
   const orderNo = generateOrderNo();
   const paymentChannel = normalizePaymentChannel(input.paymentProvider, input.paymentChannel);
   const statements: D1PreparedStatement[] = [
-    database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productNameSnapshot, unitPrice, quantity, amount, contactType, contactValue, contactEmailNormalized, buyerNote, addressSnapshotJson, paymentProvider, paymentChannel, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
-      orderNo, ownerUserId, item.id, item.name, item.price, quantity, amount, input.contactType, contactValue,
+    database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productSkuId, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, contactType, contactValue, contactEmailNormalized, buyerNote, addressSnapshotJson, paymentProvider, paymentChannel, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
+      orderNo, ownerUserId, item.id, sku.id, item.name, sku.name, sku.price, quantity, amount, input.contactType, contactValue,
       input.contactType === "EMAIL" ? normalizeOrderEmail(contactValue) : null, input.buyerNote?.trim() || null,
-      addressSnapshotJson, input.paymentProvider, paymentChannel, item.deliveryType,
-      item.deliveryType === "FIXED_CARD" ? item.fixedDeliveryContent!.trim() : null, reservePhysical ? 1 : 0,
+      addressSnapshotJson, input.paymentProvider, paymentChannel, sku.deliveryType,
+      sku.deliveryType === "FIXED_CARD" ? sku.fixedDeliveryContent!.trim() : null, reservePhysical ? 1 : 0,
       discountId, discountCodeValue, discountId === null ? null : originalAmount, discountId === null ? null : discountAmount,
       now, now,
     ),
   ];
   if (reservePhysical) {
     statements.push(
-      database.prepare("UPDATE product SET physicalStock = physicalStock - ?, updatedAt = ? WHERE id = ? AND physicalStock >= ?").bind(quantity, now, item.id, quantity),
+      database.prepare("UPDATE productSku SET physicalStock = physicalStock - ?, updatedAt = ? WHERE id = ? AND physicalStock >= ?").bind(quantity, now, sku.id, quantity),
       database.prepare("INSERT INTO transactionGuard (id, value) VALUES (1, changes()) ON CONFLICT(id) DO UPDATE SET value = excluded.value"),
     );
   }
@@ -160,8 +163,8 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
   } catch (cause) {
     if (String(cause).includes("transactionGuard_value_check")) {
       if (reservePhysical) {
-        const [currentProduct] = await db.select({ physicalStock: product.physicalStock }).from(product).where(eq(product.id, item.id)).limit(1);
-        if ((currentProduct?.physicalStock ?? 0) < quantity) fail("PRODUCT_STOCK_NOT_ENOUGH");
+        const [currentSku] = await db.select({ physicalStock: productSku.physicalStock }).from(productSku).where(eq(productSku.id, sku.id)).limit(1);
+        if ((currentSku?.physicalStock ?? 0) < quantity) fail("PRODUCT_STOCK_NOT_ENOUGH");
       }
       if (discountId !== null) {
         const [currentDiscount] = await db.select({ isActive: discountCode.isActive, maxUses: discountCode.maxUses, usedCount: discountCode.usedCount, reservedCount: discountCode.reservedCount }).from(discountCode).where(eq(discountCode.id, discountId)).limit(1);
@@ -243,7 +246,7 @@ async function claimAutomaticDelivery(database: D1Database, orderId: number, tok
 
 export async function deliverPaidOrder(database: D1Database, orderId: number): Promise<DeliveryResult> {
   const db = createDrizzleDb(database);
-  const [record] = await db.select({ id: order.id, productId: order.productId, quantity: order.quantity, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, deliveryType: order.deliveryTypeSnapshot, fixedDeliveryContent: order.fixedDeliveryContentSnapshot }).from(order).where(eq(order.id, orderId)).limit(1);
+  const [record] = await db.select({ id: order.id, productId: order.productId, productSkuId: order.productSkuId, quantity: order.quantity, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, deliveryType: order.deliveryTypeSnapshot, fixedDeliveryContent: order.fixedDeliveryContentSnapshot }).from(order).where(eq(order.id, orderId)).limit(1);
   if (!record) fail("ORDER_NOT_FOUND");
   if (record.paymentStatus !== "PAID") fail("ORDER_NOT_PAID");
   if (record.deliveryStatus === "DELIVERED") return { status: "DELIVERED" };
@@ -256,7 +259,7 @@ export async function deliverPaidOrder(database: D1Database, orderId: number): P
   try {
     const contents = record.deliveryType === "FIXED_CARD"
       ? (record.fixedDeliveryContent?.trim() ? [record.fixedDeliveryContent.trim()] : fail("FIXED_DELIVERY_CONTENT_MISSING"))
-      : (await allocateCardsForPaidOrder(database, orderId, record.productId, record.quantity)).map((item) => item.content);
+      : (record.productSkuId === null ? fail("PRODUCT_SKU_NOT_AVAILABLE") : (await allocateCardsForPaidOrder(database, orderId, record.quantity, record.productSkuId)).map((item) => item.content));
     const completedAt = Date.now();
     await database.batch([
       database.prepare("INSERT INTO orderDelivery (orderId, deliveryType, attemptToken, contentSnapshot, errorCode, status, createdAt) SELECT id, ?, ?, ?, NULL, 'SUCCESS', ? FROM `order` WHERE id = ? AND deliveryStatus = 'DELIVERING' AND deliveryToken = ?").bind(deliveryType, token, JSON.stringify(contents), completedAt, orderId, token),
@@ -368,11 +371,11 @@ export async function closeExpiredPendingOrders(database: D1Database, cutoff: Da
 
 export async function closePendingOrder(database: D1Database, orderId: number): Promise<{ closed: boolean }> {
   const db = createDrizzleDb(database);
-  const [record] = await db.select({ orderNo: order.orderNo, productId: order.productId, quantity: order.quantity, paymentProvider: order.paymentProvider, discountCodeId: order.discountCodeId, physicalStockReserved: order.physicalStockReserved }).from(order).where(eq(order.id, orderId)).limit(1);
+  const [record] = await db.select({ orderNo: order.orderNo, productId: order.productId, productSkuId: order.productSkuId, quantity: order.quantity, paymentProvider: order.paymentProvider, discountCodeId: order.discountCodeId, physicalStockReserved: order.physicalStockReserved }).from(order).where(eq(order.id, orderId)).limit(1);
   if (!record) fail("ORDER_NOT_FOUND");
   const now = Date.now();
   const statements: D1PreparedStatement[] = [];
-  if (record.physicalStockReserved) statements.push(database.prepare("UPDATE product SET physicalStock = physicalStock + ?, updatedAt = ? WHERE id = ? AND EXISTS (SELECT 1 FROM `order` WHERE id = ? AND status = 'PENDING' AND paymentStatus = 'UNPAID' AND physicalStockReserved = 1)").bind(record.quantity, now, record.productId, orderId));
+  if (record.physicalStockReserved && record.productSkuId !== null) statements.push(database.prepare("UPDATE productSku SET physicalStock = physicalStock + ?, updatedAt = ? WHERE id = ? AND EXISTS (SELECT 1 FROM `order` WHERE id = ? AND status = 'PENDING' AND paymentStatus = 'UNPAID' AND physicalStockReserved = 1)").bind(record.quantity, now, record.productSkuId, orderId));
   if (record.discountCodeId !== null) statements.push(database.prepare("UPDATE discountCode SET reservedCount = CASE WHEN reservedCount > 0 THEN reservedCount - 1 ELSE 0 END, updatedAt = ? WHERE id = ? AND EXISTS (SELECT 1 FROM `order` WHERE id = ? AND status = 'PENDING' AND paymentStatus = 'UNPAID')").bind(now, record.discountCodeId, orderId));
   const orderUpdateIndex = statements.length;
   statements.push(

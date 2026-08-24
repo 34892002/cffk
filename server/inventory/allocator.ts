@@ -3,7 +3,7 @@ import { createDrizzleDb } from "@/database/drizzle";
 import { card } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 
-export async function allocateCardsForPaidOrder(database: D1Database, orderId: number, productId: number, quantity: number) {
+export async function allocateCardsForPaidOrder(database: D1Database, orderId: number, quantity: number, productSkuId: number) {
   const db = createDrizzleDb(database);
   const count = Math.floor(quantity);
   if (!Number.isInteger(count) || count < 1) throw new Error("CARD_QUANTITY_INVALID");
@@ -22,7 +22,7 @@ export async function allocateCardsForPaidOrder(database: D1Database, orderId: n
   const candidates = await db
     .select({ id: card.id })
     .from(card)
-    .where(and(eq(card.productId, productId), eq(card.status, "UNUSED")))
+    .where(and(eq(card.productSkuId, productSkuId), eq(card.status, "UNUSED")))
     .orderBy(asc(card.id))
     .limit(missingCount);
   if (candidates.length < missingCount) appError("CARD_INVENTORY_SHORTAGE");
@@ -42,11 +42,11 @@ export async function allocateCardsForPaidOrder(database: D1Database, orderId: n
   return allocated;
 }
 
-export async function countAvailableCards(database: D1Database, productId: number) {
+export async function countAvailableCards(database: D1Database, productSkuId: number) {
   const db = createDrizzleDb(database);
   const [result] = await db
     .select({ count: sql<number>`count(*)` })
     .from(card)
-    .where(and(eq(card.productId, productId), eq(card.status, "UNUSED")));
+    .where(and(eq(card.productSkuId, productSkuId), eq(card.status, "UNUSED")));
   return result?.count ?? 0;
 }

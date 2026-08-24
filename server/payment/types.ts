@@ -18,6 +18,7 @@ export type PaymentAddressInput = Omit<AddressSnapshot, "version" | "postalCode"
 
 export type PaymentCreateInput = {
   productId: number;
+  productSkuId: number;
   quantity: number;
   paymentProvider: PaymentProviderKind;
   paymentChannel?: PaymentChannel;

@@ -63,10 +63,12 @@ class SqliteD1Statement {
 export function createTestDatabase() {
   const sqlite = new Database(":memory:");
   sqlite.run("PRAGMA foreign_keys = ON");
-  const migrationPath = fileURLToPath(new URL("../../database/migrations/0000_initial.sql", import.meta.url));
-  const migration = readFileSync(migrationPath, "utf8");
-  for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
-    sqlite.run(statement);
+  for (const migrationName of ["0000_initial.sql", "0001_flowery_doomsday.sql"]) {
+    const migrationPath = fileURLToPath(new URL(`../../database/migrations/${migrationName}`, import.meta.url));
+    const migration = readFileSync(migrationPath, "utf8");
+    for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
+      sqlite.run(statement);
+    }
   }
 
   const database = {

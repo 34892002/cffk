@@ -86,6 +86,7 @@ export const errorMessages: Record<string, string> = {
   PRODUCT_STATUS_INVALID: "商品状态无效。",
   PRODUCT_DELIVERY_TYPE_INVALID: "发货方式无效。",
   PRODUCT_DELIVERY_TYPE_IMMUTABLE: "商品发货方式创建后不可修改。",
+  PRODUCT_SKU_DELIVERY_TYPE_CONFLICT: "同一商品的所有 SKU 必须使用相同的发货方式。",
   PRODUCT_STATUS_CHANGED_RETRY: "商品状态已被其他操作更新，请刷新后重试。",
   PRODUCT_DELETE_REJECTED: "已有订单或卡密记录的商品不能删除，请先下架保留历史记录。",
 

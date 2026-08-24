@@ -31,8 +31,11 @@ function insertFixtures(sqlite: Database, identity: FlowIdentity) {
       .run(identity.ownerUserId, identity.name, identity.email, now, now);
   }
   sqlite.query("INSERT INTO siteSetting (id, siteName, siteUrl, registrationEnabled, timezone, createdAt, updatedAt) VALUES (1, 'Core Shop', 'https://shop.example.com', 1, 'Asia/Shanghai', ?, ?)").run(now, now);
-  sqlite.query("INSERT INTO product (name, slug, price, status, deliveryType, fixedDeliveryContent, stockMode, minBuy, maxBuy, sort, createdAt, updatedAt) VALUES ('Core product', ?, 1000, 'ACTIVE', 'FIXED_CARD', 'LICENSE-CORE-001', 'UNLIMITED', 1, 1, 0, ?, ?)")
+  sqlite.query("INSERT INTO product_v2 (name, slug, status, sort, createdAt, updatedAt) VALUES ('Core product', ?, 'ACTIVE', 0, ?, ?)")
     .run(`core-${identity.ownerUserId ?? "guest"}`, now, now);
+  const product = sqlite.query("SELECT id FROM product_v2 WHERE slug = ?").get(`core-${identity.ownerUserId ?? "guest"}`) as { id: number };
+  sqlite.query("INSERT INTO productSku (productId, name, price, status, deliveryType, fixedDeliveryContent, minBuy, maxBuy, sort, createdAt, updatedAt) VALUES (?, 'Default', 1000, 'ACTIVE', 'FIXED_CARD', 'LICENSE-CORE-001', 1, 1, 0, ?, ?)")
+    .run(product.id, now, now);
   sqlite.query("INSERT INTO discountCode (code, type, value, usedCount, reservedCount, isActive, createdAt, updatedAt) VALUES (?, 'FIXED', 1000, 0, 0, 1, ?, ?)")
     .run(`FREE-${(identity.ownerUserId ?? "GUEST").toUpperCase()}`, now, now);
   sqlite.query("INSERT INTO pushChannelConfig (channel, provider, name, isEnabled, configJson, createdAt, updatedAt) VALUES ('EMAIL', 'CLOUDFLARE', 'Test Email', 1, ?, ?, ?)")
@@ -47,12 +50,13 @@ async function runStorefrontFlow(identity: FlowIdentity) {
   const context = createTestDatabase();
   databases.push(context);
   insertFixtures(context.sqlite, identity);
-  const product = context.sqlite.query("SELECT id FROM product LIMIT 1").get() as { id: number };
+  const product = context.sqlite.query("SELECT id FROM product_v2 LIMIT 1").get() as { id: number };
   const discountCode = `FREE-${(identity.ownerUserId ?? "GUEST").toUpperCase()}`;
   const sent: SentEmail[] = [];
 
   const created = await createOrder(context.database, {
     productId: product.id,
+    productSkuId: (context.sqlite.query("SELECT id FROM productSku WHERE productId = ?").get(product.id) as { id: number }).id,
     quantity: 1,
     paymentProvider: "ALIPAY",
     contactType: "EMAIL",

@@ -30,7 +30,7 @@ INSERT INTO `category` (
 ) ON CONFLICT(`slug`) DO NOTHING;
 
 -- Repair products created before the fallback category was initialized.
-UPDATE `product`
+UPDATE `product_v2`
 SET `categoryId` = (SELECT `id` FROM `category` WHERE `slug` = 'default')
 WHERE `categoryId` IS NULL;
 
