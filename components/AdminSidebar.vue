@@ -69,6 +69,15 @@
             </SidebarMenuItem>
 
             <SidebarMenuItem>
+              <Collapsible default-open class="group/collapsible">
+                <CollapsibleTrigger as-child>
+                  <SidebarMenuButton :is-active="isGroupActive(adminNavigation.suppliers)"><KeyRoundIcon /><span>{{ adminNavigation.suppliers.title }}</span><ChevronRightIcon class="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" /></SidebarMenuButton>
+                </CollapsibleTrigger>
+                <CollapsibleContent><SidebarMenuSub><SidebarMenuSubItem v-for="item in adminNavigation.suppliers.items" :key="item.title"><SidebarMenuSubButton as-child :is-active="isItemActive(item)"><a :href="basePath + item.path"><span>{{ item.title }}</span></a></SidebarMenuSubButton></SidebarMenuSubItem></SidebarMenuSub></CollapsibleContent>
+              </Collapsible>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
               <SidebarMenuButton as-child :is-active="isItemActive(adminNavigation.orders)">
                 <a :href="basePath + adminNavigation.orders.path"><ClipboardListIcon /><span>{{ adminNavigation.orders.title }}</span></a>
               </SidebarMenuButton>
@@ -170,7 +179,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { authClient } from "@/lib/auth-client";
 import { adminNavigation, adminPages, isAdminNavigationItemActive, type AdminNavigationGroup, type AdminNavigationItem } from "@/lib/admin-navigation";
-import { BellIcon, ChevronRightIcon, ChevronUpIcon, ChevronsUpDownIcon, ClipboardListIcon, ExternalLinkIcon, InfoIcon, LayoutDashboardIcon, LogOutIcon, PackageIcon, SettingsIcon, UserRoundCogIcon, UsersIcon } from "@lucide/vue";
+import { BellIcon, ChevronRightIcon, ChevronUpIcon, ChevronsUpDownIcon, ClipboardListIcon, ExternalLinkIcon, InfoIcon, KeyRoundIcon, LayoutDashboardIcon, LogOutIcon, PackageIcon, SettingsIcon, UserRoundCogIcon, UsersIcon } from "@lucide/vue";
 import logoUrl from "@/assets/logo.svg?url";
 import { navigate } from "vike/client/router";
 import { computed, ref } from "vue";

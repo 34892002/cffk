@@ -71,6 +71,24 @@ export const adminPages = {
     pageTitle: "优惠券管理",
     description: "创建优惠规则、限制使用次数和适用商品。",
   },
+  supplierAccounts: {
+    title: "供应商账号",
+    path: "/suppliers/accounts",
+    pageTitle: "供应商账号",
+    description: "管理 ACG 和独角数卡 Next 上游账号、余额与连接状态。",
+  },
+  supplierProducts: {
+    title: "供应商商品",
+    path: "/suppliers/products",
+    pageTitle: "供应商商品",
+    description: "查看上游商品、SKU、库存和成本，并同步已绑定货源。",
+  },
+  supplierOrders: {
+    title: "供应商订单",
+    path: "/suppliers/orders",
+    pageTitle: "供应商订单",
+    description: "查看采购状态、成本、错误并执行重试、对账和账号重选。",
+  },
   orders: {
     title: "订单管理",
     path: "/orders",
@@ -171,6 +189,10 @@ export const adminNavigation = {
     items: [adminPages.categories, adminPages.products, adminPages.cards, adminPages.discounts],
   },
   orders: adminPages.orders,
+  suppliers: {
+    title: "供应商管理",
+    items: [adminPages.supplierAccounts, adminPages.supplierProducts, adminPages.supplierOrders],
+  },
   users: adminPages.users,
   push: {
     title: "推送管理",
@@ -192,6 +214,7 @@ export const adminNavigation = {
 
 const navigationGroups: readonly AdminNavigationGroup[] = [
   adminNavigation.product,
+  adminNavigation.suppliers,
   adminNavigation.push,
   adminNavigation.system,
 ];

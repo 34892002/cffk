@@ -61,8 +61,16 @@ export class PaymentFlowService {
     const created = await createOrder(this.database, { ...input, paymentChannel: channel, allowPendingPayment: true } as CreateOrderInput, ownerUserId);
     const logs = new PaymentLogService(this.database);
     if (created.amount === 0) {
-      await this.confirm(created.orderNo, "ZERO_AMOUNT");
-      return { ...created, payment: null, paymentStatus: "PAID" };
+      try {
+        const outcome = await this.confirm(created.orderNo, "ZERO_AMOUNT");
+        if (outcome !== "CONFIRMED" && outcome !== "ALREADY_PAID" && outcome !== "DELIVERY_PENDING") {
+          appError(outcome === "DELIVERY_FAILED" ? "SUPPLIER_PURCHASE_UNAVAILABLE" : "PAYMENT_CONFIRM_FAILED");
+        }
+        return { ...created, payment: null, paymentStatus: "PAID" };
+      } catch (cause) {
+        await closePendingOrder(this.database, created.id).catch((closeCause) => reportUnexpectedServerError("payment-close-zero-order-failed", closeCause, { orderId: created.id, orderNo: created.orderNo }));
+        throw cause;
+      }
     }
     const repository = paymentRepository(this.database);
     const attemptId = await repository.createAttempt({ orderId: created.id, provider: provider.provider, channel });

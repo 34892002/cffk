@@ -10,6 +10,7 @@ import type { PaymentProviderKind } from "./payment/registry";
 import { PaymentLogService } from "./payment/log-service";
 import { getTurnstileConfig } from "@/lib/turnstile-config";
 import { env } from "./env";
+import { handleDujiaoSupplierCallback } from "./supplier/callback";
 
 function getApp() {
   const app = new Hono<{ Bindings: Record<string, unknown> & { DB: D1Database } }>();
@@ -40,6 +41,7 @@ function getApp() {
     if (provider === "ALIPAY" || provider === "EPAY") app.on(["GET", "POST"], path, handlePaymentCallback);
     else app.post(path, handlePaymentCallback);
   }
+  app.post("/api/suppliers/dujiao-next/callback/:accountId", async (context) => handleDujiaoSupplierCallback(context.env.DB, context.req.param("accountId"), context.req.raw));
   registerMediaRoutes(app);
   app.get("/api/security/turnstile", (context) => {
     const config = getTurnstileConfig(env);

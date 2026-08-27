@@ -15,6 +15,13 @@
       "when": 1787294975088,
       "tag": "0001_flowery_doomsday",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787639479892,
+      "tag": "0002_glamorous_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }

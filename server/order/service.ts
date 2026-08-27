@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { automaticDeliveryJob, customerAddress, discountCode, order, orderDelivery, productV2, productSku } from "@/database/drizzle/schema";
+import { automaticDeliveryJob, customerAddress, discountCode, order, orderDelivery, productV2, productSku, supplierOrder } from "@/database/drizzle/schema";
 import { getProductSku } from "@/server/catalog/sku";
 import { appError } from "@/lib/app-error";
 import { isJsonFormEmail } from "@/lib/json-form-values";
@@ -14,6 +14,10 @@ import { generateOrderNo } from "@/server/order/order-number";
 import { PaymentLogService } from "@/server/payment/log-service";
 import type { AddressSnapshot, PaymentAddressInput } from "@/server/payment/types";
 import type { PaymentProviderKind } from "@/server/payment/registry";
+import { createSupplierOrder } from "@/server/supplier/purchase";
+import { processSupplierOrder } from "@/server/supplier/process";
+import { assertSupplierSkuOrderable } from "@/server/supplier/eligibility";
+
 
 const DELIVERY_LEASE_MS = 5 * 60 * 1000;
 
@@ -110,12 +114,16 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
   if (!item) fail("PRODUCT_NOT_AVAILABLE");
   const sku = await getProductSku(db, item.id, positiveInteger(input.productSkuId, "PRODUCT_SKU_ID"));
 
+  const isSupplier = sku.fulfillmentSource === "SUPPLIER";
+  if (isSupplier && sku.deliveryType !== "SUPPLIER") fail("SUPPLIER_FULFILLMENT_INVALID");
+  if (!isSupplier && sku.deliveryType === "SUPPLIER") fail("PRODUCT_DELIVERY_TYPE_INVALID");
   if (sku.deliveryType === "FIXED_CARD" && requestedQuantity !== 1) fail("PRODUCT_QUANTITY_INVALID");
   if (requestedQuantity < sku.minBuy || requestedQuantity > sku.maxBuy) fail("PRODUCT_QUANTITY_INVALID");
   const quantity = sku.deliveryType === "FIXED_CARD" ? 1 : requestedQuantity;
-  if (sku.deliveryType === "CARD_AUTO" && (await countAvailableCards(database, sku.id)) < quantity) fail("PRODUCT_STOCK_NOT_ENOUGH");
-  if (sku.deliveryType === "FIXED_CARD" && !sku.fixedDeliveryContent?.trim()) fail("PRODUCT_FIXED_CONTENT_MISSING");
-  const addressSnapshotJson = sku.deliveryType === "EXPRESS"
+  if (isSupplier) await assertSupplierSkuOrderable(database, sku.id, quantity);
+  if (!isSupplier && sku.deliveryType === "CARD_AUTO" && (await countAvailableCards(database, sku.id)) < quantity) fail("PRODUCT_STOCK_NOT_ENOUGH");
+  if (!isSupplier && sku.deliveryType === "FIXED_CARD" && !sku.fixedDeliveryContent?.trim()) fail("PRODUCT_FIXED_CONTENT_MISSING");
+  const addressSnapshotJson = !isSupplier && sku.deliveryType === "EXPRESS"
     ? JSON.stringify(await resolveAddressSnapshot(db, input, ownerUserId))
     : null;
 
@@ -130,17 +138,17 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
     discountAmount = validated.discountAmount;
   }
 
-  const reservePhysical = (sku.deliveryType === "MANUAL" || sku.deliveryType === "EXPRESS") && sku.physicalStock !== null;
+  const reservePhysical = !isSupplier && (sku.deliveryType === "MANUAL" || sku.deliveryType === "EXPRESS") && sku.physicalStock !== null;
   const now = Date.now();
   const amount = Math.max(0, originalAmount - discountAmount);
   if (amount > 0 && input.allowPendingPayment === false) fail("PAYMENT_ADAPTER_NOT_AVAILABLE");
   const orderNo = generateOrderNo();
   const paymentChannel = normalizePaymentChannel(input.paymentProvider, input.paymentChannel);
   const statements: D1PreparedStatement[] = [
-    database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productSkuId, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, contactType, contactValue, contactEmailNormalized, buyerNote, addressSnapshotJson, paymentProvider, paymentChannel, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
+    database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productSkuId, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, contactType, contactValue, contactEmailNormalized, buyerNote, addressSnapshotJson, paymentProvider, paymentChannel, fulfillmentSourceSnapshot, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
       orderNo, ownerUserId, item.id, sku.id, item.name, sku.name, sku.price, quantity, amount, input.contactType, contactValue,
       input.contactType === "EMAIL" ? normalizeOrderEmail(contactValue) : null, input.buyerNote?.trim() || null,
-      addressSnapshotJson, input.paymentProvider, paymentChannel, sku.deliveryType,
+      addressSnapshotJson, input.paymentProvider, paymentChannel, sku.fulfillmentSource, sku.deliveryType,
       sku.deliveryType === "FIXED_CARD" ? sku.fixedDeliveryContent!.trim() : null, reservePhysical ? 1 : 0,
       discountId, discountCodeValue, discountId === null ? null : originalAmount, discountId === null ? null : discountAmount,
       now, now,
@@ -185,14 +193,25 @@ export type PaymentConfirmationResult = {
 
 export async function confirmOrderPayment(database: D1Database, orderId: number): Promise<PaymentConfirmationResult> {
   const db = createDrizzleDb(database);
-  const [record] = await db.select({ status: order.status, paymentStatus: order.paymentStatus, discountCodeId: order.discountCodeId, deliveryType: order.deliveryTypeSnapshot }).from(order).where(eq(order.id, orderId)).limit(1);
+  const [record] = await db.select({ status: order.status, paymentStatus: order.paymentStatus, amount: order.amount, discountCodeId: order.discountCodeId, fulfillmentSource: order.fulfillmentSourceSnapshot, deliveryType: order.deliveryTypeSnapshot, productSkuId: order.productSkuId, quantity: order.quantity }).from(order).where(eq(order.id, orderId)).limit(1);
   if (!record) fail("ORDER_NOT_FOUND");
   if (record.paymentStatus === "PAID") {
+    if (record.fulfillmentSource === "SUPPLIER") {
+      const supplierTask = await createSupplierOrder(database, orderId);
+      if (supplierTask?.id) await processSupplierOrder(database, supplierTask.id);
+    }
     const delivery = await deliverPaidOrder(database, orderId);
     return { outcome: delivery.status === "FAILED" ? "DELIVERY_FAILED" : "ALREADY_PAID", deliveryError: delivery.errorCode };
   }
   if (record.status === "CLOSED" && record.paymentStatus === "UNPAID") return { outcome: "PAYMENT_EXCEPTION" };
   if (!canConfirmPayment(record.status, record.paymentStatus)) return { outcome: "NOT_PAYABLE" };
+
+  // Do not mark a supplier order paid until the same live quote used for
+  // purchase confirms that the upstream SKU is currently orderable.
+  if (record.fulfillmentSource === "SUPPLIER") {
+    if (record.productSkuId === null) return { outcome: "DELIVERY_FAILED", deliveryError: "SUPPLIER_SKU_MISSING" };
+    await assertSupplierSkuOrderable(database, record.productSkuId, record.quantity);
+  }
 
   const now = Date.now();
   const statements: D1PreparedStatement[] = [];
@@ -206,7 +225,7 @@ export async function confirmOrderPayment(database: D1Database, orderId: number)
     database.prepare("UPDATE `order` SET status = 'PAID', paymentStatus = 'PAID', paidAt = ?, updatedAt = ? WHERE id = ? AND status = 'PENDING' AND paymentStatus = 'UNPAID'").bind(now, now, orderId),
     database.prepare("INSERT INTO transactionGuard (id, value) VALUES (1, changes()) ON CONFLICT(id) DO UPDATE SET value = excluded.value"),
   );
-  if (record.deliveryType === "CARD_AUTO" || record.deliveryType === "FIXED_CARD") {
+  if (record.fulfillmentSource === "LOCAL" && (record.deliveryType === "CARD_AUTO" || record.deliveryType === "FIXED_CARD")) {
     statements.push(database.prepare("INSERT INTO automaticDeliveryJob (orderId, status, attemptCount, createdAt, updatedAt) SELECT id, 'PENDING', 0, ?, ? FROM `order` WHERE id = ? AND paymentStatus = 'PAID' ON CONFLICT(orderId) DO NOTHING").bind(now, now, orderId));
   }
   statements.push(database.prepare("INSERT INTO orderEvent (eventKey, orderId, scene, status, attemptCount, availableAt, createdAt, updatedAt) SELECT 'order-paid:' || id, id, 'ORDER_PAID', 'PENDING', 0, ?, ?, ? FROM `order` WHERE id = ? AND paymentStatus = 'PAID' ON CONFLICT(eventKey) DO NOTHING").bind(now, now, now, orderId));
@@ -217,6 +236,27 @@ export async function confirmOrderPayment(database: D1Database, orderId: number)
     if (current?.paymentStatus !== "PAID") return { outcome: "NOT_PAYABLE" };
   }
 
+  if (record.fulfillmentSource === "SUPPLIER") {
+    const supplierTask = await createSupplierOrder(database, orderId);
+    if (supplierTask?.id) {
+      const supplierResult = await processSupplierOrder(database, supplierTask.id);
+      if (supplierResult.status === "failed") {
+        // A zero-value supplier order has no payment to protect. If purchase
+        // failed before an upstream order was created, undo the local payment
+        // state instead of reporting a successful order with no upstream order.
+        if (record.amount === 0) {
+          const [currentTask] = await db.select({ upstreamOrderId: supplierOrder.upstreamOrderId }).from(supplierOrder).where(eq(supplierOrder.id, supplierTask.id)).limit(1);
+          if (!currentTask?.upstreamOrderId) {
+            await database.batch([
+              database.prepare("DELETE FROM supplierOrder WHERE id = ? AND upstreamOrderId IS NULL").bind(supplierTask.id),
+              database.prepare("UPDATE `order` SET status = 'PENDING', paymentStatus = 'UNPAID', paidAt = NULL, updatedAt = ? WHERE id = ? AND amount = 0 AND paymentStatus = 'PAID'").bind(Date.now(), orderId),
+            ]);
+          }
+        }
+        return { outcome: "DELIVERY_FAILED", deliveryError: supplierResult.errorCode };
+      }
+    }
+  }
   const delivery = await deliverPaidOrder(database, orderId);
   if (delivery.status === "FAILED") return { outcome: "DELIVERY_FAILED", deliveryError: delivery.errorCode };
   if (delivery.status === "PENDING") return { outcome: "DELIVERY_PENDING" };
@@ -230,7 +270,7 @@ async function claimAutomaticDelivery(database: D1Database, orderId: number, tok
   try {
     await database.batch([
       database.prepare(`UPDATE \`order\` SET deliveryStatus = 'DELIVERING', deliveryToken = ?, deliveryLeaseUntil = ?, updatedAt = ?
-        WHERE id = ? AND paymentStatus = 'PAID' AND deliveryTypeSnapshot IN ('CARD_AUTO', 'FIXED_CARD') AND deliveryStatus != 'DELIVERED'
+        WHERE id = ? AND paymentStatus = 'PAID' AND fulfillmentSourceSnapshot = 'LOCAL' AND deliveryTypeSnapshot IN ('CARD_AUTO', 'FIXED_CARD') AND deliveryStatus != 'DELIVERED'
           AND (deliveryStatus IN ('NOT_DELIVERED', 'FAILED') OR (deliveryStatus = 'DELIVERING' AND deliveryLeaseUntil < ?))
           AND (deliveryTypeSnapshot = 'FIXED_CARD' OR NOT EXISTS (SELECT 1 FROM automaticDeliveryJob earlier JOIN \`order\` earlierOrder ON earlierOrder.id = earlier.orderId WHERE earlier.id < (SELECT id FROM automaticDeliveryJob WHERE orderId = ?) AND earlier.status IN ('PENDING', 'PROCESSING') AND earlierOrder.deliveryTypeSnapshot = 'CARD_AUTO'))`)
         .bind(token, leaseUntil, now.getTime(), orderId, now.getTime(), orderId),
@@ -246,11 +286,13 @@ async function claimAutomaticDelivery(database: D1Database, orderId: number, tok
 
 export async function deliverPaidOrder(database: D1Database, orderId: number): Promise<DeliveryResult> {
   const db = createDrizzleDb(database);
-  const [record] = await db.select({ id: order.id, productId: order.productId, productSkuId: order.productSkuId, quantity: order.quantity, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, deliveryType: order.deliveryTypeSnapshot, fixedDeliveryContent: order.fixedDeliveryContentSnapshot }).from(order).where(eq(order.id, orderId)).limit(1);
+  const [record] = await db.select({ id: order.id, productId: order.productId, productSkuId: order.productSkuId, quantity: order.quantity, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, fulfillmentSource: order.fulfillmentSourceSnapshot, deliveryType: order.deliveryTypeSnapshot, fixedDeliveryContent: order.fixedDeliveryContentSnapshot }).from(order).where(eq(order.id, orderId)).limit(1);
   if (!record) fail("ORDER_NOT_FOUND");
   if (record.paymentStatus !== "PAID") fail("ORDER_NOT_PAID");
   if (record.deliveryStatus === "DELIVERED") return { status: "DELIVERED" };
+  if (record.fulfillmentSource === "SUPPLIER") return { status: "PENDING" };
   if (record.deliveryType === "MANUAL" || record.deliveryType === "EXPRESS") return { status: "NOT_AUTOMATIC" };
+  if (record.deliveryType !== "CARD_AUTO" && record.deliveryType !== "FIXED_CARD") fail("PRODUCT_DELIVERY_TYPE_INVALID");
 
   const token = crypto.randomUUID();
   const now = new Date();
@@ -285,7 +327,7 @@ export async function deliverPaidOrder(database: D1Database, orderId: number): P
 
 export async function processPendingAutomaticDeliveries(database: D1Database, limit = 50) {
   const db = createDrizzleDb(database);
-  const jobs = await db.select({ orderId: automaticDeliveryJob.orderId, deliveryType: order.deliveryTypeSnapshot }).from(automaticDeliveryJob).innerJoin(order, eq(order.id, automaticDeliveryJob.orderId)).where(or(eq(automaticDeliveryJob.status, "PENDING"), eq(automaticDeliveryJob.status, "PROCESSING"))).orderBy(asc(automaticDeliveryJob.id)).limit(limit);
+  const jobs = await db.select({ orderId: automaticDeliveryJob.orderId, deliveryType: order.deliveryTypeSnapshot }).from(automaticDeliveryJob).innerJoin(order, eq(order.id, automaticDeliveryJob.orderId)).where(and(eq(order.fulfillmentSourceSnapshot, "LOCAL"), or(eq(automaticDeliveryJob.status, "PENDING"), eq(automaticDeliveryJob.status, "PROCESSING")))).orderBy(asc(automaticDeliveryJob.id)).limit(limit);
   let delivered = 0;
   let failed = 0;
   let cardQueueBlocked = false;

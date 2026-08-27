@@ -42,5 +42,5 @@ function editProduct(id: number) { void navigate(`${productsPath.value}/${id}`);
 function requestDeleteProduct(item: Product) { productToDelete.value = item; deleteDialogOpen.value = true; }
 async function deleteProduct() { if (!productToDelete.value) return; deleting.value = true; try { await runTelefunc(() => onDeleteProduct({ id: productToDelete.value!.id }), { successMessage: "商品已删除。" }); deleteDialogOpen.value = false; productToDelete.value = null; await loadCatalog(); } finally { deleting.value = false; } }
 async function setProductStatus(id: number, status: ProductStatus) { await runTelefunc(() => onSetProductStatus({ id, status }), { successMessage: "商品状态已更新。" }); await loadCatalog(); }
-function deliveryLabel(v: Product["deliveryType"]) { return { CARD_AUTO: "自动卡密", FIXED_CARD: "固定内容", MANUAL: "人工发货", EXPRESS: "物流发货" }[v]; } function statusLabel(v: ProductStatus) { return { DRAFT: "草稿", ACTIVE: "上架", INACTIVE: "下架" }[v]; }
+function deliveryLabel(v: Product["deliveryType"]) { return { CARD_AUTO: "自动卡密", FIXED_CARD: "固定内容", MANUAL: "人工发货", EXPRESS: "物流发货", SUPPLIER: "供应商履约" }[v]; } function statusLabel(v: ProductStatus) { return { DRAFT: "草稿", ACTIVE: "上架", INACTIVE: "下架" }[v]; }
 </script>

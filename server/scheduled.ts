@@ -4,6 +4,8 @@ import { closeExpiredPendingOrders, processPendingAutomaticDeliveries } from "./
 import { processOrderEvents } from "./email/order-events";
 import { recordScheduledMaintenanceFailure } from "./scheduled-task-log";
 import { reconcilePendingAlipayPayments } from "./payment/reconciliation-service";
+import { processPendingSupplierOrders } from "./supplier/process";
+import { runSupplierMaintenance } from "./supplier/maintenance";
 
 export const ORDER_PAYMENT_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -15,6 +17,8 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
   let automaticDelivery: Awaited<ReturnType<typeof processPendingAutomaticDeliveries>> | null = null;
   let orderEvents: Awaited<ReturnType<typeof processOrderEvents>> | null = null;
   let pushRetry: Awaited<ReturnType<typeof retryDuePushes>> | null = null;
+  let supplierOrders: Awaited<ReturnType<typeof processPendingSupplierOrders>> | null = null;
+  let supplierMaintenance: Awaited<ReturnType<typeof runSupplierMaintenance>> | null = null;
   const failures: string[] = [];
   let attemptedTasks = 0;
   let failedTasks = 0;
@@ -65,6 +69,28 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
 
   attemptedTasks += 1;
   try {
+    supplierOrders = await processPendingSupplierOrders(database, runtime);
+    if (supplierOrders.failed > 0) failures.push(`供应商采购失败: ${supplierOrders.failed}`);
+  } catch (cause) {
+    failedTasks += 1;
+    failures.push(`供应商采购: ${errorMessage(cause)}`);
+    reportUnexpectedServerError("scheduled-supplier-orders", cause);
+  }
+
+  if (runFiveMinuteMaintenance) {
+    attemptedTasks += 1;
+    try {
+      supplierMaintenance = await runSupplierMaintenance(database, now);
+      if (supplierMaintenance.failed > 0) failures.push(`供应商同步失败: ${supplierMaintenance.failed}`);
+    } catch (cause) {
+      failedTasks += 1;
+      failures.push(`供应商同步: ${errorMessage(cause)}`);
+      reportUnexpectedServerError("scheduled-supplier-sync", cause);
+    }
+  }
+
+  attemptedTasks += 1;
+  try {
     pushRetry = await retryDuePushes(database, runtime, now);
     if (pushRetry.exhausted > 0) failures.push(`推送重试已耗尽: ${pushRetry.exhausted}`);
   } catch (cause) {
@@ -91,7 +117,7 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
     }
   }
 
-  return { runFiveMinuteMaintenance, reconciliation, orderCleanup, automaticDelivery, orderEvents, pushRetry };
+  return { runFiveMinuteMaintenance, reconciliation, orderCleanup, automaticDelivery, supplierOrders, supplierMaintenance, orderEvents, pushRetry };
 }
 
 function errorMessage(cause: unknown) {
