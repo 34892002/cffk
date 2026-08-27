@@ -9,6 +9,8 @@ import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
 import type { AddressSnapshot } from "@/server/payment/types";
 import { closePendingOrder, deliverPaidOrder } from "./service";
+import { createSupplierOrder } from "@/server/supplier/purchase";
+import { processSupplierOrder } from "@/server/supplier/process";
 
 type OrderStatus = "PENDING" | "PAID" | "DELIVERED" | "CLOSED" | "FAILED";
 type DeliveryStatus = "NOT_DELIVERED" | "DELIVERING" | "DELIVERED" | "FAILED";
@@ -70,7 +72,16 @@ async function internalOnCloseAdminOrder(input: { orderId: number }) {
 
 async function internalOnRetryAutomaticDelivery(input: { orderId: number }) {
   const { database, runtime, db } = requireAdmin();
-  await deliverPaidOrder(database, input.orderId);
+  const [snapshot] = await db.select({ fulfillmentSource: order.fulfillmentSourceSnapshot }).from(order).where(eq(order.id, input.orderId)).limit(1);
+  if (!snapshot) appError("ORDER_NOT_FOUND");
+  if (snapshot.fulfillmentSource === "SUPPLIER") {
+    const supplierTask = await createSupplierOrder(database, input.orderId);
+    if (!supplierTask?.id) appError("SUPPLIER_ORDER_CREATE_FAILED");
+    const result = await processSupplierOrder(database, supplierTask.id, runtime);
+    if (result.status !== "supplied") appError("ORDER_DELIVERY_NOT_COMPLETED");
+  } else {
+    await deliverPaidOrder(database, input.orderId);
+  }
   await notifyOrderEmailEvents(database, runtime);
   const [record] = await db.select({ id: order.id, deliveryStatus: order.deliveryStatus }).from(order).where(eq(order.id, input.orderId)).limit(1);
   if (!record) appError("ORDER_NOT_FOUND");
@@ -82,15 +93,15 @@ async function internalOnRecordManualDelivery(input: { orderId: number; content:
   const { database, runtime, db } = requireAdmin();
   const content = input.content.trim();
   if (!content) appError("DELIVERY_CONTENT_REQUIRED");
-  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, deliveryType: order.deliveryTypeSnapshot }).from(order).where(eq(order.id, input.orderId)).limit(1);
+  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, fulfillmentSource: order.fulfillmentSourceSnapshot, deliveryType: order.deliveryTypeSnapshot }).from(order).where(eq(order.id, input.orderId)).limit(1);
   if (!record) appError("ORDER_NOT_FOUND");
   if (record.paymentStatus !== "PAID") appError("ORDER_NOT_PAID");
-  if (record.deliveryType !== "MANUAL" && record.deliveryType !== "EXPRESS") appError("ORDER_DELIVERY_TYPE_INVALID");
+  if (record.fulfillmentSource !== "LOCAL" || (record.deliveryType !== "MANUAL" && record.deliveryType !== "EXPRESS")) appError("ORDER_DELIVERY_TYPE_INVALID");
   if (record.deliveryStatus === "DELIVERED") appError("ORDER_ALREADY_DELIVERED");
 
   const token = crypto.randomUUID();
   const now = Date.now();
-  const claimed = await database.prepare("UPDATE `order` SET deliveryStatus = 'DELIVERING', deliveryToken = ?, deliveryLeaseUntil = ?, updatedAt = ? WHERE id = ? AND paymentStatus = 'PAID' AND deliveryTypeSnapshot IN ('MANUAL', 'EXPRESS') AND (deliveryStatus IN ('NOT_DELIVERED', 'FAILED') OR (deliveryStatus = 'DELIVERING' AND deliveryLeaseUntil < ?))").bind(token, now + 5 * 60 * 1000, now, record.id, now).run();
+  const claimed = await database.prepare("UPDATE `order` SET deliveryStatus = 'DELIVERING', deliveryToken = ?, deliveryLeaseUntil = ?, updatedAt = ? WHERE id = ? AND paymentStatus = 'PAID' AND fulfillmentSourceSnapshot = 'LOCAL' AND deliveryTypeSnapshot IN ('MANUAL', 'EXPRESS') AND (deliveryStatus IN ('NOT_DELIVERED', 'FAILED') OR (deliveryStatus = 'DELIVERING' AND deliveryLeaseUntil < ?))").bind(token, now + 5 * 60 * 1000, now, record.id, now).run();
   if (claimed.meta.changes !== 1) appError("ORDER_DELIVERY_IN_PROGRESS");
   const deliveryType = record.deliveryType;
   const scene = input.failed ? "DELIVERY_FAILED" : "DELIVERY_SUCCESS";

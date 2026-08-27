@@ -16,6 +16,7 @@ export function appError(code: string): never {
 
 export function errorCode(cause: unknown) {
   if (cause instanceof AppError) return cause.code;
+  if (typeof cause === "object" && cause !== null && "code" in cause && typeof (cause as { code?: unknown }).code === "string") return (cause as { code: string }).code;
   if (typeof cause === "object" && cause !== null && "abortValue" in cause) {
     const abortValue = (cause as TelefuncAbort).abortValue;
     if (typeof abortValue === "object" && abortValue !== null && "code" in abortValue && typeof abortValue.code === "string") return abortValue.code;

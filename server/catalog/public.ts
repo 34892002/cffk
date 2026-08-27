@@ -7,7 +7,7 @@ export type PublicSku = {
   id: number;
   name: string;
   price: string;
-  deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS";
+  deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS" | "SUPPLIER";
   physicalStock: number | null;
   availableStock: number | null;
   minBuy: number;
@@ -30,7 +30,7 @@ export type PublicCatalog = {
     subtitle: string | null;
     coverImage: string | null;
     price: string;
-    deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS";
+    deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS" | "SUPPLIER";
 
     physicalStock: number | null;
     availableStock: number | null;
@@ -73,7 +73,7 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
   if (!item) return null;
 
   const skuRows = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy }).from(productSku).where(and(eq(productSku.productId, item.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id));
-  const skus = await Promise.all(skuRows.map(async (sku) => ({ ...sku, price: formatCentsAsYuan(sku.price), availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.physicalStock })));
+  const skus = await Promise.all(skuRows.map(async (sku) => ({ ...sku, price: formatCentsAsYuan(sku.price), availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock })));
   const primary = skus[0];
   if (!primary) return null;
   return {
@@ -148,7 +148,7 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
     products: products.flatMap((item) => {
       const sku = primaryByProduct.get(item.id);
       if (!sku) return [];
-      return [{ ...item, price: formatCentsAsYuan(sku.price), deliveryType: sku.deliveryType, physicalStock: sku.physicalStock, availableStock: sku.deliveryType === "CARD_AUTO" ? cardStockBySkuId.get(sku.id) ?? 0 : sku.physicalStock, minBuy: sku.minBuy, maxBuy: sku.maxBuy, categoryName: item.categoryId === null ? null : categoryNameById.get(item.categoryId) ?? null }];
+      return [{ ...item, price: formatCentsAsYuan(sku.price), deliveryType: sku.deliveryType, physicalStock: sku.physicalStock, availableStock: sku.deliveryType === "CARD_AUTO" ? cardStockBySkuId.get(sku.id) ?? 0 : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock, minBuy: sku.minBuy, maxBuy: sku.maxBuy, categoryName: item.categoryId === null ? null : categoryNameById.get(item.categoryId) ?? null }];
     }),
   };
 }
