@@ -70,7 +70,7 @@ test("ACG maps the real v3.1.2+ catalog response shape", async () => {
   });
   await expect(adapter.listProducts({ page: 1, pageSize: 20 })).resolves.toMatchObject({
     total: 1,
-    products: [{ id: "E8D947F2522800C0", imageUrls: ["https://acg.example/assets/demo.jpg"], active: true, skus: [{ id: "月费", costMinor: "2000", retailPriceMinor: "990", memberPriceMinor: "330", stockQuantity: 9_999_999, active: true, purchaseContext: { code: "E8D947F2522800C0", race: "月费" } }, { id: "年费", costMinor: "15000", retailPriceMinor: "990", memberPriceMinor: "330", stockQuantity: 9_999_999, active: true, purchaseContext: { code: "E8D947F2522800C0", race: "年费" } }] }],
+    products: [{ id: "E8D947F2522800C0", name: "哈喽", imageUrls: ["https://acg.example/assets/demo.jpg"], active: true, skus: [{ id: "月费", name: "月费", costMinor: "2000", retailPriceMinor: "990", memberPriceMinor: "330", stockQuantity: 9_999_999, active: true, purchaseContext: { code: "E8D947F2522800C0", race: "月费" } }, { id: "年费", name: "年费", costMinor: "15000", retailPriceMinor: "990", memberPriceMinor: "330", stockQuantity: 9_999_999, active: true, purchaseContext: { code: "E8D947F2522800C0", race: "年费" } }] }],
   });
 });
 
@@ -96,7 +96,7 @@ test("ACG maps category choices as independent SKUs", async () => {
 
   const product = await adapter.getSku("HELLO", "季费");
   expect(product.id).toBe("季费");
-  expect(product.name).toBe("哈喽 · 季费");
+  expect(product.name).toBe("季费");
   expect(product.purchaseContext).toMatchObject({ code: "HELLO", race: "季费" });
   await expect(adapter.quote!({ skuId: product.id, quantity: 1, purchaseContext: product.purchaseContext })).resolves.toEqual({ unitCostMinor: "660", totalCostMinor: "660" });
   await expect(adapter.submitOrder({ skuId: product.id, quantity: 1, requestNo: "hello-req", callbackUrl: "", traceId: "hello-trace", purchaseContext: product.purchaseContext })).resolves.toEqual({ status: "supplied", upstreamOrderId: "trade-hello", cards: ["CARD"] });

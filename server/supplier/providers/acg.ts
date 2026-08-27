@@ -144,7 +144,7 @@ export class AcgAdapter implements SupplierAdapter {
           // the lowest generic member reference price.
           costMinor: categoryPrices[race] == null ? skuBase.costMinor : decimalToMinor(String(categoryPrices[race]), this.input.currencyDecimals),
           id: race,
-          name: `${value.name} · ${race}`,
+          name: race,
           purchaseContext: { ...baseContext, code, race, ...(value.delivery_way != null ? { deliveryWay: Number(value.delivery_way) } : {}) },
         }))
       : [{ ...skuBase, id: code, name: value.name, ...(baseContext || value.delivery_way != null ? { purchaseContext: { ...baseContext, code, ...(value.delivery_way != null ? { deliveryWay: Number(value.delivery_way) } : {}) } } : {}) }];
