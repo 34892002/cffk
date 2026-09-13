@@ -88,7 +88,7 @@ export const errorMessages: Record<string, string> = {
   PRODUCT_DELIVERY_TYPE_IMMUTABLE: "商品发货方式创建后不可修改。",
   PRODUCT_SKU_DELIVERY_TYPE_CONFLICT: "同一商品的所有 SKU 必须使用相同的发货方式。",
   PRODUCT_STATUS_CHANGED_RETRY: "商品状态已被其他操作更新，请刷新后重试。",
-  PRODUCT_DELETE_REJECTED: "已有订单或卡密记录的商品不能删除，请先下架保留历史记录。",
+  PRODUCT_DELETE_REJECTED: "商品仍有未关闭或已付款订单，或存在卡密记录，暂时不能删除。请先关闭未付款订单并处理卡密记录。",
 
   CARD_CONTENT_REQUIRED: "请至少填写一条卡密。",
   CARD_DATE_INVALID: "日期格式无效，请重新选择日期。",

@@ -1,5 +1,5 @@
 import { telefuncAction } from "@/server/telefunc-action";
-import { and, asc, count, eq, inArray, like, or } from "drizzle-orm";
+import { and, asc, count, eq, inArray, like, ne, or } from "drizzle-orm";
 import { requireAdmin } from "@/server/telefunc-context";
 import { appError } from "@/lib/app-error";
 import { slugify } from "@/lib/slugify";
@@ -298,10 +298,19 @@ async function internalOnDeleteProduct(input: { id: number }) {
   const [target, cardCount, orderCount] = await Promise.all([
     db.select({ id: productV2.id }).from(productV2).where(eq(productV2.id, input.id)).limit(1),
     db.select({ value: count() }).from(card).where(eq(card.productId, input.id)),
-    db.select({ value: count() }).from(order).where(eq(order.productId, input.id)),
+    db.select({ value: count() }).from(order).where(and(
+      eq(order.productId, input.id),
+      or(ne(order.status, "CLOSED"), ne(order.paymentStatus, "UNPAID")),
+    )),
   ]);
   if (!target[0]) appError("PRODUCT_NOT_FOUND");
   if ((cardCount[0]?.value ?? 0) > 0 || (orderCount[0]?.value ?? 0) > 0) appError("PRODUCT_DELETE_REJECTED");
+  // Closed unpaid orders keep their snapshots but release the product foreign keys.
+  await db.update(order).set({ productId: null, productSkuId: null, updatedAt: new Date() }).where(and(
+    eq(order.productId, input.id),
+    eq(order.status, "CLOSED"),
+    eq(order.paymentStatus, "UNPAID"),
+  ));
   // Neither productSku nor supplierBinding cascades from product_v2. Remove
   // bindings first, then the now-orphaned local SKUs.
   const skuRows = await db.select({ id: productSku.id }).from(productSku).where(eq(productSku.productId, input.id));

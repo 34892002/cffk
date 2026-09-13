@@ -22,6 +22,13 @@
       "when": 1787639479892,
       "tag": "0002_glamorous_daimon_hellstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789300432870,
+      "tag": "0003_normal_forge",
+      "breakpoints": true
     }
   ]
 }
