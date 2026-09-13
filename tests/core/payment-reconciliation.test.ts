@@ -61,11 +61,18 @@ test("scheduled Alipay query treats a missing provider trade as closeable pendin
   assert.deepEqual(deps.logs, [{ status: "PENDING", message: "PAYMENT_QUERY_PENDING" }]);
 });
 
-test("scheduled Alipay query closes an order without a payment attempt when still pending", async () => {
+test("scheduled Alipay query closes an order without a payment attempt without querying the provider", async () => {
+  let queried = false;
   const deps = dependencies(queryResult({ orderNo: "ORD-2", status: "PENDING" }));
+  deps.value.query = async () => {
+    queried = true;
+    return queryResult({ orderNo: "ORD-2", status: "PENDING" });
+  };
   const summary = await reconcilePaymentCandidates([candidateWithoutAttempt], deps.value);
   assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 1, failed: 0, closeableOrderIds: [2] });
+  assert.equal(queried, false);
   assert.deepEqual(deps.confirmations, []);
+  assert.deepEqual(deps.logs, []);
 });
 
 test("scheduled Alipay query errors do not confirm payment", async () => {

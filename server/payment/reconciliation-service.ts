@@ -34,6 +34,11 @@ type ReconciliationDependencies = {
 export async function reconcilePaymentCandidates(candidates: ReconciliationCandidate[], dependencies: ReconciliationDependencies): Promise<PaymentReconciliationResult> {
   const summary: PaymentReconciliationResult = { scanned: candidates.length, confirmed: 0, pending: 0, failed: 0, closeableOrderIds: [] };
   for (const candidate of candidates) {
+    if (candidate.attemptId === null) {
+      summary.pending += 1;
+      summary.closeableOrderIds.push(candidate.orderId);
+      continue;
+    }
     try {
       const result = await dependencies.query({ orderNo: candidate.orderNo, paymentOrderNo: candidate.paymentOrderNo ?? undefined, amount: candidate.amount });
       if (!result.verified || result.orderNo !== candidate.orderNo) {
