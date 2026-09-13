@@ -6,6 +6,7 @@ import { reconcilePaymentCandidates } from "../../server/payment/reconciliation-
 import type { PaymentQueryResult } from "../../server/payment/types.ts";
 
 const candidate = { orderId: 1, orderNo: "ORD-1", amount: 1234, attemptId: 10, paymentOrderNo: "ORD-1" };
+const candidateWithoutAttempt = { ...candidate, orderId: 2, orderNo: "ORD-2", attemptId: null, paymentOrderNo: null };
 
 function queryResult(overrides: Partial<PaymentQueryResult> = {}): PaymentQueryResult {
   return { provider: "ALIPAY", verified: true, orderNo: "ORD-1", paymentOrderNo: "TRADE-1", amount: 1234, status: "PAID", message: "ALIPAY_QUERY", ...overrides };
@@ -58,6 +59,13 @@ test("scheduled Alipay query treats a missing provider trade as closeable pendin
   assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 1, failed: 0, closeableOrderIds: [1] });
   assert.deepEqual(deps.confirmations, []);
   assert.deepEqual(deps.logs, [{ status: "PENDING", message: "PAYMENT_QUERY_PENDING" }]);
+});
+
+test("scheduled Alipay query closes an order without a payment attempt when still pending", async () => {
+  const deps = dependencies(queryResult({ orderNo: "ORD-2", status: "PENDING" }));
+  const summary = await reconcilePaymentCandidates([candidateWithoutAttempt], deps.value);
+  assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 1, failed: 0, closeableOrderIds: [2] });
+  assert.deepEqual(deps.confirmations, []);
 });
 
 test("scheduled Alipay query errors do not confirm payment", async () => {

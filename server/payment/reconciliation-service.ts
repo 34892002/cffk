@@ -20,7 +20,7 @@ type ReconciliationCandidate = {
   orderId: number;
   orderNo: string;
   amount: number;
-  attemptId: number;
+  attemptId: number | null;
   paymentOrderNo: string | null;
 };
 
@@ -73,15 +73,17 @@ export async function reconcilePendingAlipayPayments(database: D1Database, runti
   const db = createDrizzleDb(database);
   const candidates = await db
     .select({ orderId: order.id, orderNo: order.orderNo, amount: order.amount, attemptId: paymentAttempt.id, paymentOrderNo: paymentAttempt.paymentOrderNo })
-    .from(paymentAttempt)
-    .innerJoin(order, eq(order.id, paymentAttempt.orderId))
+    .from(order)
+    .leftJoin(paymentAttempt, and(
+      eq(paymentAttempt.orderId, order.id),
+      eq(paymentAttempt.provider, "ALIPAY"),
+      eq(paymentAttempt.status, "PENDING"),
+      sql`${paymentAttempt.id} = (SELECT MAX(pa.id) FROM paymentAttempt AS pa WHERE pa.orderId = ${order.id} AND pa.provider = 'ALIPAY' AND pa.status = 'PENDING')`,
+    ))
     .where(and(
       eq(order.status, "PENDING"),
       eq(order.paymentStatus, "UNPAID"),
       eq(order.paymentProvider, "ALIPAY"),
-      eq(paymentAttempt.provider, "ALIPAY"),
-      eq(paymentAttempt.status, "PENDING"),
-      sql`${paymentAttempt.id} = (SELECT MAX(pa.id) FROM paymentAttempt AS pa WHERE pa.orderId = ${order.id} AND pa.provider = 'ALIPAY' AND pa.status = 'PENDING')`,
     ))
     .orderBy(asc(order.createdAt), desc(paymentAttempt.id))
     .limit(Math.max(1, Math.min(limit, 100)));
