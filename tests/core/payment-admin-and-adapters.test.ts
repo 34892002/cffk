@@ -234,6 +234,71 @@ test("Alipay accepts raw Base64 keys and preserves a complete sandbox gateway UR
   assert.ok(url.searchParams.get("sign"));
 });
 
+test("Alipay treats a missing provider trade as verified pending", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    alipay_trade_query_response: {
+      code: "40004",
+      sub_code: "ACQ.TRADE_NOT_EXIST",
+      sub_msg: "交易不存在",
+    },
+  }), { status: 200 });
+  try {
+    const adapter = createProviderAdapter("ALIPAY", {
+      schemaVersion: 1,
+      modes: ["web"],
+      baseUrl: "https://openapi.alipay.example",
+      appId: "app-1",
+      sellerId: "seller-1",
+      privateKey: testPrivateKey,
+      alipayPublicKey: "unused-for-query",
+      notifyUrl: "https://shop.example/notify",
+      returnUrl: "https://shop.example/result",
+    });
+    const result = await adapter.query!({ orderNo: "ORD-missing", amount: 1234 });
+    assert.deepEqual(result, {
+      provider: "ALIPAY",
+      verified: true,
+      orderNo: "ORD-missing",
+      paymentOrderNo: "ORD-missing",
+      amount: undefined,
+      status: "PENDING",
+      message: "ALIPAY_TRADE_NOT_EXIST",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Alipay keeps other query errors unverified", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    alipay_trade_query_response: {
+      code: "40002",
+      sub_code: "isv.invalid-signature",
+    },
+  }), { status: 200 });
+  try {
+    const adapter = createProviderAdapter("ALIPAY", {
+      schemaVersion: 1,
+      modes: ["web"],
+      baseUrl: "https://openapi.alipay.example",
+      appId: "app-1",
+      sellerId: "seller-1",
+      privateKey: testPrivateKey,
+      alipayPublicKey: "unused-for-query",
+      notifyUrl: "https://shop.example/notify",
+      returnUrl: "https://shop.example/result",
+    });
+    const result = await adapter.query!({ orderNo: "ORD-failed", amount: 1234 });
+    assert.equal(result.verified, false);
+    assert.equal(result.status, "PENDING");
+    assert.equal(result.message, "ALIPAY_QUERY_FAILED");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Alipay web and face-to-face modes create signed provider requests", async () => {
   const originalFetch = globalThis.fetch;
   const requests: Request[] = [];

@@ -94,7 +94,7 @@ export async function reconcilePendingAlipayPayments(database: D1Database, runti
       await flow.confirm(candidate.orderNo, "SCHEDULED_QUERY", result.amount, candidate.attemptId);
     },
     log: async (candidate, result, verifyStatus, message) => {
-      if (verifyStatus === "PENDING" && await logs.hasRecent(candidate.orderId, "QUERY", "PENDING", new Date(Date.now() - 10 * 60 * 1000))) return;
+      if (verifyStatus === "PENDING") return;
       await logs.writeBestEffort({
         orderId: candidate.orderId,
         provider: "ALIPAY",

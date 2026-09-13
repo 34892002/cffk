@@ -47,6 +47,19 @@ test("scheduled Alipay query leaves a provider-pending order unpaid", async () =
   assert.deepEqual(deps.confirmations, []);
 });
 
+test("scheduled Alipay query treats a missing provider trade as closeable pending", async () => {
+  const deps = dependencies(queryResult({
+    verified: true,
+    status: "PENDING",
+    amount: undefined,
+    message: "ALIPAY_TRADE_NOT_EXIST",
+  }));
+  const summary = await reconcilePaymentCandidates([candidate], deps.value);
+  assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 1, failed: 0, closeableOrderIds: [1] });
+  assert.deepEqual(deps.confirmations, []);
+  assert.deepEqual(deps.logs, [{ status: "PENDING", message: "PAYMENT_QUERY_PENDING" }]);
+});
+
 test("scheduled Alipay query errors do not confirm payment", async () => {
   const failure = new Error("network unavailable");
   const deps = dependencies(failure);
