@@ -6,11 +6,12 @@ import {
   parseBepusdtConfig,
   parseEpayConfig,
   parseHashpayConfig,
+  parsePerpayConfig,
   parseStripeConfig,
   type PaymentProviderConfig,
 } from "@/lib/config-schemas";
 
-export type PaymentProviderKind = "ALIPAY" | "EPAY" | "BEPUSDT" | "STRIPE" | "HASHPAY";
+export type PaymentProviderKind = "ALIPAY" | "EPAY" | "BEPUSDT" | "STRIPE" | "HASHPAY" | "PERPAY";
 export type PaymentChannel = "web" | "wap" | "face_to_face" | "alipay" | "wxpay";
 
 
@@ -24,7 +25,7 @@ export type ProviderDefinition = {
   getChannels: (config: PaymentProviderConfig) => PaymentChannel[];
   createAdapter: (config: Record<string, unknown>) => PaymentAdapter;
 
-  callbackResponse: "text";
+  callbackResponse: "text" | "json";
 };
 
 const common = {
@@ -108,6 +109,12 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     createAdapter: (config) => createProviderAdapter("HASHPAY", config),
     callbackResponse: "text",
   },
+  PERPAY: {
+    provider: "PERPAY", title: "PerPay", schemaVersion: 1,
+    fields: [{ key: "baseUrl", label: "PerPay 地址", type: "url", required: true }, { key: "apiSecret", label: "API Secret", type: "password", required: true, secret: true }, { key: "webhookSecret", label: "Webhook Secret", type: "password", required: true, secret: true }, common.notifyUrl, common.returnUrl],
+    defaults: { schemaVersion: 1, baseUrl: "", apiSecret: "", webhookSecret: "", notifyUrl: "", returnUrl: "" },
+    parseConfig: parsePerpayConfig, getChannels: () => [], createAdapter: (config) => createProviderAdapter("PERPAY", config), callbackResponse: "json",
+  },
 };
 
 const paymentNotifyPaths: Partial<Record<PaymentProviderKind, string>> = {
@@ -116,6 +123,7 @@ const paymentNotifyPaths: Partial<Record<PaymentProviderKind, string>> = {
   BEPUSDT: "/api/payments/bepusdt/notify",
   STRIPE: "/api/payments/stripe/notify",
   HASHPAY: "/api/payments/hashpay/notify",
+  PERPAY: "/api/payments/perpay/notify",
 };
 
 export function getProviderDefinition(provider: string) {

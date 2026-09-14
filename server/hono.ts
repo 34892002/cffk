@@ -20,14 +20,15 @@ function getApp() {
     if (context.req.path.startsWith("/api/")) return context.json({ code: "INTERNAL_ERROR", message: "接口异常，请稍后重试。", data: null }, 500);
     return context.text("Internal Server Error", 500);
   });
-  for (const [provider, path] of [["ALIPAY", "/api/payments/alipay/notify"], ["EPAY", "/api/payments/epay/notify"], ["BEPUSDT", "/api/payments/bepusdt/notify"], ["STRIPE", "/api/payments/stripe/notify"], ["HASHPAY", "/api/payments/hashpay/notify"]] as const) {
+  for (const [provider, path] of [["ALIPAY", "/api/payments/alipay/notify"], ["EPAY", "/api/payments/epay/notify"], ["BEPUSDT", "/api/payments/bepusdt/notify"], ["STRIPE", "/api/payments/stripe/notify"], ["HASHPAY", "/api/payments/hashpay/notify"], ["PERPAY", "/api/payments/perpay/notify"]] as const) {
     const handlePaymentCallback = async (context: Context<{ Bindings: Record<string, unknown> & { DB: D1Database } }>) => {
       const contentLength = Number(context.req.header("content-length"));
       if (Number.isFinite(contentLength) && contentLength > MAX_PAYMENT_CALLBACK_BYTES) {
         await new PaymentLogService(context.env.DB).writeBestEffort({ provider, eventType: "NOTIFY", verifyStatus: "FAILED", message: "PAYMENT_CALLBACK_TOO_LARGE" });
         return context.text("failure", 400);
       }
-      const rawBody = await context.req.text();
+      const rawBodyBytes = provider === "PERPAY" ? new Uint8Array(await context.req.raw.arrayBuffer()) : undefined;
+      const rawBody = rawBodyBytes ? new TextDecoder().decode(rawBodyBytes) : await context.req.text();
       let payload: Record<string, string>;
       try {
         payload = normalizePaymentCallbackPayload(context.req.method, context.req.url, rawBody, provider);
@@ -35,7 +36,7 @@ function getApp() {
         await new PaymentLogService(context.env.DB).writeBestEffort({ provider, eventType: "NOTIFY", verifyStatus: "FAILED", message: "PAYMENT_CALLBACK_PAYLOAD_INVALID" });
         throw cause;
       }
-      const result = await new PaymentCallbackService(context.env.DB, context.env).handle(provider as PaymentProviderKind, { payload, rawBody, headers: context.req.raw.headers });
+      const result = await new PaymentCallbackService(context.env.DB, context.env).handle(provider as PaymentProviderKind, { payload, rawBody, rawBodyBytes, headers: context.req.raw.headers });
       return context.body(result.body, result.status as 200 | 400, { "content-type": result.contentType });
     };
     if (provider === "ALIPAY" || provider === "EPAY") app.on(["GET", "POST"], path, handlePaymentCallback);
