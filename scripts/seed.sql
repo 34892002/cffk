@@ -41,7 +41,8 @@ INSERT INTO `paymentProvider` (
   ('EPAY', '易支付', false, 20, '{"schemaVersion":1,"baseUrl":"","pid":"","key":"","epayChannels":["alipay","wxpay"],"notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
   ('BEPUSDT', 'BEpusdt', false, 30, '{"schemaVersion":1,"baseUrl":"","appSecret":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
   ('STRIPE', 'Stripe', false, 40, '{"schemaVersion":1,"secretKey":"","webhookSecret":"","currency":"cny","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
-  ('HASHPAY', 'HashPay', false, 50, '{"schemaVersion":1,"baseUrl":"","merchantId":"","privateKey":"","currency":"CNY","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000)
+  ('HASHPAY', 'HashPay', false, 50, '{"schemaVersion":1,"baseUrl":"","merchantId":"","privateKey":"","currency":"CNY","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000),
+  ('PERPAY', 'PerPay', false, 60, '{"schemaVersion":1,"baseUrl":"","apiSecret":"","webhookSecret":"","notifyUrl":"","returnUrl":""}', unixepoch('now') * 1000, unixepoch('now') * 1000)
 ON CONFLICT(`provider`) DO NOTHING;
 
 INSERT INTO `pushChannelConfig` (

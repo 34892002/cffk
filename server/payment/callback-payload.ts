@@ -42,7 +42,7 @@ export function normalizePaymentCallbackPayload(method: string, url: string, raw
     const payload: Record<string, string> = {};
     for (const [key, item] of entries) {
       if (typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean" && item !== null) {
-        if (provider === "STRIPE") continue;
+        if (provider === "STRIPE" || provider === "PERPAY") continue;
         failPayload();
       }
       const normalized = item === null ? "" : String(item);

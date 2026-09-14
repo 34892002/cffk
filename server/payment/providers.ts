@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { parseBepusdtConfig, parseEpayConfig, parseHashpayConfig, parseStripeConfig } from "@/lib/config-schemas";
+import { parseBepusdtConfig, parseEpayConfig, parseHashpayConfig, parseStripeConfig, parsePerpayConfig } from "@/lib/config-schemas";
+import { createPerpayAdapter } from "./perpay";
 import { createAlipayPayment, queryAlipayPayment, verifyAlipayCallback } from "./alipay";
 import type { PaymentAdapter, PaymentNotifyResult } from "./types";
 import type { PaymentChannel, PaymentProviderKind } from "./registry";
@@ -92,6 +93,7 @@ export function createProviderAdapter(provider: PaymentProviderKind, config: Rec
       },
     };
   }
+  if (provider === "PERPAY") return createPerpayAdapter(parsePerpayConfig(json));
   const parsed = parseHashpayConfig(json);
   return {
     create: async (input) => { const privateKey = await importPem(parsed.privateKey, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, "sign"); const path = "/api/merchant/new"; const timestamp = Math.floor(Date.now() / 1000).toString(); const body = JSON.stringify({ merchantNo: input.orderNo, amount: input.amount / 100, currency: parsed.currency, description: input.subject, return_url: input.returnUrl }); const signature = base64(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", privateKey, new TextEncoder().encode(`POST\n${path}\n${timestamp}\n${body}`))); const response = await fetch(`${parsed.baseUrl.replace(/\/+$/, "")}${path}`, { method: "POST", headers: { "content-type": "application/json", "X-Merchant-Id": parsed.merchantId, "X-Timestamp": timestamp, "X-Signature": signature }, body }); const text = await response.text(); let data: { checkoutUrl?: string; order?: { id?: string } }; try { data = JSON.parse(text); } catch { throw new Error("HASHPAY_INVALID_RESPONSE"); } if (!response.ok || !data.checkoutUrl || !data.order?.id) throw new Error("HASHPAY_CREATE_FAILED"); return { mode: "redirect", url: data.checkoutUrl, paymentOrderNo: data.order.id }; },

@@ -54,6 +54,6 @@ export type PaymentNotifyResult = {
 
 export type PaymentAdapter = {
   create(input: { orderNo: string; amount: number; subject: string; notifyUrl: string; returnUrl: string; channel?: PaymentChannel }): Promise<{ mode: "redirect" | "qr"; url?: string; qrCode?: string; paymentOrderNo?: string }>;
-  verify(input: { payload: Record<string, string>; rawBody?: string; headers?: Headers }): Promise<PaymentNotifyResult>;
+  verify(input: { payload: Record<string, string>; rawBody?: string; rawBodyBytes?: Uint8Array; headers?: Headers }): Promise<PaymentNotifyResult>;
   query?(input: { orderNo: string; paymentOrderNo?: string; amount: number }): Promise<PaymentQueryResult>;
 };
