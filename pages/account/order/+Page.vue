@@ -76,6 +76,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
+import { cacheQrPayment } from "@/lib/payment-utils";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { onListAccountOrders, onQueryOrder, onResumeOrderPayment, type AccountOrderSummary, type PublicOrder } from "@/server/order/public.telefunc";
 
@@ -143,7 +144,7 @@ async function resumePayment() {
   try {
     const payment = await runTelefunc(() => onResumeOrderPayment({ orderNo: activeOrderNo.value }), { notifyError: false });
     if (payment.payment?.mode === "redirect" && payment.payment.url) { window.location.assign(payment.payment.url); return; }
-    if (payment.payment?.mode === "qr") { window.location.assign(`/checkout?orderNo=${encodeURIComponent(payment.orderNo)}`); return; }
+    if (payment.payment?.mode === "qr") { cacheQrPayment(payment); window.location.assign(`/checkout?orderNo=${encodeURIComponent(payment.orderNo)}`); return; }
     toast.error(messages.value.accountOrders.payment.generateFailed);
   } catch (cause) { toast.error(userErrorMessage(cause, messages.value.accountOrders.payment.resumeFailed)); } finally { resumingPayment.value = false; }
 }

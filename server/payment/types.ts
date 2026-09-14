@@ -30,11 +30,19 @@ export type PaymentCreateInput = {
   discountCode?: string;
 };
 
+export type PaymentResult = {
+  mode: "redirect" | "qr";
+  url?: string;
+  qrCode?: string;
+  paymentOrderNo?: string;
+  payableAmount?: number;
+};
+
 export type PaymentCreateResult = {
   orderNo: string;
   amount: number;
   paymentStatus: "UNPAID" | "PAID";
-  payment: { mode: "redirect" | "qr"; url?: string; qrCode?: string; paymentOrderNo?: string } | null;
+  payment: PaymentResult | null;
 };
 
 export type PaymentQueryResult = PaymentNotifyResult & {
@@ -53,7 +61,7 @@ export type PaymentNotifyResult = {
 };
 
 export type PaymentAdapter = {
-  create(input: { orderNo: string; amount: number; subject: string; notifyUrl: string; returnUrl: string; channel?: PaymentChannel }): Promise<{ mode: "redirect" | "qr"; url?: string; qrCode?: string; paymentOrderNo?: string }>;
+  create(input: { orderNo: string; amount: number; subject: string; notifyUrl: string; returnUrl: string; channel?: PaymentChannel }): Promise<PaymentResult>;
   verify(input: { payload: Record<string, string>; rawBody?: string; rawBodyBytes?: Uint8Array; headers?: Headers }): Promise<PaymentNotifyResult>;
   query?(input: { orderNo: string; paymentOrderNo?: string; amount: number }): Promise<PaymentQueryResult>;
 };

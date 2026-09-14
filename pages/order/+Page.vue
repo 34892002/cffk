@@ -183,6 +183,7 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 
 import { clearAllLocalOrders, deleteLocalOrdersForEmail, getLocalOrderGroups, replaceLocalOrdersForEmail, type LocalOrder } from "@/lib/local-orders";
+import { cacheQrPayment } from "@/lib/payment-utils";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onQueryOrder, onResumeOrderPayment, type PublicOrder } from "@/server/order/public.telefunc";
 import { onSendGuestOrderRecoveryCode, onVerifyGuestOrderRecoveryCode } from "@/server/order/recovery.telefunc";
@@ -373,6 +374,7 @@ async function resumePayment() {
       return;
     }
     if (payment.payment?.mode === "qr") {
+      cacheQrPayment(payment);
       window.location.assign(`/checkout?orderNo=${encodeURIComponent(payment.orderNo)}`);
       return;
     }
