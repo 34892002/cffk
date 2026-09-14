@@ -478,20 +478,72 @@ test("Stripe active query rejects a session owned by another order", async () =>
 test("PerPay adapter signs create requests and validates checkout response", async () => {
   const originalFetch = globalThis.fetch;
   let request: Request | undefined;
+  let createRequest: Request | undefined;
+  const token = "pct1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   globalThis.fetch = async (input, init) => {
     request = new Request(input, init);
-    return new Response(JSON.stringify({ data: { order_id: "550e8400-e29b-41d4-a716-446655440000", merchant_order_no: "ORD-PP-1", currency: "CNY", checkout: { checkout_url: "https://perpay.example/checkout/pct1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } } }), { status: 200, headers: { "content-type": "application/json" } });
+    if (request.url.endsWith("/api/v1/orders")) { createRequest = request; return new Response(JSON.stringify({ data: { order_id: "550e8400-e29b-41d4-a716-446655440000", merchant_order_no: "ORD-PP-1", currency: "CNY", checkout: { token, checkout_url: `https://perpay.example/checkout/${token}` } } }), { status: 200, headers: { "content-type": "application/json" } }); }
+    return new Response(JSON.stringify({ data: { merchant_order_no: "ORD-PP-1", requested_amount_cents: 1234, currency: "CNY", payment_instructions: { payable_amount_cents: 1235, currency: "CNY", collection_code_payload: "https://qr.alipay.com/fixed-code" }, checkout: { status: "OPEN" }, payment: { status: "UNPAID" } } }), { status: 200, headers: { "content-type": "application/json" } });
   };
   try {
     const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
     const payment = await adapter.create({ orderNo: "ORD-PP-1", amount: 1234, subject: "Order", notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
-    assert.equal(payment.mode, "redirect");
+    assert.equal(payment.mode, "qr");
     assert.equal(payment.paymentOrderNo, "550e8400-e29b-41d4-a716-446655440000");
-    assert.equal(request!.method, "POST");
-    assert.equal(request!.headers.get("X-PerPay-Client-Id"), "default");
-    assert.match(request!.headers.get("X-PerPay-Signature") ?? "", /^[0-9a-f]{64}$/);
-    assert.equal(JSON.parse(await request!.text()).amount_cents, 1234);
+    assert.equal(payment.payableAmount, 1235);
+    assert.equal(createRequest!.method, "POST");
+    assert.equal(createRequest!.headers.get("X-PerPay-Client-Id"), "default");
+    assert.match(createRequest!.headers.get("X-PerPay-Signature") ?? "", /^[0-9a-f]{64}$/);
+    assert.equal(JSON.parse(await createRequest!.text()).amount_cents, 1234);
+    assert.equal(request!.method, "GET");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("PerPay adapter returns the order-bound collection QR and payable amount", async () => {
+  const originalFetch = globalThis.fetch;
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const token = "pct1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const requests: Request[] = [];
+  globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    requests.push(request);
+    if (request.url.endsWith("/api/v1/orders")) {
+      return new Response(JSON.stringify({ data: { order_id: "550e8400-e29b-41d4-a716-446655440010", merchant_order_no: "ORD-PP-QR", currency: "CNY", checkout: { token, checkout_url: `https://perpay.example/checkout/${token}` } } }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ data: { merchant_order_no: "ORD-PP-QR", requested_amount_cents: 1234, currency: "CNY", payment_instructions: { payable_amount_cents: 1235, currency: "CNY", collection_code_payload: "https://qr.alipay.com/fixed-code" }, checkout: { status: "OPEN" }, payment: { status: "UNPAID" } } }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+    const payment = await adapter.create({ orderNo: "ORD-PP-QR", amount: 1234, subject: "Order", notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+    assert.deepEqual(payment, { mode: "qr", qrCode: "https://qr.alipay.com/fixed-code", paymentOrderNo: "550e8400-e29b-41d4-a716-446655440010", payableAmount: 1235 });
+    assert.equal(requests.length, 2);
+    assert.equal(new URL(requests[1]!.url).pathname, `/api/public/v1/checkouts/${token}`);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("PerPay adapter rejects checkout state that cannot render a trusted QR", async () => {
+  const originalFetch = globalThis.fetch;
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const token = "pct1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const states = [
+    { payment_instructions: { payable_amount_cents: 1235, currency: "CNY", collection_code_payload: "https://qr.alipay.com/fixed-code with-space" } },
+    { payment_instructions: { payable_amount_cents: 1234, currency: "CNY", collection_code_payload: "https://qr.alipay.com/fixed-code" } },
+    { payment_instructions: null },
+  ];
+  try {
+    for (const state of states) {
+      let requestCount = 0;
+      globalThis.fetch = async (input, init) => {
+        requestCount += 1;
+        const request = new Request(input, init);
+        if (request.url.endsWith("/api/v1/orders")) return new Response(JSON.stringify({ data: { order_id: "550e8400-e29b-41d4-a716-446655440011", merchant_order_no: "ORD-PP-INVALID", currency: "CNY", checkout: { token, checkout_url: `https://perpay.example/checkout/${token}` } } }), { status: 200, headers: { "content-type": "application/json" } });
+        return new Response(JSON.stringify({ data: { merchant_order_no: "ORD-PP-INVALID", requested_amount_cents: 1234, currency: "CNY", ...state, checkout: { status: "OPEN" }, payment: { status: "UNPAID" } } }), { status: 200, headers: { "content-type": "application/json" } });
+      };
+      const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "", returnUrl: "" });
+      await assert.rejects(() => adapter.create({ orderNo: "ORD-PP-INVALID", amount: 1234, subject: "Order", notifyUrl: "", returnUrl: "" }), /PERPAY_CREATE_CHECKOUT_STATE_INVALID/);
+      assert.equal(requestCount, 2);
+    }
   } finally { globalThis.fetch = originalFetch; }
 });
 
