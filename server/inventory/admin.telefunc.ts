@@ -162,7 +162,11 @@ async function internalOnImportCards(input: { productId: number; productSkuId: n
     `INSERT INTO card (productId, productSkuId, content, status, batchNo, createdAt, updatedAt)
      VALUES (?, ?, ?, 'UNUSED', ?, ?, ?)`,
   );
-  await database.batch(contents.map((content) => statement.bind(productId, productSkuId, content, batchNo, now, now)));
+  const importBatchSize = 15;
+  for (let offset = 0; offset < contents.length; offset += importBatchSize) {
+    const batch = contents.slice(offset, offset + importBatchSize);
+    await database.batch(batch.map((content) => statement.bind(productId, productSkuId, content, batchNo, now, now)));
+  }
   return { imported: contents.length };
 }
 
