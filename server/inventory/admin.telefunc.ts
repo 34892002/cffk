@@ -149,24 +149,20 @@ async function internalOnCreateCard(input: { productId: number; productSkuId: nu
 }
 
 async function internalOnImportCards(input: { productId: number; productSkuId: number; content: string; batchNo?: string }) {
-  const { db } = getAdminDb();
+  const { database, db } = requireAdmin();
   const productId = positiveInteger(input.productId, "PRODUCT_ID");
   const productSkuId = await resolveCardSku(db, productId, input.productSkuId);
   const contents = [...new Set(input.content.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))];
   if (!contents.length) appError("CARD_CONTENT_REQUIRED");
   if (contents.length > 1000) appError("CARD_IMPORT_LIMIT_EXCEEDED");
 
-  const now = new Date();
+  const now = Date.now();
   const batchNo = input.batchNo?.trim() || null;
-  await db.insert(card).values(contents.map((content) => ({
-    productId,
-    productSkuId,
-    content,
-    status: "UNUSED" as const,
-    batchNo,
-    createdAt: now,
-    updatedAt: now,
-  })));
+  const statement = database.prepare(
+    `INSERT INTO card (productId, productSkuId, content, status, batchNo, createdAt, updatedAt)
+     VALUES (?, ?, ?, 'UNUSED', ?, ?, ?)`,
+  );
+  await database.batch(contents.map((content) => statement.bind(productId, productSkuId, content, batchNo, now, now)));
   return { imported: contents.length };
 }
 
