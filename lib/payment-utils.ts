@@ -10,6 +10,18 @@ export function formatCentsAsYuan(value: number): string {
   return (value / 100).toFixed(2);
 }
 
+export function cacheQrPayment(payment: {
+  orderNo: string;
+  payment?: { mode?: string; qrCode?: string; payableAmount?: number } | null;
+}) {
+  if (typeof window === "undefined" || payment.payment?.mode !== "qr" || !payment.payment.qrCode) return;
+  try {
+    sessionStorage.setItem(`payment-qr:${payment.orderNo}`, payment.payment.qrCode);
+    if (Number.isSafeInteger(payment.payment.payableAmount) && (payment.payment.payableAmount ?? 0) > 0) sessionStorage.setItem(`payment-payable:${payment.orderNo}`, String(payment.payment.payableAmount));
+    else sessionStorage.removeItem(`payment-payable:${payment.orderNo}`);
+  } catch { /* Session storage is optional. */ }
+}
+
 export function formatMinorAmount(value: string | null | undefined, decimals: number): string {
   if (value === null || value === undefined || !/^(0|[1-9]\d*)$/.test(value) || !Number.isInteger(decimals) || decimals < 0 || decimals > 8) return "-";
   const digits = value.padStart(decimals + 1, "0");

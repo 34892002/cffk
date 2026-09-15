@@ -18,13 +18,18 @@
           <template v-else-if="order">
             <dl class="grid grid-cols-2 gap-x-6 gap-y-5 text-sm sm:grid-cols-3">
               <div><dt class="text-xs text-muted-foreground">商品</dt><dd class="mt-1 font-medium">{{ order.productName }}</dd></div>
-              <div><dt class="text-xs text-muted-foreground">金额</dt><dd class="mt-1 font-medium">¥{{ order.amount }}</dd></div>
+              <div><dt class="text-xs text-muted-foreground">订单金额</dt><dd class="mt-1 font-medium">¥{{ order.amount }}</dd></div>
+              <div v-if="payableAmount !== null"><dt class="text-xs text-muted-foreground">扫码支付</dt><dd class="mt-1 font-medium">¥{{ formatCentsAsYuan(payableAmount) }}</dd></div>
               <div><dt class="text-xs text-muted-foreground">支付状态</dt><dd class="mt-1 font-medium">{{ paymentStatusLabel(order.paymentStatus) }}</dd></div>
             </dl>
             <div v-if="order.paymentStatus === 'UNPAID'" class="grid justify-items-center gap-4 border-t pt-6 text-center">
-              <template v-if="order.paymentChannel === 'face_to_face'">
+              <template v-if="isQrPaymentOrder(order)">
+                <div v-if="isPerpayQrPaymentOrder(order) && payableAmount !== null" class="w-full rounded-xl border-2 border-primary/35 px-5 py-4 text-center shadow-sm" aria-live="polite">
+                  <p class="mt-1 text-4xl font-bold tracking-tight text-primary sm:text-5xl"><span class="text-2xl sm:text-3xl">¥</span>{{ formatCentsAsYuan(payableAmount) }}</p>
+                  <p class="mt-3 text-sm font-medium leading-6 text-foreground">请按此金额付款，金额必须完全一致</p>
+                </div>
                 <p class="font-medium">请使用支付宝扫码付款</p>
-                <div class="w-full max-w-72"><PaymentQrCode v-if="qrCode" :value="qrCode" /><p v-else class="py-16 text-sm text-muted-foreground">正在生成支付二维码...</p></div>
+                <div class="w-full max-w-72"><PaymentQrCode v-if="qrCode" :value="qrCode" /><p v-else class="py-16 text-sm text-muted-foreground">正在准备收款二维码...</p></div>
                 <p class="text-xs text-muted-foreground">支付完成后，页面会自动更新订单状态。</p>
               </template>
               <p v-else class="text-sm text-muted-foreground">该订单不使用站内扫码支付，请返回订单页面继续支付。</p>
@@ -34,7 +39,7 @@
           <p v-else class="py-16 text-center text-sm text-muted-foreground">正在加载订单...</p>
         </CardContent>
         <CardFooter v-if="order" class="justify-end gap-3 border-t pt-5">
-          <Button v-if="order.paymentStatus === 'UNPAID' && order.paymentChannel === 'face_to_face'" variant="outline" :disabled="resuming" @click="resumePayment">{{ resuming ? "正在生成..." : "重新生成二维码" }}</Button>
+          <Button v-if="order.paymentStatus === 'UNPAID' && isQrPaymentOrder(order)" variant="outline" :disabled="resuming" @click="resumePayment">{{ resuming ? "正在生成..." : "重新生成二维码" }}</Button>
           <Button as-child><a :href="orderHref">查看订单</a></Button>
         </CardFooter>
       </Card>
@@ -51,6 +56,7 @@ import StorefrontBrand from "@/components/storefront/StorefrontBrand.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { getLocalOrderGroups } from "@/lib/local-orders";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onQueryOrder, onResumeOrderPayment, type PublicOrder } from "@/server/order/public.telefunc";
@@ -62,6 +68,7 @@ const orderNo = (typeof rawOrderNo === "string" ? rawOrderNo : "").trim();
 const guestEmail = ref<string | undefined>();
 const order = ref<PublicOrder | null>(null);
 const qrCode = ref("");
+const payableAmount = ref<number | null>(null);
 const error = ref<string | null>(null);
 const resuming = ref(false);
 const orderHref = computed(() => `${guestEmail.value ? "/order" : "/account/order"}${orderNo ? `?orderNo=${encodeURIComponent(orderNo)}` : ""}`);
@@ -81,8 +88,9 @@ async function loadOrder() {
     const record = await runTelefunc(() => onQueryOrder(queryInput()), { notifyError: false });
     if (!record) { error.value = guestEmail.value ? "订单不存在，或下单邮箱不匹配。" : "未找到当前账户下的该订单。"; return; }
     order.value = record;
-    if (record.paymentStatus === "UNPAID" && record.paymentChannel === "face_to_face") {
+    if (record.paymentStatus === "UNPAID" && isQrPaymentOrder(record)) {
       try { qrCode.value = sessionStorage.getItem(`payment-qr:${record.orderNo}`) ?? ""; } catch { qrCode.value = ""; }
+      try { const stored = Number(sessionStorage.getItem(`payment-payable:${record.orderNo}`)); payableAmount.value = Number.isSafeInteger(stored) && stored > 0 ? stored : null; } catch { payableAmount.value = null; }
       if (!qrCode.value) await resumePayment();
       startPolling();
     }
@@ -96,7 +104,7 @@ async function refreshOrder() {
     const record = await runTelefunc(() => onQueryOrder(queryInput()), { notifyError: false });
     if (!record) return;
     order.value = record;
-    if (record.paymentStatus !== "UNPAID") { stopPolling(); qrCode.value = ""; try { sessionStorage.removeItem(`payment-qr:${record.orderNo}`); } catch { /* Session storage is optional. */ } }
+    if (record.paymentStatus !== "UNPAID") { stopPolling(); qrCode.value = ""; payableAmount.value = null; try { sessionStorage.removeItem(`payment-qr:${record.orderNo}`); sessionStorage.removeItem(`payment-payable:${record.orderNo}`); } catch { /* Session storage is optional. */ } }
   } catch { /* The next poll retries. */ }
 }
 async function resumePayment() {
@@ -104,9 +112,11 @@ async function resumePayment() {
   resuming.value = true;
   try {
     const payment = await runTelefunc(() => onResumeOrderPayment(queryInput()), { notifyError: false });
-    if (payment.payment?.mode === "qr" && payment.payment.qrCode) { qrCode.value = payment.payment.qrCode; try { sessionStorage.setItem(`payment-qr:${payment.orderNo}`, payment.payment.qrCode); } catch { /* Session storage is optional. */ } return; }
+    if (payment.payment?.mode === "qr" && payment.payment.qrCode) { qrCode.value = payment.payment.qrCode; payableAmount.value = payment.payment.payableAmount ?? null; try { sessionStorage.setItem(`payment-qr:${payment.orderNo}`, payment.payment.qrCode); if (payment.payment.payableAmount) sessionStorage.setItem(`payment-payable:${payment.orderNo}`, String(payment.payment.payableAmount)); } catch { /* Session storage is optional. */ } return; }
     error.value = "暂时无法生成支付二维码，请稍后再试。";
   } catch (cause) { error.value = userErrorMessage(cause, "暂时无法生成支付二维码，请稍后再试。"); } finally { resuming.value = false; }
 }
 function paymentStatusLabel(status: PublicOrder["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[status]; }
+function isQrPaymentOrder(record: PublicOrder) { return record.paymentProvider === "PERPAY" || (record.paymentProvider === "ALIPAY" && record.paymentChannel === "face_to_face"); }
+function isPerpayQrPaymentOrder(record: PublicOrder) { return record.paymentProvider === "PERPAY"; }
 </script>

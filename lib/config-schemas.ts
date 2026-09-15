@@ -50,7 +50,16 @@ export type HashpayConfig = {
   returnUrl: string;
 };
 
-export type PaymentProviderConfig = AlipayConfig | EpayConfig | BepusdtConfig | StripeConfig | HashpayConfig;
+export type PerpayConfig = {
+  schemaVersion: 1;
+  baseUrl: string;
+  apiSecret: string;
+  webhookSecret: string;
+  notifyUrl: string;
+  returnUrl: string;
+};
+
+export type PaymentProviderConfig = AlipayConfig | EpayConfig | BepusdtConfig | StripeConfig | HashpayConfig | PerpayConfig;
 
 export type EmailProviderConfig =
   | { kind: "smtp"; host: string; port: number; secure: boolean; username: string; password: string; authType?: "plain" | "login" | "cram-md5"; from: string; fromName?: string; replyTo?: string }
@@ -213,6 +222,34 @@ export function parseHashpayConfig(json: string): HashpayConfig {
   };
 }
 
+function requirePerpaySecret(value: unknown, field: string) {
+  const secret = requireString(value, field);
+  if (!/^[A-Za-z0-9_-]{43}$/.test(secret)) throw new Error(`Invalid configuration: ${field} must be a 32-byte base64url secret`);
+  try {
+    const bytes = Uint8Array.from(atob(secret.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - secret.length % 4) % 4)), (character) => character.charCodeAt(0));
+    if (bytes.length !== 32) throw new Error();
+  } catch { throw new Error(`Invalid configuration: ${field} must be a 32-byte base64url secret`); }
+  return secret;
+}
+
+export function parsePerpayConfig(json: string): PerpayConfig {
+  const value = parseJsonObject(json, "PerPay");
+  requireSchemaVersion(value, "schemaVersion");
+  const baseUrl = requireUrl(value.baseUrl, "baseUrl");
+  const parsed = new URL(baseUrl);
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") {
+    throw new Error("Invalid configuration: baseUrl must be an HTTPS origin");
+  }
+  return {
+    schemaVersion: 1,
+    baseUrl: parsed.origin,
+    apiSecret: requirePerpaySecret(value.apiSecret, "apiSecret"),
+    webhookSecret: requirePerpaySecret(value.webhookSecret, "webhookSecret"),
+    notifyUrl: requirePaymentUrl(value.notifyUrl, "notifyUrl", true),
+    returnUrl: requirePaymentUrl(value.returnUrl, "returnUrl", true),
+  };
+}
+
 export function parseEmailProviderConfig(json: string): EmailProviderConfig {
   const value: unknown = JSON.parse(json);
   if (!isRecord(value)) throw new Error("Invalid email provider configuration");
@@ -304,4 +341,3 @@ export function parseEmailTemplateConfig(json: string): EmailTemplateConfig {
     ...(variables ? { variables } : {}),
   };
 }
-

@@ -474,3 +474,172 @@ test("Stripe active query rejects a session owned by another order", async () =>
     globalThis.fetch = originalFetch;
   }
 });
+
+test("PerPay adapter signs create requests and validates checkout response", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: Request | undefined;
+  let createRequest: Request | undefined;
+  const token = "pct1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    if (request.url.endsWith("/api/v1/orders")) { createRequest = request; return new Response(JSON.stringify({ data: { order_id: "550e8400-e29b-41d4-a716-446655440000", merchant_order_no: "ORD-PP-1", currency: "CNY", checkout: { token, checkout_url: `https://perpay.example/checkout/${token}` } } }), { status: 200, headers: { "content-type": "application/json" } }); }
+    return new Response(JSON.stringify({ data: { merchant_order_no: "ORD-PP-1", requested_amount_cents: 1234, currency: "CNY", payment_instructions: { payable_amount_cents: 1235, currency: "CNY", collection_code_payload: "https://qr.alipay.com/fixed-code" }, checkout: { status: "OPEN" }, payment: { status: "UNPAID" } } }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+    const payment = await adapter.create({ orderNo: "ORD-PP-1", amount: 1234, subject: "Order", notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+    assert.equal(payment.mode, "qr");
+    assert.equal(payment.paymentOrderNo, "550e8400-e29b-41d4-a716-446655440000");
+    assert.equal(payment.payableAmount, 1235);
+    assert.equal(createRequest!.method, "POST");
+    assert.equal(createRequest!.headers.get("X-PerPay-Client-Id"), "default");
+    assert.match(createRequest!.headers.get("X-PerPay-Signature") ?? "", /^[0-9a-f]{64}$/);
+    assert.equal(JSON.parse(await createRequest!.text()).amount_cents, 1234);
+    assert.equal(request!.method, "GET");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("PerPay adapter returns the order-bound collection QR and payable amount", async () => {
+  const originalFetch = globalThis.fetch;
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const token = "pct1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const requests: Request[] = [];
+  globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    requests.push(request);
+    if (request.url.endsWith("/api/v1/orders")) {
+      return new Response(JSON.stringify({ data: { order_id: "550e8400-e29b-41d4-a716-446655440010", merchant_order_no: "ORD-PP-QR", currency: "CNY", checkout: { token, checkout_url: `https://perpay.example/checkout/${token}` } } }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ data: { merchant_order_no: "ORD-PP-QR", requested_amount_cents: 1234, currency: "CNY", payment_instructions: { payable_amount_cents: 1235, currency: "CNY", collection_code_payload: "https://qr.alipay.com/fixed-code" }, checkout: { status: "OPEN" }, payment: { status: "UNPAID" } } }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+    const payment = await adapter.create({ orderNo: "ORD-PP-QR", amount: 1234, subject: "Order", notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+    assert.deepEqual(payment, { mode: "qr", qrCode: "https://qr.alipay.com/fixed-code", paymentOrderNo: "550e8400-e29b-41d4-a716-446655440010", payableAmount: 1235 });
+    assert.equal(requests.length, 2);
+    assert.equal(new URL(requests[1]!.url).pathname, `/api/public/v1/checkouts/${token}`);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("PerPay adapter rejects checkout state that cannot render a trusted QR", async () => {
+  const originalFetch = globalThis.fetch;
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const token = "pct1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const states = [
+    { payment_instructions: { payable_amount_cents: 1235, currency: "CNY", collection_code_payload: "https://qr.alipay.com/fixed-code with-space" } },
+    { payment_instructions: { payable_amount_cents: 1234, currency: "CNY", collection_code_payload: "https://qr.alipay.com/fixed-code" } },
+    { payment_instructions: null },
+  ];
+  try {
+    for (const state of states) {
+      let requestCount = 0;
+      globalThis.fetch = async (input, init) => {
+        requestCount += 1;
+        const request = new Request(input, init);
+        if (request.url.endsWith("/api/v1/orders")) return new Response(JSON.stringify({ data: { order_id: "550e8400-e29b-41d4-a716-446655440011", merchant_order_no: "ORD-PP-INVALID", currency: "CNY", checkout: { token, checkout_url: `https://perpay.example/checkout/${token}` } } }), { status: 200, headers: { "content-type": "application/json" } });
+        return new Response(JSON.stringify({ data: { merchant_order_no: "ORD-PP-INVALID", requested_amount_cents: 1234, currency: "CNY", ...state, checkout: { status: "OPEN" }, payment: { status: "UNPAID" } } }), { status: 200, headers: { "content-type": "application/json" } });
+      };
+      const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "", returnUrl: "" });
+      await assert.rejects(() => adapter.create({ orderNo: "ORD-PP-INVALID", amount: 1234, subject: "Order", notifyUrl: "", returnUrl: "" }), /PERPAY_CREATE_CHECKOUT_STATE_INVALID/);
+      assert.equal(requestCount, 2);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("PerPay webhook verifies raw bytes and maps confirmed events", async () => {
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const rawBody = JSON.stringify({ schema: "perpay:outbox-event:v2", event_id: "550e8400-e29b-41d4-a716-446655440001", event_type: "PAYMENT_CONFIRMED", order_id: "550e8400-e29b-41d4-a716-446655440002", merchant_order_no: "ORD-PP-2", currency: "CNY", payment_status: "CONFIRMED", requested_amount_cents: 500, payable_amount_cents: 501, received_amount_cents: 501 });
+  const digest = createHash("sha256").update(rawBody).digest("hex");
+  const keyId = "550e8400-e29b-41d4-a716-446655440003";
+  const deliveryId = "550e8400-e29b-41d4-a716-446655440004";
+  const eventId = "550e8400-e29b-41d4-a716-446655440001";
+  const timestamp = String(Date.now());
+  const attempt = "1";
+  const signature = `v1=${createHmac("sha256", Buffer.from(secret, "base64url")).update(["perpay:webhook:v1", keyId, timestamp, deliveryId, eventId, attempt, digest].join("\n")).digest("hex")}`;
+  const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+  const result = await adapter.verify({ payload: {}, rawBody, rawBodyBytes: new TextEncoder().encode(rawBody), headers: new Headers({ "X-PerPay-Webhook-Version": "1", "X-PerPay-Webhook-Key-Id": keyId, "X-PerPay-Webhook-Timestamp": timestamp, "X-PerPay-Webhook-Delivery-Id": deliveryId, "X-PerPay-Webhook-Event-Id": eventId, "X-PerPay-Webhook-Attempt": attempt, "X-PerPay-Webhook-Signature": signature }) });
+  assert.deepEqual(result, { provider: "PERPAY", verified: true, orderNo: "ORD-PP-2", paymentOrderNo: "550e8400-e29b-41d4-a716-446655440002", amount: 500, currency: "CNY", status: "PAID", message: "PERPAY_WEBHOOK" });
+});
+
+test("PerPay refund webhook is acknowledged without payment amount matching", async () => {
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const rawBody = JSON.stringify({ schema: "perpay:outbox-event:v2", event_id: "550e8400-e29b-41d4-a716-446655440011", event_type: "REFUND_UPDATED", order_id: "550e8400-e29b-41d4-a716-446655440012", merchant_order_no: "ORD-PP-REFUND", currency: "CNY", refund_status: "PARTIAL" });
+  const digest = createHash("sha256").update(rawBody).digest("hex");
+  const keyId = "550e8400-e29b-41d4-a716-446655440013";
+  const deliveryId = "550e8400-e29b-41d4-a716-446655440014";
+  const eventId = "550e8400-e29b-41d4-a716-446655440011";
+  const timestamp = String(Date.now());
+  const attempt = "1";
+  const signature = `v1=${createHmac("sha256", Buffer.from(secret, "base64url")).update(["perpay:webhook:v1", keyId, timestamp, deliveryId, eventId, attempt, digest].join("\n")).digest("hex")}`;
+  const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+  const result = await adapter.verify({ payload: {}, rawBody, rawBodyBytes: new TextEncoder().encode(rawBody), headers: new Headers({ "X-PerPay-Webhook-Version": "1", "X-PerPay-Webhook-Key-Id": keyId, "X-PerPay-Webhook-Timestamp": timestamp, "X-PerPay-Webhook-Delivery-Id": deliveryId, "X-PerPay-Webhook-Event-Id": eventId, "X-PerPay-Webhook-Attempt": attempt, "X-PerPay-Webhook-Signature": signature }) });
+  assert.deepEqual(result, { provider: "PERPAY", verified: true, orderNo: "ORD-PP-REFUND", paymentOrderNo: "550e8400-e29b-41d4-a716-446655440012", currency: "CNY", status: "PENDING", message: "PERPAY_REFUND_UPDATED" });
+});
+
+test("PerPay query does not mark a confirmed order paid without received amount", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ data: { order_id: "550e8400-e29b-41d4-a716-446655440020", merchant_order_no: "ORD-PP-Q1", currency: "CNY", requested_amount_cents: 100, payable_amount_cents: 101, received_amount_cents: null, payment: { status: "CONFIRMED" } } }), { status: 200, headers: { "content-type": "application/json" } });
+  try {
+    const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", webhookSecret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", notifyUrl: "", returnUrl: "" });
+    const result = await adapter.query!({ orderNo: "ORD-PP-Q1", amount: 100 });
+    assert.deepEqual(result, { provider: "PERPAY", verified: false, orderNo: "ORD-PP-Q1", paymentOrderNo: "550e8400-e29b-41d4-a716-446655440020", status: "PENDING", message: "PERPAY_QUERY_FAILED" });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("PerPay rejects string amounts in signed callbacks", async () => {
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const rawBody = JSON.stringify({ schema: "perpay:outbox-event:v2", event_id: "550e8400-e29b-41d4-a716-446655440021", event_type: "PAYMENT_CONFIRMED", order_id: "550e8400-e29b-41d4-a716-446655440022", merchant_order_no: "ORD-PP-TYPE", currency: "CNY", payment_status: "CONFIRMED", requested_amount_cents: "100", payable_amount_cents: "101", received_amount_cents: "101" });
+  const keyId = "550e8400-e29b-41d4-a716-446655440023";
+  const deliveryId = "550e8400-e29b-41d4-a716-446655440024";
+  const timestamp = String(Date.now());
+  const attempt = "1";
+  const digest = createHash("sha256").update(rawBody).digest("hex");
+  const signature = `v1=${createHmac("sha256", Buffer.from(secret, "base64url")).update(["perpay:webhook:v1", keyId, timestamp, deliveryId, "550e8400-e29b-41d4-a716-446655440021", attempt, digest].join("\n")).digest("hex")}`;
+  const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "", returnUrl: "" });
+  const result = await adapter.verify({ payload: {}, rawBody, rawBodyBytes: new TextEncoder().encode(rawBody), headers: new Headers({ "X-PerPay-Webhook-Version": "1", "X-PerPay-Webhook-Key-Id": keyId, "X-PerPay-Webhook-Timestamp": timestamp, "X-PerPay-Webhook-Delivery-Id": deliveryId, "X-PerPay-Webhook-Event-Id": "550e8400-e29b-41d4-a716-446655440021", "X-PerPay-Webhook-Attempt": attempt, "X-PerPay-Webhook-Signature": signature }) });
+  assert.equal(result.verified, false);
+  assert.equal(result.message, "PERPAY_WEBHOOK_AMOUNT_INVALID");
+});
+
+test("PerPay rejects tampered, stale, and malformed webhook requests", async () => {
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const event = { schema: "perpay:outbox-event:v2", event_id: "550e8400-e29b-41d4-a716-446655440031", event_type: "PAYMENT_CONFIRMED", order_id: "550e8400-e29b-41d4-a716-446655440032", merchant_order_no: "ORD-PP-SIG", currency: "CNY", payment_status: "CONFIRMED", requested_amount_cents: 100, payable_amount_cents: 101, received_amount_cents: 101 };
+  const rawBody = JSON.stringify(event);
+  const keyId = "550e8400-e29b-41d4-a716-446655440033";
+  const deliveryId = "550e8400-e29b-41d4-a716-446655440034";
+  const eventId = event.event_id;
+  const attempt = "1";
+  const sign = (body: string, ts: string) => `v1=${createHmac("sha256", Buffer.from(secret, "base64url")).update(["perpay:webhook:v1", keyId, ts, deliveryId, eventId, attempt, createHash("sha256").update(body).digest("hex")].join("\n")).digest("hex")}`;
+  const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "", returnUrl: "" });
+  const validHeaders = (timestamp: string, signature: string) => new Headers({ "X-PerPay-Webhook-Version": "1", "X-PerPay-Webhook-Key-Id": keyId, "X-PerPay-Webhook-Timestamp": timestamp, "X-PerPay-Webhook-Delivery-Id": deliveryId, "X-PerPay-Webhook-Event-Id": eventId, "X-PerPay-Webhook-Attempt": attempt, "X-PerPay-Webhook-Signature": signature });
+  const now = String(Date.now());
+  const tampered = await adapter.verify({ payload: {}, rawBody: rawBody + " ", rawBodyBytes: new TextEncoder().encode(rawBody + " "), headers: validHeaders(now, sign(rawBody, now)) });
+  assert.equal(tampered.verified, false);
+  const staleTimestamp = String(Date.now() - 301_000);
+  const stale = await adapter.verify({ payload: {}, rawBody, rawBodyBytes: new TextEncoder().encode(rawBody), headers: validHeaders(staleTimestamp, sign(rawBody, staleTimestamp)) });
+  assert.equal(stale.message, "PERPAY_WEBHOOK_INVALID");
+  const malformed = await adapter.verify({ payload: {}, rawBody: "{", rawBodyBytes: new TextEncoder().encode("{"), headers: validHeaders(now, sign("{", now)) });
+  assert.equal(malformed.message, "PERPAY_WEBHOOK_INVALID");
+});
+
+test("PerPay create rejects redirects and non-JSON responses", async () => {
+  const originalFetch = globalThis.fetch;
+  const config = { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", webhookSecret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", notifyUrl: "", returnUrl: "" };
+  try {
+    const adapter = createProviderAdapter("PERPAY", config);
+    globalThis.fetch = async () => new Response(null, { status: 302, headers: { location: "https://evil.example" } });
+    await assert.rejects(() => adapter.create({ orderNo: "ORD-PP-HTTP", amount: 100, subject: "Order", notifyUrl: "", returnUrl: "" }), /PERPAY_REDIRECT_REJECTED/);
+    globalThis.fetch = async () => new Response("not-json", { status: 200, headers: { "content-type": "text/plain" } });
+    await assert.rejects(() => adapter.create({ orderNo: "ORD-PP-HTTP", amount: 100, subject: "Order", notifyUrl: "", returnUrl: "" }), /PERPAY_INVALID_RESPONSE/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("PerPay create surfaces a redacted provider error code", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: "return_url_not_allowed", message: "sensitive details omitted" } }), { status: 422, headers: { "content-type": "application/json" } });
+  try {
+    const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", webhookSecret: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" });
+    await assert.rejects(() => adapter.create({ orderNo: "ORD-PP-ERR", amount: 100, subject: "Order", notifyUrl: "https://shop.example/api/payments/perpay/notify", returnUrl: "https://shop.example/payment-result" }), /PERPAY_API_422_RETURN_URL_NOT_ALLOWED/);
+  } finally { globalThis.fetch = originalFetch; }
+});
