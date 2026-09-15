@@ -158,14 +158,15 @@ async function internalOnImportCards(input: { productId: number; productSkuId: n
 
   const now = Date.now();
   const batchNo = input.batchNo?.trim() || null;
-  const statement = database.prepare(
-    `INSERT INTO card (productId, productSkuId, content, status, batchNo, createdAt, updatedAt)
-     VALUES (?, ?, ?, 'UNUSED', ?, ?, ?)`,
-  );
   const importBatchSize = 15;
+  const rowPlaceholders = "(?, ?, ?, 'UNUSED', ?, ?, ?)";
   for (let offset = 0; offset < contents.length; offset += importBatchSize) {
     const batch = contents.slice(offset, offset + importBatchSize);
-    await database.batch(batch.map((content) => statement.bind(productId, productSkuId, content, batchNo, now, now)));
+    const values = batch.flatMap((content) => [productId, productSkuId, content, batchNo, now, now]);
+    await database
+      .prepare(`INSERT INTO card (productId, productSkuId, content, status, batchNo, createdAt, updatedAt) VALUES ${batch.map(() => rowPlaceholders).join(", ")}`)
+      .bind(...values)
+      .run();
   }
   return { imported: contents.length };
 }
