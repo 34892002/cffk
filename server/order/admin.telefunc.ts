@@ -9,6 +9,8 @@ import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
 import type { AddressSnapshot } from "@/server/payment/types";
 import { closePendingOrder, deliverPaidOrder } from "./service";
+import { PaymentFlowService } from "@/server/payment/flow-service";
+import { paymentRepository } from "@/server/payment/repository";
 import { createSupplierOrder } from "@/server/supplier/purchase";
 import { processSupplierOrder } from "@/server/supplier/process";
 
@@ -68,6 +70,19 @@ async function internalOnCloseAdminOrder(input: { orderId: number }) {
   if (!record) appError("ORDER_NOT_FOUND");
   if (record.status !== "CLOSED") appError("ORDER_CANNOT_CLOSE");
   return record;
+}
+
+async function internalOnReplenishAdminOrder(input: { orderId: number }) {
+  const { database, runtime, db } = requireAdmin();
+  if (!input || typeof input !== "object" || !Number.isInteger(input.orderId) || input.orderId <= 0) appError("ORDER_ID_INVALID");
+  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, status: order.status, paymentStatus: order.paymentStatus }).from(order).where(eq(order.id, input.orderId)).limit(1);
+  if (!record) appError("ORDER_NOT_FOUND");
+  if (record.status !== "PENDING" || record.paymentStatus !== "UNPAID") appError("ORDER_NOT_PAYABLE");
+  const attempt = await paymentRepository(database).latestAttempt(record.id);
+  const outcome = await new PaymentFlowService(database, runtime).confirm(record.orderNo, "ADMIN_MANUAL", undefined, attempt?.id);
+  if (outcome === "NOT_PAYABLE") appError("ORDER_NOT_PAYABLE");
+  if (outcome === "PAYMENT_EXCEPTION") appError("ORDER_PAYMENT_EXCEPTION");
+  return { id: record.id, outcome };
 }
 
 async function internalOnRetryAutomaticDelivery(input: { orderId: number }) {
@@ -131,5 +146,6 @@ async function internalOnRecordManualDelivery(input: { orderId: number; content:
 export const onGetAdminOrders = telefuncAction(internalOnGetAdminOrders);
 export const onGetAdminOrderDetail = telefuncAction(internalOnGetAdminOrderDetail);
 export const onCloseAdminOrder = telefuncAction(internalOnCloseAdminOrder);
+export const onReplenishAdminOrder = telefuncAction(internalOnReplenishAdminOrder);
 export const onRetryAutomaticDelivery = telefuncAction(internalOnRetryAutomaticDelivery);
 export const onRecordManualDelivery = telefuncAction(internalOnRecordManualDelivery);
