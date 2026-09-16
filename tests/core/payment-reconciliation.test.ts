@@ -75,22 +75,29 @@ test("scheduled Alipay query closes an order without a payment attempt without q
   assert.deepEqual(deps.logs, []);
 });
 
-test("scheduled Alipay query errors do not confirm payment", async () => {
+test("scheduled Alipay query errors become closeable after the payment timeout", async () => {
   const failure = new Error("network unavailable");
   const deps = dependencies(failure);
   const summary = await reconcilePaymentCandidates([candidate], deps.value);
-  assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 0, failed: 1, closeableOrderIds: [] });
+  assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 0, failed: 1, closeableOrderIds: [1] });
   assert.deepEqual(deps.confirmations, []);
   assert.deepEqual(deps.reports, [failure]);
 });
 
-test("scheduled Alipay query rejects order and amount mismatches", async () => {
-  for (const result of [queryResult({ orderNo: "ORD-other" }), queryResult({ amount: 999 })]) {
-    const deps = dependencies(result);
-    const summary = await reconcilePaymentCandidates([candidate], deps.value);
-    assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 0, failed: 1, closeableOrderIds: [] });
-    assert.deepEqual(deps.confirmations, []);
-  }
+test("scheduled Alipay verification failures become closeable after the payment timeout", async () => {
+  const deps = dependencies(queryResult({ verified: false }));
+  const summary = await reconcilePaymentCandidates([candidate], deps.value);
+  assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 0, failed: 1, closeableOrderIds: [1] });
+  assert.deepEqual(deps.confirmations, []);
+  assert.deepEqual(deps.logs, [{ status: "FAILED", message: "PAYMENT_QUERY_VERIFY_FAILED" }]);
+});
+
+test("scheduled Alipay amount mismatches become closeable after the payment timeout", async () => {
+  const deps = dependencies(queryResult({ amount: 999 }));
+  const summary = await reconcilePaymentCandidates([candidate], deps.value);
+  assert.deepEqual(summary, { scanned: 1, confirmed: 0, pending: 0, failed: 1, closeableOrderIds: [1] });
+  assert.deepEqual(deps.confirmations, []);
+  assert.deepEqual(deps.logs, [{ status: "FAILED", message: "PAYMENT_QUERY_AMOUNT_MISMATCH" }]);
 });
 
 test("scheduled reconciliation handles candidates independently", async () => {
@@ -106,6 +113,6 @@ test("scheduled reconciliation handles candidates independently", async () => {
     log: async () => undefined,
     report: () => undefined,
   });
-  assert.deepEqual(summary, { scanned: 2, confirmed: 1, pending: 0, failed: 1, closeableOrderIds: [] });
+  assert.deepEqual(summary, { scanned: 2, confirmed: 1, pending: 0, failed: 1, closeableOrderIds: [1] });
   assert.deepEqual(confirmations, ["ORD-2"]);
 });

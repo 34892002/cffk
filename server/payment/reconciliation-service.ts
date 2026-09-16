@@ -43,6 +43,7 @@ export async function reconcilePaymentCandidates(candidates: ReconciliationCandi
       const result = await dependencies.query({ orderNo: candidate.orderNo, paymentOrderNo: candidate.paymentOrderNo ?? undefined, amount: candidate.amount });
       if (!result.verified || result.orderNo !== candidate.orderNo) {
         summary.failed += 1;
+        summary.closeableOrderIds.push(candidate.orderId);
         await dependencies.log(candidate, result, "FAILED", "PAYMENT_QUERY_VERIFY_FAILED");
         continue;
       }
@@ -54,6 +55,7 @@ export async function reconcilePaymentCandidates(candidates: ReconciliationCandi
       }
       if (result.amount !== candidate.amount) {
         summary.failed += 1;
+        summary.closeableOrderIds.push(candidate.orderId);
         await dependencies.log(candidate, result, "FAILED", "PAYMENT_QUERY_AMOUNT_MISMATCH");
         continue;
       }
@@ -62,6 +64,7 @@ export async function reconcilePaymentCandidates(candidates: ReconciliationCandi
       await dependencies.log(candidate, result, "VERIFIED", "PAYMENT_QUERY_CONFIRMED");
     } catch (cause) {
       summary.failed += 1;
+      summary.closeableOrderIds.push(candidate.orderId);
       dependencies.report(candidate, cause);
     }
   }
@@ -98,7 +101,7 @@ export async function reconcilePendingAlipayPayments(database: D1Database, runti
   return reconcilePaymentCandidates(candidates, {
     query: adapter.query,
     confirm: async (candidate, result) => {
-      await flow.confirm(candidate.orderNo, "SCHEDULED_QUERY", result.amount, candidate.attemptId);
+      await flow.confirm(candidate.orderNo, "SCHEDULED_QUERY", result.amount, candidate.attemptId ?? undefined);
     },
     log: async (candidate, result, verifyStatus, message) => {
       if (verifyStatus === "PENDING") return;

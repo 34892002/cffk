@@ -145,6 +145,11 @@ async function internalOnGetPaymentLogs(input?: { provider?: PaymentProviderKind
   return { rows, total: total?.value ?? 0, page, pageSize };
 }
 
+async function clearPaymentLogs() {
+  const { db } = requireAdmin();
+  await db.delete(paymentLog);
+}
+
 async function validatePaymentProviderConfig(input: {
   provider: PaymentProviderKind;
   values: JsonFormSubmitValues;
@@ -175,5 +180,6 @@ export const onGetPaymentProviders = telefuncAction(internalOnGetPaymentProvider
 export const onGetPaymentProviderForm = telefuncAction(internalOnGetPaymentProviderForm);
 export const onSavePaymentProvider = telefuncAction(savePaymentProvider);
 export const onGetPaymentLogs = telefuncAction(internalOnGetPaymentLogs);
+export const onClearPaymentLogs = telefuncAction(clearPaymentLogs);
 export const onValidatePaymentProviderConfig = telefuncAction(validatePaymentProviderConfig);
 export const onSetPaymentProviderEnabled = telefuncAction(setPaymentProviderEnabled);
