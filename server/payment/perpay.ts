@@ -7,13 +7,18 @@ const CHECKOUT_TOKEN = /^pct1_[A-Za-z0-9_-]{43}$/;
 const MAX_RESPONSE_BYTES = 256 * 1024;
 
 // PerPay adds a unique offset for ledger matching; only the requested amount enters cffk.
-function paymentAmounts(value: Record<string, unknown>, requireReceived = true) {
+function paymentAmounts(value: Record<string, unknown>, requireReceived = true, allowManualSettlement = false) {
   const requested = value.requested_amount_cents;
   const payable = value.payable_amount_cents;
   const receivedValue = value.received_amount_cents;
   const received = receivedValue === null || receivedValue === undefined ? null : receivedValue;
   if (typeof requested !== "number" || typeof payable !== "number" || !Number.isSafeInteger(requested) || requested < 1 || !Number.isSafeInteger(payable) || payable <= requested) return null;
-  if (received !== null && (typeof received !== "number" || !Number.isSafeInteger(received) || received !== payable)) return null;
+  if (received !== null) {
+    if (typeof received !== "number" || !Number.isSafeInteger(received)) return null;
+    const matchesAutomaticSettlement = received === payable;
+    const matchesManualSettlement = allowManualSettlement && value.payment_basis === "MANUAL" && received > 0;
+    if (!matchesAutomaticSettlement && !matchesManualSettlement) return null;
+  }
   if (requireReceived && received === null) return null;
   return { requested, payable, received };
 }
@@ -159,7 +164,7 @@ export function createPerpayAdapter(config: PerpayConfig) {
         // cffk does not mutate payment state for PerPay refunds.
         return result({ verified: true, orderNo: String(event.merchant_order_no), paymentOrderNo: String(event.order_id), currency: "CNY", status: "PENDING", message: "PERPAY_REFUND_UPDATED" });
       }
-      const amounts = paymentAmounts(event);
+      const amounts = paymentAmounts(event, true, eventType === "PAYMENT_CONFIRMED");
       if (!amounts) return result({ verified: false, status: "FAILED", message: "PERPAY_WEBHOOK_AMOUNT_INVALID" });
       return result({ verified: true, orderNo: String(event.merchant_order_no), paymentOrderNo: String(event.order_id), amount: amounts.requested, currency: "CNY", status: eventType === "PAYMENT_CONFIRMED" && event.payment_status === "CONFIRMED" ? "PAID" : "FAILED", message: "PERPAY_WEBHOOK" });
     },

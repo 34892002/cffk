@@ -562,6 +562,34 @@ test("PerPay webhook verifies raw bytes and maps confirmed events", async () => 
   assert.deepEqual(result, { provider: "PERPAY", verified: true, orderNo: "ORD-PP-2", paymentOrderNo: "550e8400-e29b-41d4-a716-446655440002", amount: 500, currency: "CNY", status: "PAID", message: "PERPAY_WEBHOOK" });
 });
 
+test("PerPay webhook accepts any positive manual settlement amount", async () => {
+  const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const keyId = "550e8400-e29b-41d4-a716-446655440043";
+  const deliveryId = "550e8400-e29b-41d4-a716-446655440044";
+  const timestamp = String(Date.now());
+  const attempt = "1";
+  const adapter = createProviderAdapter("PERPAY", { schemaVersion: 1, baseUrl: "https://perpay.example", apiSecret: secret, webhookSecret: secret, notifyUrl: "", returnUrl: "" });
+
+  const verify = async (paymentBasis: "MANUAL" | "INFERRED", receivedAmount: number, eventId: string) => {
+    const rawBody = JSON.stringify({ schema: "perpay:outbox-event:v2", event_id: eventId, event_type: "PAYMENT_CONFIRMED", order_id: "550e8400-e29b-41d4-a716-446655440042", merchant_order_no: "ORD-PP-MANUAL", currency: "CNY", payment_status: "CONFIRMED", payment_basis: paymentBasis, requested_amount_cents: 10_000, payable_amount_cents: 10_005, received_amount_cents: receivedAmount });
+    const digest = createHash("sha256").update(rawBody).digest("hex");
+    const signature = `v1=${createHmac("sha256", Buffer.from(secret, "base64url")).update(["perpay:webhook:v1", keyId, timestamp, deliveryId, eventId, attempt, digest].join("\n")).digest("hex")}`;
+    return adapter.verify({ payload: {}, rawBody, rawBodyBytes: new TextEncoder().encode(rawBody), headers: new Headers({ "X-PerPay-Webhook-Version": "1", "X-PerPay-Webhook-Key-Id": keyId, "X-PerPay-Webhook-Timestamp": timestamp, "X-PerPay-Webhook-Delivery-Id": deliveryId, "X-PerPay-Webhook-Event-Id": eventId, "X-PerPay-Webhook-Attempt": attempt, "X-PerPay-Webhook-Signature": signature }) });
+  };
+
+  const expected = { provider: "PERPAY", verified: true, orderNo: "ORD-PP-MANUAL", paymentOrderNo: "550e8400-e29b-41d4-a716-446655440042", amount: 10_000, currency: "CNY", status: "PAID", message: "PERPAY_WEBHOOK" };
+  assert.deepEqual(await verify("MANUAL", 10_001, "550e8400-e29b-41d4-a716-446655440041"), expected);
+  assert.deepEqual(await verify("MANUAL", 9_999, "550e8400-e29b-41d4-a716-446655440046"), expected);
+  const inferred = await verify("INFERRED", 10_001, "550e8400-e29b-41d4-a716-446655440045");
+  assert.equal(inferred.verified, false);
+  assert.equal(inferred.message, "PERPAY_WEBHOOK_AMOUNT_INVALID");
+  for (const [receivedAmount, eventId] of [[0, "550e8400-e29b-41d4-a716-446655440047"], [-1, "550e8400-e29b-41d4-a716-446655440048"]] as const) {
+    const invalid = await verify("MANUAL", receivedAmount, eventId);
+    assert.equal(invalid.verified, false);
+    assert.equal(invalid.message, "PERPAY_WEBHOOK_AMOUNT_INVALID");
+  }
+});
+
 test("PerPay refund webhook is acknowledged without payment amount matching", async () => {
   const secret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   const rawBody = JSON.stringify({ schema: "perpay:outbox-event:v2", event_id: "550e8400-e29b-41d4-a716-446655440011", event_type: "REFUND_UPDATED", order_id: "550e8400-e29b-41d4-a716-446655440012", merchant_order_no: "ORD-PP-REFUND", currency: "CNY", refund_status: "PARTIAL" });
