@@ -24,7 +24,7 @@
       <template #cell-payment="{ row }"><Badge :variant="row.paymentStatus === 'PAID' ? 'default' : 'secondary'">{{ paymentLabel(row.paymentStatus) }}</Badge></template>
       <template #cell-delivery="{ row }"><Badge :variant="row.deliveryStatus === 'FAILED' ? 'destructive' : row.deliveryStatus === 'DELIVERED' ? 'default' : 'secondary'">{{ deliveryLabel(row.deliveryStatus) }}</Badge></template>
       <template #cell-createdAt="{ row }"><span class="whitespace-nowrap text-xs">{{ formatDate(row.createdAt) }}</span></template>
-      <template #actions="{ row }"><Button variant="ghost" size="sm" @click="showDetail(row.id)">查看</Button><Button v-if="row.status === 'PENDING'" variant="ghost" size="sm" @click="closeOrder(row.id)">关闭</Button><Button v-if="row.paymentStatus === 'PAID' && row.deliveryStatus !== 'DELIVERED'" variant="ghost" size="sm" @click="row.deliveryType === 'SUPPLIER' ? retrySupplierOrder(row.id) : openDelivery(row.id)">{{ row.deliveryType === 'SUPPLIER' ? '重试供应商发货' : '处理发货' }}</Button></template>
+      <template #actions="{ row }"><div class="flex min-w-[22rem] justify-end gap-1"><Button variant="ghost" size="sm" @click="showDetail(row.id)">查看</Button><Button v-if="row.status === 'PENDING'" variant="ghost" size="sm" @click="closeOrder(row.id)">关闭</Button><Button v-if="row.paymentStatus === 'UNPAID'" variant="ghost" size="sm" :disabled="replenishingOrderId === row.id" @click="openReplenish(row)">{{ replenishingOrderId === row.id ? '补单中...' : '补单' }}</Button><Button v-if="row.paymentStatus === 'PAID' && row.deliveryStatus !== 'DELIVERED'" variant="ghost" size="sm" @click="row.deliveryType === 'SUPPLIER' ? retrySupplierOrder(row.id) : openDelivery(row.id)">{{ row.deliveryType === 'SUPPLIER' ? '重试供应商发货' : '处理发货' }}</Button></div></template>
       <template #pagination><Pagination :total="total" :page="page" :page-size="pageSize" :page-size-options="[10, 20, 50, 100]" @update:page="changePage" @update:page-size="changePageSize" /></template>
     </AdminDataTable>
 
@@ -153,6 +153,19 @@
         <DialogFooter class="flex flex-wrap border-t px-6 py-4"><Button :disabled="delivering" @click="completeDelivery">确认发货</Button><Button variant="outline" :disabled="delivering" @click="retryAutomatic">重试自动发货</Button><Button variant="destructive" :disabled="delivering" @click="markDeliveryFailed">标记发货失败</Button><Button variant="ghost" :disabled="delivering" @click="closeDelivery">取消</Button></DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog v-model:open="replenishDialogOpen">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>确认补单</DialogTitle>
+          <DialogDescription>确定将订单 {{ replenishTarget?.orderNo }} 按支付成功处理吗？此操作会触发后续发货和支付成功通知，请先确认已收到款项。</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" :disabled="replenishingOrderId !== null" @click="replenishDialogOpen = false">取消</Button>
+          <Button :disabled="replenishingOrderId !== null" @click="confirmReplenish">{{ replenishingOrderId !== null ? "补单中..." : "确认补单" }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>
 
@@ -173,7 +186,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RefreshCwIcon } from "@lucide/vue";
 import { runTelefunc } from "@/lib/telefunc-client";
 import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
-import { onCloseAdminOrder, onGetAdminOrderDetail, onGetAdminOrders, onRecordManualDelivery, onRetryAutomaticDelivery } from "@/server/order/admin.telefunc";
+import { onCloseAdminOrder, onGetAdminOrderDetail, onGetAdminOrders, onRecordManualDelivery, onReplenishAdminOrder, onRetryAutomaticDelivery } from "@/server/order/admin.telefunc";
 
 type Order = Awaited<ReturnType<typeof onGetAdminOrders>>["orders"][number];
 const timezone = useSiteTimezone();
@@ -190,12 +203,14 @@ const deliveryContents = computed(() => detail.value?.deliveries.flatMap((item) 
 const columns: AdminTableColumn<Order>[] = [
   { key: "orderNo", label: "订单" }, { key: "productName", label: "商品" }, { key: "quantity", label: "数量" }, { key: "deliveryType", label: "发货方式" }, { key: "contactValue", label: "联系方式" }, { key: "amount", label: "金额" }, { key: "payment", label: "支付" }, { key: "delivery", label: "发货" }, { key: "createdAt", label: "创建时间" },
 ];
-const orders = ref<Order[]>([]); const detail = ref<Detail | null>(null); const detailOpen = ref(false); const loading = ref(false); const delivering = ref(false); const page = ref(1); const pageSize = ref(10); const total = ref(0); const deliveryOpen = ref(false); const deliveryOrderId = ref<number | null>(null); const deliveryContent = ref("");
+const orders = ref<Order[]>([]); const detail = ref<Detail | null>(null); const detailOpen = ref(false); const loading = ref(false); const delivering = ref(false); const replenishingOrderId = ref<number | null>(null); const replenishDialogOpen = ref(false); const replenishTarget = ref<Order | null>(null); const page = ref(1); const pageSize = ref(10); const total = ref(0); const deliveryOpen = ref(false); const deliveryOrderId = ref<number | null>(null); const deliveryContent = ref("");
 const filters = reactive<{ query: string; status: "" | Order["status"]; deliveryStatus: "" | Order["deliveryStatus"]; startDate: string; endDate: string }>({ query: "", status: "", deliveryStatus: "", startDate: "", endDate: "" });
 const dateRange = computed({ get: () => ({ start: filters.startDate, end: filters.endDate }), set: (value: { start: string; end: string }) => { filters.startDate = value.start; filters.endDate = value.end; } });
 async function loadOrders() { loading.value = true; try { const result = await runTelefunc(() => onGetAdminOrders({ page: page.value, pageSize: pageSize.value, ...(filters.query ? { query: filters.query } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.deliveryStatus ? { deliveryStatus: filters.deliveryStatus } : {}), ...(filters.startDate ? { startDate: filters.startDate } : {}), ...(filters.endDate ? { endDate: filters.endDate } : {}) }), { errorMessage: "读取订单失败，请稍后重试。" }); orders.value = result.orders; total.value = result.total; page.value = result.page; } finally { loading.value = false; } }
 async function showDetail(orderId: number) { detail.value = await runTelefunc(() => onGetAdminOrderDetail({ orderId }), { errorMessage: "读取订单详情失败，请稍后重试。" }); detailOpen.value = true; }
 async function closeOrder(orderId: number) { try { await runTelefunc(() => onCloseAdminOrder({ orderId }), { successMessage: "订单已关闭，已释放预占资源。" }); await loadOrders(); if (detail.value?.order.id === orderId) await showDetail(orderId); } catch { /* runTelefunc already displayed the error toast. */ } }
+function openReplenish(order: Order) { if (replenishingOrderId.value !== null) return; replenishTarget.value = order; replenishDialogOpen.value = true; }
+async function confirmReplenish() { const target = replenishTarget.value; if (!target || replenishingOrderId.value !== null) return; replenishingOrderId.value = target.id; try { await runTelefunc(() => onReplenishAdminOrder({ orderId: target.id }), { successMessage: "补单成功，订单已按支付成功处理。" }); replenishDialogOpen.value = false; await loadOrders(); if (detail.value?.order.id === target.id) await showDetail(target.id); } catch { /* runTelefunc already displayed the error toast. */ } finally { replenishingOrderId.value = null; replenishTarget.value = null; } }
 function openDelivery(orderId: number) { deliveryOrderId.value = orderId; deliveryContent.value = ""; deliveryOpen.value = true; }
 function closeDelivery() { deliveryOpen.value = false; deliveryOrderId.value = null; deliveryContent.value = ""; }
 function onDeliveryOpenChange(open: boolean) { if (!open && !delivering.value) closeDelivery(); }
