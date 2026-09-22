@@ -25,6 +25,7 @@ export const errorMessages: Record<string, string> = {
   SITE_FOOTER_CODE_TOO_LONG: "页脚代码不能超过 20,000 个字符。",
   SITE_TIMEZONE_INVALID: "站点时区无效。",
   SITE_SETTINGS_NOT_FOUND: "站点配置不存在。",
+  REGISTRATION_SMTP_REQUIRED: "开启注册前请先启用 SMTP 邮件。",
 
   ADMIN_NOT_FOUND: "管理员账号不存在。",
   ADMIN_SELF_STATUS_CHANGE_FORBIDDEN: "不能停用自己的管理员权限。",

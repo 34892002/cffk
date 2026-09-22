@@ -1,6 +1,7 @@
+import { and, eq } from "drizzle-orm";
 import { telefuncAction } from "@/server/telefunc-action";
 
-import { siteSetting } from "@/database/drizzle/schema";
+import { pushChannelConfig, siteSetting } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { validateSiteSettingsInput, type SiteSettingsInput } from "@/lib/validators/site";
 import { requireAdmin } from "@/server/telefunc-context";
@@ -14,6 +15,14 @@ async function internalOnGetSiteSettings() {
 async function internalOnSaveSiteSettings(input: SiteSettingsInput) {
   const { database, db } = requireAdmin();
   const values = validateSiteSettingsInput(input);
+  if (values.registrationEnabled) {
+    const [smtpProvider] = await db
+      .select({ provider: pushChannelConfig.provider, configJson: pushChannelConfig.configJson })
+      .from(pushChannelConfig)
+      .where(and(eq(pushChannelConfig.channel, "EMAIL"), eq(pushChannelConfig.provider, "SMTP"), eq(pushChannelConfig.isEnabled, true)))
+      .limit(1);
+    if (!smtpProvider) appError("REGISTRATION_SMTP_REQUIRED");
+  }
   const now = new Date();
   const [record] = await db
     .insert(siteSetting)
