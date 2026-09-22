@@ -327,10 +327,10 @@ const saveSettings = handleSubmit(async (values) => {
   loading.value = true;
   error.value = null;
   try {
-    const settings = await runTelefunc(() => onSaveSiteSettings(values), { successMessage: "站点设置已保存。", notifyError: false });
+    const settings = await runTelefunc(() => onSaveSiteSettings(values), { successMessage: "站点设置已保存。" });
     resetForm({ values: toFormValues(settings) });
-  } catch (cause) {
-    error.value = userErrorMessage(cause);
+  } catch {
+    // runTelefunc 已显示脱敏后的错误提示。
   } finally {
     loading.value = false;
   }
