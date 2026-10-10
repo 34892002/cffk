@@ -25,17 +25,63 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Keep instance-specific Cloudflare bindings and deployment settings.
-          if [ -f wrangler.jsonc ]; then
-            cp wrangler.jsonc "$RUNNER_TEMP/wrangler.current.jsonc"
-          fi
+          # 上游同步后需要保留的实例侧文件：
+          # - wrangler.jsonc：本实例的 Cloudflare 绑定与部署设置。
+          # - scripts/ci-migrate.mjs：构建阶段自动应用 D1 迁移的脚本。
+          # - 本工作流自身：保留下面这段保留逻辑。
+          KEEP_FILES=(
+            "wrangler.jsonc"
+            "scripts/ci-migrate.mjs"
+            ".github/workflows/update-cffk.yml"
+          )
+
+          for file in "${KEEP_FILES[@]}"; do
+            if [ -f "$file" ]; then
+              mkdir -p "$RUNNER_TEMP/keep/$(dirname "$file")"
+              cp "$file" "$RUNNER_TEMP/keep/$file"
+            fi
+          done
 
           git fetch https://github.com/34892002/cffk.git main
           git reset --hard FETCH_HEAD
           upstream_sha="$(git rev-parse --short HEAD)"
 
-          if [ -f "$RUNNER_TEMP/wrangler.current.jsonc" ]; then
-            cp "$RUNNER_TEMP/wrangler.current.jsonc" wrangler.jsonc
+          for file in "${KEEP_FILES[@]}"; do
+            if [ -f "$RUNNER_TEMP/keep/$file" ]; then
+              mkdir -p "$(dirname "$file")"
+              cp "$RUNNER_TEMP/keep/$file" "$file"
+            fi
+          done
+
+          # 上游的 package.json 若没有 CI 迁移钩子，就补回来，其余脚本保持上游原样。
+          if ! grep -q "db:migrate:ci" package.json; then
+            node -e '
+              const fs = require("node:fs");
+              const file = "package.json";
+              const source = fs.readFileSync(file, "utf8");
+              let patched = source;
+              if (!patched.includes("\"db:migrate:ci\"")) {
+                patched = patched.replace(
+                  /("db:generate":\s*"[^"]*",)/,
+                  (match) => match + "\n    \"db:migrate:ci\": \"node scripts/ci-migrate.mjs\","
+                );
+              }
+              patched = patched.replace(
+                /("build":\s*")([^"]*)(")/,
+                (match, head, body, tail) => {
+                  if (body.includes("db:migrate:ci")) return match;
+                  const hooked = body.includes("vike build")
+                    ? body.replace("vike build", "bun run db:migrate:ci && vike build")
+                    : body + " && bun run db:migrate:ci";
+                  return head + hooked + tail;
+                }
+              );
+              fs.writeFileSync(file, patched);
+            '
+
+            if ! grep -q "db:migrate:ci" package.json; then
+              echo "::warning::package.json 的 CI 迁移钩子未能恢复，请检查 scripts.db:migrate:ci 与 scripts.build"
+            fi
           fi
 
           git config user.name "CFFK Updater"
