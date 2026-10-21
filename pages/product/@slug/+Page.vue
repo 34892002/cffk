@@ -61,7 +61,7 @@
                       :aria-pressed="selectedMethod === item.key"
                       @click="selectedMethod = item.key"
                     >
-                      {{ item.name }}{{ item.channel ? `（${channelLabel(item.channel)}）` : "" }}
+                      {{ methodLabel(item) }}
                     </Button>
                   </div>
                 </div>
@@ -132,10 +132,11 @@ import { cacheQrPayment } from "@/lib/payment-utils";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onCreateAddress, onListAddresses } from "@/server/address/index.telefunc";
 import { onPreviewDiscount } from "@/server/discount/preview.telefunc";
+import { displayPaymentProviderName } from "@/lib/i18n/payment-providers";
 import { onCreatePayment } from "@/server/payment/checkout.telefunc";
 import type { PaymentChannel, PaymentProviderKind } from "@/server/payment/registry";
 import type { Data } from "./+data.server";
-const { messages, t } = useStorefrontPreferences();
+const { messages, t, locale } = useStorefrontPreferences();
 const data = useData<Data>();
 const pageContext = usePageContext() as ReturnType<typeof usePageContext> & { user?: { id: string; email?: string | null } | null };
 const user = pageContext.user ?? null;
@@ -143,7 +144,15 @@ type Address = Awaited<ReturnType<typeof onListAddresses>>[number];
 type SavedAddress = Address | LocalAddress;
 type AddressForm = { recipientName: string; phone: string; country: string; province: string; city: string; district: string; addressLine: string; postalCode: string };
 type PaymentMethod = { key: string; provider: PaymentProviderKind; channel?: PaymentChannel; name: string };
-const methods = computed<PaymentMethod[]>(() => data.paymentProviders.flatMap((provider): PaymentMethod[] => provider.channels.length ? provider.channels.map((channel) => ({ key: `${provider.provider}:${channel}`, provider: provider.provider, channel, name: provider.name })) : [{ key: `${provider.provider}:`, provider: provider.provider, name: provider.name }]));
+const methods = computed<PaymentMethod[]>(() => data.paymentProviders.flatMap((provider): PaymentMethod[] => {
+  const name = displayPaymentProviderName(provider.provider, provider.name, locale.value);
+  return provider.channels.length ? provider.channels.map((channel) => ({ key: `${provider.provider}:${channel}`, provider: provider.provider, channel, name })) : [{ key: `${provider.provider}:`, provider: provider.provider, name }];
+}));
+function methodLabel(item: PaymentMethod) {
+  if (!item.channel) return item.name;
+  const channel = channelLabel(item.channel);
+  return locale.value === "en-US" ? `${item.name} (${channel})` : `${item.name}（${channel}）`;
+}
 const purchaseNote = computed(() => data.purchaseNote || messages.value.productCheckout.defaultPurchaseNote);
 const deliveryHint = computed(() => {
   if (selectedSku.value.deliveryType === "MANUAL") return data.manualDeliveryHint || messages.value.productCheckout.defaultManualDeliveryHint;
