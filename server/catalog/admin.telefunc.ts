@@ -5,6 +5,7 @@ import { appError } from "@/lib/app-error";
 import { slugify } from "@/lib/slugify";
 import { formatCentsAsYuan, parseAmountToCents } from "@/lib/payment-utils";
 import { sanitizeProductDescription } from "./product-description";
+import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, normalizeContentTranslations, readContentTranslations, serializeContentTranslations, type ContentTranslation, type ContentTranslationLocale, type ContentTranslations } from "@/lib/content-translations";
 import { card, category, order, productV2, productSku, supplierBinding } from "@/database/drizzle/schema";
 import { assertSupplierSkuPublishable } from "@/server/supplier/eligibility";
 
@@ -50,6 +51,48 @@ function optionalText(value: unknown, maxLength: number, code: string) {
   const normalized = value.trim();
   if (normalized.length > maxLength) appError(code);
   return normalized || null;
+}
+
+function normalizeTranslationFields(
+  input: unknown,
+  fields: readonly string[],
+  normalize: (content: ContentTranslation) => ContentTranslation,
+): ContentTranslations {
+  const translations = normalizeContentTranslations(input, fields);
+  const values: ContentTranslations = {};
+  for (const [locale, content] of Object.entries(translations)) {
+    if (!content) continue;
+    const normalized = normalize(content);
+    const entry: ContentTranslation = {};
+    for (const [field, value] of Object.entries(normalized)) if (value) entry[field] = value;
+    if (Object.keys(entry).length > 0) values[locale as ContentTranslationLocale] = entry;
+  }
+  return values;
+}
+
+function normalizeCategoryTranslations(input: unknown) {
+  return normalizeTranslationFields(input, CATEGORY_TRANSLATION_FIELDS, (content) => ({
+    name: content.name ? requiredText(content.name, "CATEGORY_NAME_REQUIRED", 120, "CATEGORY_NAME_TOO_LONG") : undefined,
+    description: content.description ? optionalText(content.description, 2_000, "CATEGORY_DESCRIPTION_INVALID") ?? undefined : undefined,
+  }));
+}
+
+function normalizeProductTranslations(input: unknown) {
+  return normalizeTranslationFields(input, PRODUCT_TRANSLATION_FIELDS, (content) => {
+    const description = content.description ? sanitizeProductDescription(content.description) : null;
+    if (content.description && !description) appError("PRODUCT_DESCRIPTION_INVALID");
+    return {
+      name: content.name ? requiredText(content.name, "PRODUCT_NAME_REQUIRED", 120, "PRODUCT_NAME_TOO_LONG") : undefined,
+      subtitle: content.subtitle ? optionalText(content.subtitle, 300, "PRODUCT_SUBTITLE_INVALID") ?? undefined : undefined,
+      description: description ?? undefined,
+    };
+  });
+}
+
+function normalizeSkuTranslations(input: unknown) {
+  return normalizeTranslationFields(input, SKU_TRANSLATION_FIELDS, (content) => ({
+    name: content.name ? requiredText(content.name, "PRODUCT_SKU_NAME_REQUIRED", 120, "PRODUCT_SKU_NAME_TOO_LONG") : undefined,
+  }));
 }
 
 function resolveCoverImage(value: unknown) {
@@ -103,7 +146,7 @@ async function internalOnGetCatalogAdminData(input: ProductListQuery = {}) {
   ].filter(Boolean) as Array<ReturnType<typeof eq>>;
   const where = conditions.length ? and(...conditions) : undefined;
   const [categories, items, totalRows] = await Promise.all([
-    db.select({ id: category.id, name: category.name, slug: category.slug, description: category.description, sort: category.sort, status: category.status }).from(category).orderBy(asc(category.sort), asc(category.id)),
+    db.select({ id: category.id, name: category.name, slug: category.slug, description: category.description, sort: category.sort, status: category.status, translationsJson: category.translationsJson }).from(category).orderBy(asc(category.sort), asc(category.id)),
     db.select({ id: productV2.id, categoryId: productV2.categoryId, name: productV2.name, slug: productV2.slug, status: productV2.status, sort: productV2.sort, categoryName: category.name }).from(productV2).leftJoin(category, eq(productV2.categoryId, category.id)).where(where).orderBy(asc(productV2.sort), asc(productV2.id)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ value: count() }).from(productV2).where(where),
   ]);
@@ -111,7 +154,7 @@ async function internalOnGetCatalogAdminData(input: ProductListQuery = {}) {
     const primarySkus = itemIds.length ? await db.select({ productId: productSku.productId, price: productSku.price, fulfillmentSource: productSku.fulfillmentSource, deliveryType: productSku.deliveryType }).from(productSku).where(inArray(productSku.productId, itemIds)).orderBy(asc(productSku.sort), asc(productSku.id)) : [];
     const primaryByProduct = new Map<number, typeof primarySkus[number]>();
     for (const sku of primarySkus) if (!primaryByProduct.has(sku.productId)) primaryByProduct.set(sku.productId, sku);
-    return { categories, items: items.map((item) => ({ ...item, price: formatCentsAsYuan(primaryByProduct.get(item.id)?.price ?? 0), fulfillmentSource: primaryByProduct.get(item.id)?.fulfillmentSource ?? "LOCAL", deliveryType: primaryByProduct.get(item.id)?.deliveryType ?? "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1 })), total: totalRows[0]?.value ?? 0, page, pageSize };
+    return { categories: categories.map(({ translationsJson, ...item }) => ({ ...item, translations: readContentTranslations(translationsJson, CATEGORY_TRANSLATION_FIELDS) })), items: items.map((item) => ({ ...item, price: formatCentsAsYuan(primaryByProduct.get(item.id)?.price ?? 0), fulfillmentSource: primaryByProduct.get(item.id)?.fulfillmentSource ?? "LOCAL", deliveryType: primaryByProduct.get(item.id)?.deliveryType ?? "CARD_AUTO", physicalStock: null, minBuy: 1, maxBuy: 1 })), total: totalRows[0]?.value ?? 0, page, pageSize };
 }
 
 async function internalOnGetProductAdminDetail(input: { id: number }) {
@@ -120,18 +163,19 @@ async function internalOnGetProductAdminDetail(input: { id: number }) {
   const [record] = await db.select().from(productV2).where(eq(productV2.id, input.id)).limit(1);
   if (!record) appError("PRODUCT_NOT_FOUND");
   const [sku] = await db.select({ id: productSku.id, name: productSku.name, fulfillmentSource: productSku.fulfillmentSource, deliveryType: productSku.deliveryType }).from(productSku).where(and(eq(productSku.productId, record.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id)).limit(1);
-  const skus = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, status: productSku.status, fulfillmentSource: productSku.fulfillmentSource, deliveryType: productSku.deliveryType, fixedDeliveryContent: productSku.fixedDeliveryContent, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy, sort: productSku.sort }).from(productSku).where(eq(productSku.productId, record.id)).orderBy(asc(productSku.sort), asc(productSku.id));
+  const skus = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, status: productSku.status, fulfillmentSource: productSku.fulfillmentSource, deliveryType: productSku.deliveryType, fixedDeliveryContent: productSku.fixedDeliveryContent, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy, sort: productSku.sort, translationsJson: productSku.translationsJson }).from(productSku).where(eq(productSku.productId, record.id)).orderBy(asc(productSku.sort), asc(productSku.id));
   const [inventory] = sku?.fulfillmentSource === "LOCAL" && sku.deliveryType === "CARD_AUTO"
     ? await db.select({ available: count() }).from(card).where(and(eq(card.productSkuId, sku.id), eq(card.status, "UNUSED")))
     : [];
+  const { translationsJson, ...product } = record;
   return {
-    product: record,
-    skus: skus.map((item) => ({ ...item, price: formatCentsAsYuan(item.price) })),
+    product: { ...product, translations: readContentTranslations(translationsJson, PRODUCT_TRANSLATION_FIELDS) },
+    skus: skus.map(({ translationsJson, ...item }) => ({ ...item, translations: readContentTranslations(translationsJson, SKU_TRANSLATION_FIELDS), price: formatCentsAsYuan(item.price) })),
     cardInventory: sku ? { available: inventory?.available ?? 0 } : null,
   };
 }
 
-async function internalOnSaveCategory(input: { id?: number; name: string; slug?: string; description?: string; sort: number }) {
+async function internalOnSaveCategory(input: { id?: number; name: string; slug?: string; description?: string; sort: number; translations?: ContentTranslations }) {
   const { db } = getAdminDb();
   const now = new Date();
   const name = requiredText(input.name, "CATEGORY_NAME_REQUIRED", 120, "CATEGORY_NAME_TOO_LONG");
@@ -139,6 +183,7 @@ async function internalOnSaveCategory(input: { id?: number; name: string; slug?:
     name,
     slug: resolveSlug(input.slug, name, "SLUG_REQUIRED"),
     description: optionalText(input.description, 2_000, "CATEGORY_DESCRIPTION_INVALID"),
+    translationsJson: serializeContentTranslations(normalizeCategoryTranslations(input.translations), CATEGORY_TRANSLATION_FIELDS),
     sort: nonNegativeInteger(input.sort, "CATEGORY_SORT_INVALID"),
     updatedAt: now,
   };
@@ -196,6 +241,7 @@ type ProductSkuInput = {
   minBuy: number;
   maxBuy: number;
   sort: number;
+  translations?: ContentTranslations;
 };
 
 async function internalOnSaveProduct(input: {
@@ -212,6 +258,7 @@ async function internalOnSaveProduct(input: {
   sort: number;
   skus: ProductSkuInput[];
   deliveryType: DeliveryType;
+  translations?: ContentTranslations;
 }) {
   const { db } = getAdminDb();
   if (!input || typeof input !== "object") appError("PRODUCT_INPUT_INVALID");
@@ -243,7 +290,7 @@ async function internalOnSaveProduct(input: {
     const fixedDeliveryContent = optionalText(sku.fixedDeliveryContent, 10_000, "FIXED_DELIVERY_CONTENT_INVALID");
     if (sku.deliveryType === "FIXED_CARD" && sku.status === "ACTIVE" && !fixedDeliveryContent) appError("FIXED_DELIVERY_CONTENT_REQUIRED");
     if (sku.status !== "ACTIVE" && sku.status !== "INACTIVE") appError("PRODUCT_SKU_STATUS_INVALID");
-    return { id: sku.id, name, price: cents, status: sku.status, fulfillmentSource: "LOCAL" as const, deliveryType: sku.deliveryType, fixedDeliveryContent: sku.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null, physicalStock, minBuy, maxBuy, sort: nonNegativeInteger(sku.sort, "PRODUCT_SORT_INVALID") };
+    return { id: sku.id, name, price: cents, status: sku.status, fulfillmentSource: "LOCAL" as const, deliveryType: sku.deliveryType, fixedDeliveryContent: sku.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null, physicalStock, minBuy, maxBuy, sort: nonNegativeInteger(sku.sort, "PRODUCT_SORT_INVALID"), translationsJson: serializeContentTranslations(normalizeSkuTranslations(sku.translations), SKU_TRANSLATION_FIELDS) };
   });
   if (new Set(normalizedSkus.map((sku) => sku.name)).size !== normalizedSkus.length) appError("PRODUCT_SKU_NAME_CONFLICT");
 
@@ -260,6 +307,7 @@ async function internalOnSaveProduct(input: {
     description: sanitizeProductDescription(requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG")) ?? (appError("PRODUCT_DESCRIPTION_REQUIRED"), null),
     manualDeliveryHint: optionalText(input.manualDeliveryHint, 2_000, "PRODUCT_MANUAL_DELIVERY_HINT_INVALID"),
     purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"),
+    translationsJson: serializeContentTranslations(normalizeProductTranslations(input.translations), PRODUCT_TRANSLATION_FIELDS),
     status: input.status,
     sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"),
     updatedAt: new Date(),
@@ -371,6 +419,7 @@ type SupplierPresentationSkuInput = {
   price: string;
   status: "ACTIVE" | "INACTIVE";
   sort: number;
+  translations?: ContentTranslations;
 };
 
 async function internalOnSaveSupplierProductPresentation(input: {
@@ -384,6 +433,7 @@ async function internalOnSaveSupplierProductPresentation(input: {
   purchaseNote?: string;
   status: ProductStatus;
   sort: number;
+  translations?: ContentTranslations;
   skus: SupplierPresentationSkuInput[];
 }) {
   const { db } = getAdminDb();
@@ -397,7 +447,7 @@ async function internalOnSaveSupplierProductPresentation(input: {
   const normalizedSkus = input.skus.map((sku) => {
     const price = parseAmountToCents(sku.price);
     if (!price || price < 1 || (sku.status !== "ACTIVE" && sku.status !== "INACTIVE")) appError("PRODUCT_INPUT_INVALID");
-    return { id: sku.id, name: requiredText(sku.name, "PRODUCT_SKU_NAME_REQUIRED", 120, "PRODUCT_SKU_NAME_TOO_LONG"), price, status: sku.status, sort: nonNegativeInteger(sku.sort, "PRODUCT_SORT_INVALID") };
+    return { id: sku.id, name: requiredText(sku.name, "PRODUCT_SKU_NAME_REQUIRED", 120, "PRODUCT_SKU_NAME_TOO_LONG"), price, status: sku.status, sort: nonNegativeInteger(sku.sort, "PRODUCT_SORT_INVALID"), translationsJson: serializeContentTranslations(normalizeSkuTranslations(sku.translations), SKU_TRANSLATION_FIELDS) };
   });
   if (new Set(normalizedSkus.map((sku) => sku.name)).size !== normalizedSkus.length) appError("PRODUCT_SKU_NAME_CONFLICT");
   const categoryId = await resolveProductCategoryId(db, input.categoryId);
@@ -414,15 +464,15 @@ async function internalOnSaveSupplierProductPresentation(input: {
   }
   for (const sku of normalizedSkus) {
     const status = input.status === "ACTIVE" && boundSkuIds.has(sku.id) ? "ACTIVE" : sku.status;
-    await db.update(productSku).set({ name: sku.name, price: sku.price, status, sort: sku.sort, updatedAt: now }).where(and(eq(productSku.id, sku.id), eq(productSku.productId, input.id)));
+    await db.update(productSku).set({ name: sku.name, price: sku.price, status, sort: sku.sort, translationsJson: sku.translationsJson, updatedAt: now }).where(and(eq(productSku.id, sku.id), eq(productSku.productId, input.id)));
   }
-  const [saved] = await db.update(productV2).set({ categoryId, name, slug: resolveSlug(input.slug, name), subtitle: optionalText(input.subtitle, 300, "PRODUCT_SUBTITLE_INVALID"), coverImage: resolveCoverImage(input.coverImage), description: sanitizeProductDescription(requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG")) ?? (appError("PRODUCT_DESCRIPTION_REQUIRED"), null), purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"), status: input.status, sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"), updatedAt: now }).where(eq(productV2.id, input.id)).returning();
+  const [saved] = await db.update(productV2).set({ categoryId, name, slug: resolveSlug(input.slug, name), subtitle: optionalText(input.subtitle, 300, "PRODUCT_SUBTITLE_INVALID"), coverImage: resolveCoverImage(input.coverImage), description: sanitizeProductDescription(requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG")) ?? (appError("PRODUCT_DESCRIPTION_REQUIRED"), null), purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"), translationsJson: serializeContentTranslations(normalizeProductTranslations(input.translations), PRODUCT_TRANSLATION_FIELDS), status: input.status, sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"), updatedAt: now }).where(eq(productV2.id, input.id)).returning();
   if (!saved) appError("PRODUCT_NOT_FOUND");
   return saved;
 }
 
 export const onSaveSupplierProductPresentation = telefuncAction(internalOnSaveSupplierProductPresentation);
-async function internalOnSaveProductSku(input: { id?: number; productId: number; name: string; price: string; status: "ACTIVE" | "INACTIVE"; deliveryType: DeliveryType; fixedDeliveryContent?: string; physicalStock: number | null; minBuy: number; maxBuy: number; sort: number }) {
+async function internalOnSaveProductSku(input: { id?: number; productId: number; name: string; price: string; status: "ACTIVE" | "INACTIVE"; deliveryType: DeliveryType; fixedDeliveryContent?: string; physicalStock: number | null; minBuy: number; maxBuy: number; sort: number; translations?: ContentTranslations }) {
   const { db } = getAdminDb();
   if (!Number.isInteger(input.productId) || input.productId < 1) appError("PRODUCT_ID_INVALID");
   const [item] = await db.select().from(productV2).where(eq(productV2.id, input.productId)).limit(1);
@@ -444,7 +494,7 @@ async function internalOnSaveProductSku(input: { id?: number; productId: number;
   const physicalStock = input.deliveryType === "MANUAL" || input.deliveryType === "EXPRESS" ? (input.physicalStock === null ? appError("PHYSICAL_STOCK_REQUIRED") : nonNegativeInteger(input.physicalStock, "PHYSICAL_STOCK_INVALID")) : null;
   const fixedDeliveryContent = optionalText(input.fixedDeliveryContent, 10_000, "FIXED_DELIVERY_CONTENT_INVALID");
   if (input.deliveryType === "FIXED_CARD" && input.status === "ACTIVE" && !fixedDeliveryContent) appError("FIXED_DELIVERY_CONTENT_REQUIRED");
-  const values = { name, price, status: input.status, fulfillmentSource: "LOCAL" as const, deliveryType: input.deliveryType, fixedDeliveryContent: input.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null, physicalStock, minBuy, maxBuy, sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"), updatedAt: new Date() };
+  const values = { name, price, status: input.status, fulfillmentSource: "LOCAL" as const, deliveryType: input.deliveryType, fixedDeliveryContent: input.deliveryType === "FIXED_CARD" ? fixedDeliveryContent : null, physicalStock, minBuy, maxBuy, sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"), translationsJson: serializeContentTranslations(normalizeSkuTranslations(input.translations), SKU_TRANSLATION_FIELDS), updatedAt: new Date() };
   try {
     if (input.id !== undefined) {
       const result = await db.update(productSku).set(values).where(and(eq(productSku.id, input.id), eq(productSku.productId, input.productId))).returning();

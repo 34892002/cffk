@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { processOrderEvents } from "../../server/email/order-events.ts";
 import { createOrder, confirmOrderPayment, getOrderForQuery } from "../../server/order/service.ts";
+import { renderPushMessageTemplate } from "../../server/push/service.ts";
 import { createTestDatabase } from "../helpers/sqlite-d1.ts";
 
 type FlowIdentity = {
@@ -31,8 +32,8 @@ function insertFixtures(sqlite: Database, identity: FlowIdentity) {
       .run(identity.ownerUserId, identity.name, identity.email, now, now);
   }
   sqlite.query("INSERT INTO siteSetting (id, siteName, siteUrl, registrationEnabled, timezone, createdAt, updatedAt) VALUES (1, 'Core Shop', 'https://shop.example.com', 1, 'Asia/Shanghai', ?, ?)").run(now, now);
-  sqlite.query("INSERT INTO product_v2 (name, slug, status, sort, createdAt, updatedAt) VALUES ('Core product', ?, 'ACTIVE', 0, ?, ?)")
-    .run(`core-${identity.ownerUserId ?? "guest"}`, now, now);
+  sqlite.query("INSERT INTO product_v2 (name, slug, status, sort, translationsJson, createdAt, updatedAt) VALUES ('Core product', ?, 'ACTIVE', 0, ?, ?, ?)")
+    .run(`core-${identity.ownerUserId ?? "guest"}`, JSON.stringify({ "en-US": { name: "Core product EN" } }), now, now);
   const product = sqlite.query("SELECT id FROM product_v2 WHERE slug = ?").get(`core-${identity.ownerUserId ?? "guest"}`) as { id: number };
   sqlite.query("INSERT INTO productSku (productId, name, price, status, deliveryType, fixedDeliveryContent, minBuy, maxBuy, sort, createdAt, updatedAt) VALUES (?, 'Default', 1000, 'ACTIVE', 'FIXED_CARD', 'LICENSE-CORE-001', 1, 1, 0, ?, ?)")
     .run(product.id, now, now);
@@ -61,13 +62,14 @@ async function runStorefrontFlow(identity: FlowIdentity) {
     paymentProvider: "ALIPAY",
     contactType: "EMAIL",
     contactValue: identity.email,
+    locale: "en-US",
     discountCode,
   }, identity.ownerUserId);
   expect(created).toMatchObject({ amount: 0, originalAmount: 1000, discountAmount: 1000, discountCode });
 
   expect(await confirmOrderPayment(context.database, created.id)).toEqual({ outcome: "CONFIRMED" });
-  const order = context.sqlite.query("SELECT ownerUserId, status, paymentStatus, deliveryStatus FROM `order` WHERE id = ?").get(created.id);
-  expect(order).toEqual({ ownerUserId: identity.ownerUserId, status: "DELIVERED", paymentStatus: "PAID", deliveryStatus: "DELIVERED" });
+  const order = context.sqlite.query("SELECT ownerUserId, status, paymentStatus, deliveryStatus, locale, productNameSnapshot FROM `order` WHERE id = ?").get(created.id);
+  expect(order).toEqual({ ownerUserId: identity.ownerUserId, status: "DELIVERED", paymentStatus: "PAID", deliveryStatus: "DELIVERED", locale: "en-US", productNameSnapshot: "Core product EN" });
   expect(context.sqlite.query("SELECT usedCount, reservedCount FROM discountCode WHERE code = ?").get(discountCode)).toEqual({ usedCount: 1, reservedCount: 0 });
 
   const eventResult = await processOrderEvents(context.database, {
@@ -111,5 +113,30 @@ describe("core storefront flows", () => {
     const queried = await getOrderForQuery(context.database, created.orderNo, identity.ownerUserId);
     expect(queried).toMatchObject({ status: "DELIVERED", paymentStatus: "PAID", deliveries: ["LICENSE-CORE-001"] });
     expect(await getOrderForQuery(context.database, created.orderNo, "another-user")).toBeNull();
+  });
+
+  test("uses the localized template and falls back to the base content", async () => {
+    const context = createTestDatabase();
+    databases.push(context);
+    context.sqlite.query("INSERT INTO emailTemplate (scene, name, templateJson, createdAt, updatedAt) VALUES ('ORDER_PAID', 'Order paid', ?, ?, ?)").run(
+      JSON.stringify({
+        subject: "[{{siteName}}] 订单 {{orderNo}} 支付成功",
+        body: "主体 {{orderNo}}",
+        format: "text",
+        variables: ["siteName", "orderNo"],
+        translations: {
+          "en-US": { subject: "[{{siteName}}] Order {{orderNo}} paid", body: "Body {{orderNo}}" },
+          "zh-TW": { subject: "[{{siteName}}] 訂單 {{orderNo}} 付款成功", body: "主體 {{orderNo}}" },
+        },
+      }),
+      Date.now(),
+      Date.now(),
+    );
+    const variables = { siteName: "Core Shop", orderNo: "CFFK1" };
+
+    expect(await renderPushMessageTemplate(context.database, { scene: "ORDER_PAID", variables, locale: "en-US" })).toEqual({ title: "[Core Shop] Order CFFK1 paid", content: "Body CFFK1" });
+    expect(await renderPushMessageTemplate(context.database, { scene: "ORDER_PAID", variables, locale: "zh-TW" })).toEqual({ title: "[Core Shop] 訂單 CFFK1 付款成功", content: "主體 CFFK1" });
+    expect(await renderPushMessageTemplate(context.database, { scene: "ORDER_PAID", variables, locale: "zh-CN" })).toEqual({ title: "[Core Shop] 订单 CFFK1 支付成功", content: "主体 CFFK1" });
+    expect(await renderPushMessageTemplate(context.database, { scene: "ORDER_PAID", variables })).toEqual({ title: "[Core Shop] 订单 CFFK1 支付成功", content: "主体 CFFK1" });
   });
 });

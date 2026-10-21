@@ -1,7 +1,7 @@
 <template>
   <footer>
     <div class="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-      <p class="whitespace-pre-wrap">{{ site.footerText }}</p>
+      <p class="whitespace-pre-wrap">{{ footerText }}</p>
       <DropdownMenu v-if="supportContacts.length > 1">
         <DropdownMenuTrigger as-child>
           <Button type="button" variant="outline" size="sm">
@@ -30,10 +30,11 @@ import { usePageContext } from "vike-vue/usePageContext";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
+import { pickLocalizedText, type LocalizedText } from "@/lib/i18n/localized-text";
 
 type Site = {
-  supportContact: string | null;
-  footerText: string | null;
+  supportContact: LocalizedText;
+  footerText: LocalizedText;
 };
 
 type SupportContact = {
@@ -43,8 +44,9 @@ type SupportContact = {
 
 const pageContext = usePageContext() as unknown as { site: Site };
 const site = pageContext.site;
-const { messages } = useStorefrontPreferences();
-const supportContacts = computed<SupportContact[]>(() => (site.supportContact ?? "")
+const { messages, locale } = useStorefrontPreferences();
+const footerText = computed(() => pickLocalizedText(site.footerText, locale.value));
+const supportContacts = computed<SupportContact[]>(() => pickLocalizedText(site.supportContact, locale.value)
   .split("\n")
   .map((line) => line.trim())
   .filter(Boolean)

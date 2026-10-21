@@ -4,17 +4,17 @@
     <div class="mt-16 flex min-h-0 flex-1 flex-col overflow-y-auto">
       <section class="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-5 pb-10 pt-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <article>
-          <div class="overflow-hidden rounded-xl border bg-muted"><img :src="data.coverImage || defaultProductImage" :alt="data.name" class="max-h-96 w-full object-cover" /></div>
+          <div class="overflow-hidden rounded-xl border bg-muted"><img :src="data.coverImage || defaultProductImage" :alt="productName" class="max-h-96 w-full object-cover" /></div>
           <div class="mt-5">
-            <Badge variant="secondary">{{ data.categoryName || messages.productCheckout.defaultCategory }}</Badge>
-            <h1 class="mt-3 text-2xl font-semibold tracking-normal sm:text-3xl">{{ data.name }}</h1>
-            <p v-if="data.subtitle" class="mt-2 text-sm leading-6 text-muted-foreground">{{ data.subtitle }}</p>
+            <Badge variant="secondary">{{ productCategoryName || messages.productCheckout.defaultCategory }}</Badge>
+            <h1 class="mt-3 text-2xl font-semibold tracking-normal sm:text-3xl">{{ productName }}</h1>
+            <p v-if="productSubtitle" class="mt-2 text-sm leading-6 text-muted-foreground">{{ productSubtitle }}</p>
           </div>
-          <section v-if="data.description" class="mt-6 rounded-xl border bg-card p-5 sm:p-6">
+          <section v-if="productDescription" class="mt-6 rounded-xl border bg-card p-5 sm:p-6">
             <h2 class="text-base font-semibold">{{ messages.productCheckout.productDetails }}</h2>
             <!-- `description` is sanitized server-side by sanitizeProductDescription(). -->
             <!-- eslint-disable vue/no-v-html -->
-            <div ref="descriptionRef" class="product-rich-content mt-4 text-sm leading-7 text-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:my-2 [&_blockquote]:border-l-[3px] [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-[1.1rem] [&_h3]:font-semibold [&_img]:my-4 [&_img]:block [&_img]:max-w-full [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:border [&_img]:transition-opacity [&_img]:hover:opacity-90 [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6" @click="previewDescriptionImage" v-html="data.description" />
+            <div ref="descriptionRef" class="product-rich-content mt-4 text-sm leading-7 text-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:my-2 [&_blockquote]:border-l-[3px] [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-[1.1rem] [&_h3]:font-semibold [&_img]:my-4 [&_img]:block [&_img]:max-w-full [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:border [&_img]:transition-opacity [&_img]:hover:opacity-90 [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6" @click="previewDescriptionImage" v-html="productDescription" />
           <!-- eslint-enable vue/no-v-html -->
           </section>
           <section class="mt-6 rounded-xl border bg-muted/30 p-5 text-sm leading-6 sm:p-6">
@@ -24,13 +24,13 @@
         </article>
         <aside class="h-fit lg:sticky lg:top-0">
           <Card>
-            <CardHeader><CardDescription>{{ messages.productCheckout.currentPrice }}</CardDescription><CardTitle class="text-3xl text-orange-600">¥{{ selectedSku.price }}</CardTitle></CardHeader><form class="grid min-w-0 gap-6" novalidate @submit.prevent="submit">
+            <CardHeader><CardDescription>{{ messages.productCheckout.currentPrice }}</CardDescription><CardTitle class="text-3xl text-orange-600">¥{{ selectedSku.price }}<CurrencyHint /></CardTitle></CardHeader><form class="grid min-w-0 gap-6" novalidate @submit.prevent="submit">
               <CardContent class="grid min-w-0 gap-4">
                 <div v-if="data.skus.length > 1" class="grid gap-2 text-sm font-medium">
                   <span>{{ messages.productCheckout.selectSku }}</span>
                   <div class="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" :aria-label="messages.productCheckout.selectSku">
                     <Button v-for="sku in data.skus" :key="sku.id" type="button" :variant="String(sku.id) === selectedSkuId ? 'default' : 'outline'" class="h-auto min-h-10 justify-start whitespace-normal px-3 py-2 text-left text-sm leading-5" :aria-pressed="String(sku.id) === selectedSkuId" @click="selectedSkuId = String(sku.id)">
-                      {{ sku.name }} · ¥{{ sku.price }}
+                      {{ skuName(sku) }} · ¥{{ sku.price }}
                     </Button>
                   </div>
                 </div>
@@ -61,12 +61,12 @@
                       :aria-pressed="selectedMethod === item.key"
                       @click="selectedMethod = item.key"
                     >
-                      {{ item.name }}{{ item.channel ? `（${channelLabel(item.channel)}）` : "" }}
+                      {{ methodLabel(item) }}
                     </Button>
                   </div>
                 </div>
                 <div class="grid gap-2 text-sm font-medium"><span>{{ messages.productCheckout.discountCode }}</span><div class="flex gap-2"><Input v-model="discountCode" autocomplete="off" @keydown.enter.prevent="onApplyDiscount" /><Button type="button" variant="outline" :disabled="discountApplying || !discountCode.trim()" @click="onApplyDiscount">{{ discountApplying ? messages.productCheckout.applyingDiscount : messages.productCheckout.applyDiscount }}</Button></div></div>
-                <div v-if="discountPreview" class="grid gap-1 rounded-md border bg-muted/30 p-3 text-sm"><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.productCheckout.originalAmount }}</span><span>¥{{ discountPreview.originalAmount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ t(messages.productCheckout.appliedDiscount, { code: discountPreview.code }) }}</span><span class="text-destructive">-¥{{ discountPreview.discountAmount }}</span></div><div class="flex justify-between gap-4 border-t pt-2 font-medium"><span>{{ messages.productCheckout.amountDue }}</span><span>¥{{ discountPreview.finalAmount }}</span></div></div>
+                <div v-if="discountPreview" class="grid gap-1 rounded-md border bg-muted/30 p-3 text-sm"><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.productCheckout.originalAmount }}</span><span>¥{{ discountPreview.originalAmount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ t(messages.productCheckout.appliedDiscount, { code: discountPreview.code }) }}</span><span class="text-destructive">-¥{{ discountPreview.discountAmount }}</span></div><div class="flex justify-between gap-4 border-t pt-2 font-medium"><span>{{ messages.productCheckout.amountDue }}</span><span>¥{{ discountPreview.finalAmount }}<CurrencyHint /></span></div></div>
                 <label class="grid gap-2 text-sm font-medium">{{ messages.productCheckout.buyerNote }}<Textarea v-model="buyerNote" rows="3" /></label>
               </CardContent><CardFooter class="flex-col items-stretch gap-3"><Button type="submit" :disabled="loading || isOutOfStock || (requiresPayment && !methods.length)">{{ loading ? messages.productCheckout.processingOrder : isOutOfStock ? messages.storefront.outOfStock : requiresPayment ? messages.productCheckout.submitAndPay : messages.productCheckout.createFreeOrder }}</Button><p class="text-xs text-muted-foreground">{{ messages.productCheckout.paymentAmountNotice }}</p></CardFooter>
             </form>
@@ -88,7 +88,7 @@
     </Dialog>
 
     <Dialog :open="clearAddressesDialogOpen" @update:open="(open) => { clearAddressesDialogOpen = open; if (!open) selectedAddress = previousAddressSelection; }">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent :close-label="messages.common.close" class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{{ messages.productCheckout.confirmClearAddressesTitle }}</DialogTitle>
           <DialogDescription>{{ messages.productCheckout.confirmClearAddressesDescription }}</DialogDescription>
@@ -125,24 +125,40 @@ import { Textarea } from "@/components/ui/textarea";
 
 import defaultProductImage from "@/assets/product_img.jpg?url";
 import { clearLocalAddresses, getLocalAddresses, saveLocalAddress, type LocalAddress } from "@/lib/local-addresses";
+import CurrencyHint from "@/components/storefront/CurrencyHint.vue";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { saveGuestOrder } from "@/lib/local-orders";
 import { cacheQrPayment } from "@/lib/payment-utils";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onCreateAddress, onListAddresses } from "@/server/address/index.telefunc";
 import { onPreviewDiscount } from "@/server/discount/preview.telefunc";
+import { displayPaymentProviderName } from "@/lib/i18n/payment-providers";
+import { pickLocalizedOptionalText, pickLocalizedText } from "@/lib/i18n/localized-text";
 import { onCreatePayment } from "@/server/payment/checkout.telefunc";
 import type { PaymentChannel, PaymentProviderKind } from "@/server/payment/registry";
 import type { Data } from "./+data.server";
-const { messages, t } = useStorefrontPreferences();
+const { messages, t, locale } = useStorefrontPreferences();
 const data = useData<Data>();
+const productName = computed(() => pickLocalizedText(data.name, locale.value));
+const productSubtitle = computed(() => (data.subtitle ? pickLocalizedOptionalText(data.subtitle, locale.value) : null));
+const productDescription = computed(() => (data.description ? pickLocalizedOptionalText(data.description, locale.value) : null));
+const productCategoryName = computed(() => (data.categoryName ? pickLocalizedOptionalText(data.categoryName, locale.value) : null));
+function skuName(sku: Data["skus"][number]) { return pickLocalizedText(sku.name, locale.value); }
 const pageContext = usePageContext() as ReturnType<typeof usePageContext> & { user?: { id: string; email?: string | null } | null };
 const user = pageContext.user ?? null;
 type Address = Awaited<ReturnType<typeof onListAddresses>>[number];
 type SavedAddress = Address | LocalAddress;
 type AddressForm = { recipientName: string; phone: string; country: string; province: string; city: string; district: string; addressLine: string; postalCode: string };
 type PaymentMethod = { key: string; provider: PaymentProviderKind; channel?: PaymentChannel; name: string };
-const methods = computed<PaymentMethod[]>(() => data.paymentProviders.flatMap((provider): PaymentMethod[] => provider.channels.length ? provider.channels.map((channel) => ({ key: `${provider.provider}:${channel}`, provider: provider.provider, channel, name: provider.name })) : [{ key: `${provider.provider}:`, provider: provider.provider, name: provider.name }]));
+const methods = computed<PaymentMethod[]>(() => data.paymentProviders.flatMap((provider): PaymentMethod[] => {
+  const name = displayPaymentProviderName(provider.provider, provider.name, locale.value);
+  return provider.channels.length ? provider.channels.map((channel) => ({ key: `${provider.provider}:${channel}`, provider: provider.provider, channel, name })) : [{ key: `${provider.provider}:`, provider: provider.provider, name }];
+}));
+function methodLabel(item: PaymentMethod) {
+  if (!item.channel) return item.name;
+  const channel = channelLabel(item.channel);
+  return locale.value === "en-US" ? `${item.name} (${channel})` : `${item.name}（${channel}）`;
+}
 const purchaseNote = computed(() => data.purchaseNote || messages.value.productCheckout.defaultPurchaseNote);
 const deliveryHint = computed(() => {
   if (selectedSku.value.deliveryType === "MANUAL") return data.manualDeliveryHint || messages.value.productCheckout.defaultManualDeliveryHint;
@@ -164,9 +180,9 @@ const availableStock = computed(() => selectedSku.value.availableStock ?? 0);
 const purchaseLimit = computed(() => isStockLimited.value ? Math.max(selectedSku.value.minBuy, Math.min(selectedSku.value.maxBuy, availableStock.value)) : selectedSku.value.maxBuy);
 const isOutOfStock = computed(() => isStockLimited.value && availableStock.value < selectedSku.value.minBuy);
 watch([discountCode, quantity], () => { discountPreview.value = null; });
-function previewDescriptionImage(event: MouseEvent) { const image = event.target instanceof HTMLImageElement ? event.target : null; if (image && descriptionRef.value?.contains(image)) previewImage.value = { src: image.currentSrc || image.src, alt: image.alt || data.name }; }
+function previewDescriptionImage(event: MouseEvent) { const image = event.target instanceof HTMLImageElement ? event.target : null; if (image && descriptionRef.value?.contains(image)) previewImage.value = { src: image.currentSrc || image.src, alt: image.alt || productName.value }; }
 async function onApplyDiscount() { const code = discountCode.value; if (!code.trim()) return; const requestedQuantity = quantity.value; const requestedSkuId = selectedSku.value.id; discountPreview.value = null; discountApplying.value = true; try { const preview = await runTelefunc(() => onPreviewDiscount({ productId: data.id, productSkuId: requestedSkuId, quantity: requestedQuantity, discountCode: code }), { notifyError: false }); if (discountCode.value === code && quantity.value === requestedQuantity && selectedSku.value.id === requestedSkuId) discountPreview.value = preview; } catch (cause) { if (discountCode.value === code && quantity.value === requestedQuantity && selectedSku.value.id === requestedSkuId) toast.error(userErrorMessage(cause, messages.value.productCheckout.discountPreviewFailed)); } finally { discountApplying.value = false; } }
-async function onSubmit(address: AddressForm) { if (isOutOfStock.value || (isStockLimited.value && quantity.value > availableStock.value)) { toast.error(messages.value.productCheckout.insufficientStock); return; } if (discountCode.value.trim() && !discountPreview.value) { toast.info(messages.value.productCheckout.applyDiscountFirst); return; } const method = methods.value.find((item) => item.key === selectedMethod.value); if (!method && requiresPayment.value) { toast.error(messages.value.productCheckout.noPaymentMethod); return; } const savedAddress = addresses.value.find((item) => String(item.id) === selectedAddress.value); const useStoredAddress = selectedSku.value.deliveryType === "EXPRESS" && selectedAddress.value !== "new" && savedAddress; const expressAddress = selectedSku.value.deliveryType === "EXPRESS" ? (useStoredAddress ? (user ? { addressId: Number(savedAddress.id) } : { address: { recipientName: savedAddress.recipientName, phone: savedAddress.phone, country: savedAddress.country, province: savedAddress.province, city: savedAddress.city, district: savedAddress.district, addressLine: savedAddress.addressLine, postalCode: savedAddress.postalCode || undefined } }) : { address: { ...address, postalCode: address.postalCode || undefined } }) : {}; loading.value = true; try { const created = await runTelefunc(() => onCreatePayment({ productId: data.id, productSkuId: selectedSku.value.id, quantity: quantity.value, paymentProvider: method?.provider ?? "ALIPAY", paymentChannel: method?.channel, contactType: "EMAIL", contactValue: contactValue.value, ...expressAddress, discountCode: discountPreview.value?.code, buyerNote: buyerNote.value }), { notifyError: false }); if (!pageContext.user) saveGuestOrder(contactValue.value, { orderNo: created.orderNo, productName: data.name, amount: requiresPayment.value ? (discountPreview.value?.finalAmount ?? selectedSku.value.price) : "0.00", createdAt: new Date().toISOString() }); if (created.payment?.mode === "redirect" && created.payment.url) { window.location.assign(created.payment.url); return; } if (created.payment?.mode === "qr") { cacheQrPayment(created); window.location.assign(`/checkout?orderNo=${encodeURIComponent(created.orderNo)}`); return; } window.location.assign(`${pageContext.user ? "/account/order" : "/order"}?orderNo=${encodeURIComponent(created.orderNo)}`); } catch (cause) { toast.error(userErrorMessage(cause, messages.value.productCheckout.orderSubmissionFailed)); } finally { loading.value = false; } }
+async function onSubmit(address: AddressForm) { if (isOutOfStock.value || (isStockLimited.value && quantity.value > availableStock.value)) { toast.error(messages.value.productCheckout.insufficientStock); return; } if (discountCode.value.trim() && !discountPreview.value) { toast.info(messages.value.productCheckout.applyDiscountFirst); return; } const method = methods.value.find((item) => item.key === selectedMethod.value); if (!method && requiresPayment.value) { toast.error(messages.value.productCheckout.noPaymentMethod); return; } const savedAddress = addresses.value.find((item) => String(item.id) === selectedAddress.value); const useStoredAddress = selectedSku.value.deliveryType === "EXPRESS" && selectedAddress.value !== "new" && savedAddress; const expressAddress = selectedSku.value.deliveryType === "EXPRESS" ? (useStoredAddress ? (user ? { addressId: Number(savedAddress.id) } : { address: { recipientName: savedAddress.recipientName, phone: savedAddress.phone, country: savedAddress.country, province: savedAddress.province, city: savedAddress.city, district: savedAddress.district, addressLine: savedAddress.addressLine, postalCode: savedAddress.postalCode || undefined } }) : { address: { ...address, postalCode: address.postalCode || undefined } }) : {}; loading.value = true; try { const created = await runTelefunc(() => onCreatePayment({ productId: data.id, productSkuId: selectedSku.value.id, quantity: quantity.value, paymentProvider: method?.provider ?? "ALIPAY", paymentChannel: method?.channel, contactType: "EMAIL", contactValue: contactValue.value, ...expressAddress, discountCode: discountPreview.value?.code, buyerNote: buyerNote.value }), { notifyError: false }); if (!pageContext.user) saveGuestOrder(contactValue.value, { orderNo: created.orderNo, productName: productName.value, amount: requiresPayment.value ? (discountPreview.value?.finalAmount ?? selectedSku.value.price) : "0.00", createdAt: new Date().toISOString() }); if (created.payment?.mode === "redirect" && created.payment.url) { window.location.assign(created.payment.url); return; } if (created.payment?.mode === "qr") { cacheQrPayment(created); window.location.assign(`/checkout?orderNo=${encodeURIComponent(created.orderNo)}`); return; } window.location.assign(`${pageContext.user ? "/account/order" : "/order"}?orderNo=${encodeURIComponent(created.orderNo)}`); } catch (cause) { toast.error(userErrorMessage(cause, messages.value.productCheckout.orderSubmissionFailed)); } finally { loading.value = false; } }
 const submitAddress = handleSubmit(onSubmit, () => toast.error(messages.value.productCheckout.shippingAddressIncomplete));
 function submit(event: Event) {
   const requiresAddressForm = selectedSku.value.deliveryType === "EXPRESS" && (!user || selectedAddress.value === "new" || !addresses.value.length);

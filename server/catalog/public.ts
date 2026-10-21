@@ -1,11 +1,14 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, category, productV2, productSku } from "@/database/drizzle/schema";
+import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, readContentTranslations } from "@/lib/content-translations";
+import { displayCategoryName } from "@/lib/i18n/category-names";
+import { buildLocalizedOptionalText, buildLocalizedText, type LocalizedNullableText, type LocalizedText } from "@/lib/i18n/localized-text";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
 
 export type PublicSku = {
   id: number;
-  name: string;
+  name: LocalizedText;
   price: string;
   deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS" | "SUPPLIER";
   physicalStock: number | null;
@@ -17,17 +20,17 @@ export type PublicSku = {
 export type PublicCatalog = {
   categories: Array<{
     id: number;
-    name: string;
+    name: LocalizedText;
     slug: string;
-    description: string | null;
+    description: LocalizedNullableText;
   }>;
   products: Array<{
     id: number;
     categoryId: number | null;
-    categoryName: string | null;
-    name: string;
+    categoryName: LocalizedNullableText | null;
+    name: LocalizedText;
     slug: string;
-    subtitle: string | null;
+    subtitle: LocalizedNullableText;
     coverImage: string | null;
     price: string;
     deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS" | "SUPPLIER";
@@ -41,12 +44,20 @@ export type PublicCatalog = {
 };
 
 export type PublicProductDetail = PublicCatalog["products"][number] & {
-  description: string | null;
+  description: LocalizedNullableText;
   purchaseNote: string | null;
   manualDeliveryHint: string | null;
   skus: PublicSku[];
-
 };
+
+function categoryNameMap(item: { slug: string | null; name: string; translationsJson: string | null }): LocalizedText {
+  const translations = readContentTranslations(item.translationsJson, CATEGORY_TRANSLATION_FIELDS);
+  return {
+    "zh-CN": displayCategoryName({ slug: item.slug, name: item.name, translations, locale: "zh-CN" }) ?? item.name,
+    "zh-TW": displayCategoryName({ slug: item.slug, name: item.name, translations, locale: "zh-TW" }) ?? item.name,
+    "en-US": displayCategoryName({ slug: item.slug, name: item.name, translations, locale: "en-US" }) ?? item.name,
+  };
+}
 
 export async function getPublicProductDetail(database: D1Database, slug: string): Promise<PublicProductDetail | null> {
   const normalizedSlug = slug.trim().toLowerCase();
@@ -64,7 +75,10 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
       description: productV2.description,
       purchaseNote: productV2.purchaseNote,
       manualDeliveryHint: productV2.manualDeliveryHint,
+      translationsJson: productV2.translationsJson,
       categoryName: category.name,
+      categorySlug: category.slug,
+      categoryTranslationsJson: category.translationsJson,
     })
     .from(productV2)
     .leftJoin(category, and(eq(productV2.categoryId, category.id), eq(category.status, "ACTIVE")))
@@ -72,12 +86,31 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
     .limit(1);
   if (!item) return null;
 
-  const skuRows = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy }).from(productSku).where(and(eq(productSku.productId, item.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id));
-  const skus = await Promise.all(skuRows.map(async (sku) => ({ ...sku, price: formatCentsAsYuan(sku.price), availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock })));
+  const skuRows = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy, translationsJson: productSku.translationsJson }).from(productSku).where(and(eq(productSku.productId, item.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id));
+  const skus = await Promise.all(skuRows.map(async (sku) => ({
+    id: sku.id,
+    name: buildLocalizedText(sku.name, readContentTranslations(sku.translationsJson, SKU_TRANSLATION_FIELDS), "name"),
+    price: formatCentsAsYuan(sku.price),
+    deliveryType: sku.deliveryType,
+    physicalStock: sku.physicalStock,
+    minBuy: sku.minBuy,
+    maxBuy: sku.maxBuy,
+    availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock,
+  })));
   const primary = skus[0];
   if (!primary) return null;
+  const translations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
   return {
-    ...item,
+    id: item.id,
+    categoryId: item.categoryId,
+    name: buildLocalizedText(item.name, translations, "name"),
+    slug: item.slug,
+    subtitle: buildLocalizedOptionalText(item.subtitle, translations, "subtitle"),
+    coverImage: item.coverImage,
+    description: buildLocalizedOptionalText(item.description, translations, "description"),
+    purchaseNote: item.purchaseNote,
+    manualDeliveryHint: item.manualDeliveryHint,
+    categoryName: item.categoryName === null ? null : categoryNameMap({ slug: item.categorySlug, name: item.categoryName, translationsJson: item.categoryTranslationsJson }),
     price: primary.price,
     deliveryType: primary.deliveryType,
     physicalStock: primary.physicalStock,
@@ -93,7 +126,6 @@ async function countAvailableCardStockBySku(db: ReturnType<typeof createDrizzleD
   return result?.count ?? 0;
 }
 
-
 export async function getPublicCatalog(database: D1Database): Promise<PublicCatalog> {
   const db = createDrizzleDb(database);
   const [categories, products] = await Promise.all([
@@ -103,6 +135,7 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
         name: category.name,
         slug: category.slug,
         description: category.description,
+        translationsJson: category.translationsJson,
       })
       .from(category)
       .where(eq(category.status, "ACTIVE"))
@@ -115,6 +148,7 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
         slug: productV2.slug,
         subtitle: productV2.subtitle,
         coverImage: productV2.coverImage,
+        translationsJson: productV2.translationsJson,
       })
       .from(productV2)
       .innerJoin(category, and(eq(productV2.categoryId, category.id), eq(category.status, "ACTIVE")))
@@ -123,13 +157,13 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
   ]);
 
   const categoryIds = [...new Set(products.flatMap((item) => (item.categoryId === null ? [] : [item.categoryId])))];
-  const categoryNames = categoryIds.length
+  const categoryRows = categoryIds.length
     ? await db
-        .select({ id: category.id, name: category.name })
+        .select({ id: category.id, name: category.name, slug: category.slug, translationsJson: category.translationsJson })
         .from(category)
         .where(and(eq(category.status, "ACTIVE"), inArray(category.id, categoryIds)))
     : [];
-  const categoryNameById = new Map(categoryNames.map((item) => [item.id, item.name]));
+  const categoryNameById = new Map(categoryRows.map((item) => [item.id, categoryNameMap(item)]));
   const itemIds = products.map((item) => item.id);
   const skuRows = itemIds.length
     ? await db.select({ productId: productSku.productId, id: productSku.id, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy })
@@ -144,11 +178,33 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
   const cardStockBySkuId = new Map(cardStockRows.map((item) => [item.productSkuId, item.availableStock]));
 
   return {
-    categories: categories.filter((item) => categoryNameById.has(item.id)),
+    categories: categories.flatMap((item) => categoryNameById.has(item.id)
+      ? [{
+          id: item.id,
+          name: categoryNameById.get(item.id)!,
+          slug: item.slug,
+          description: buildLocalizedOptionalText(item.description, readContentTranslations(item.translationsJson, CATEGORY_TRANSLATION_FIELDS), "description"),
+        }]
+      : []),
     products: products.flatMap((item) => {
       const sku = primaryByProduct.get(item.id);
       if (!sku) return [];
-      return [{ ...item, price: formatCentsAsYuan(sku.price), deliveryType: sku.deliveryType, physicalStock: sku.physicalStock, availableStock: sku.deliveryType === "CARD_AUTO" ? cardStockBySkuId.get(sku.id) ?? 0 : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock, minBuy: sku.minBuy, maxBuy: sku.maxBuy, categoryName: item.categoryId === null ? null : categoryNameById.get(item.categoryId) ?? null }];
+      const translations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
+      return [{
+        id: item.id,
+        categoryId: item.categoryId,
+        categoryName: item.categoryId === null ? null : categoryNameById.get(item.categoryId) ?? null,
+        name: buildLocalizedText(item.name, translations, "name"),
+        slug: item.slug,
+        subtitle: buildLocalizedOptionalText(item.subtitle, translations, "subtitle"),
+        coverImage: item.coverImage,
+        price: formatCentsAsYuan(sku.price),
+        deliveryType: sku.deliveryType,
+        physicalStock: sku.physicalStock,
+        availableStock: sku.deliveryType === "CARD_AUTO" ? cardStockBySkuId.get(sku.id) ?? 0 : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock,
+        minBuy: sku.minBuy,
+        maxBuy: sku.maxBuy,
+      }];
     }),
   };
 }

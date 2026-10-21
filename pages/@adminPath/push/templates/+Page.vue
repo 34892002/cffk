@@ -23,6 +23,7 @@
         <CardContent class="grid gap-3">
           <div class="rounded-md border bg-muted/30 p-3"><p class="text-xs text-muted-foreground">消息标题</p><p class="mt-1 truncate font-medium">{{ item.subject || '模板内容无效，请重新编辑。' }}</p></div>
           <p class="text-sm text-muted-foreground">可用变量：{{ item.variables.length }} 个</p>
+          <p class="text-sm text-muted-foreground">已翻译：{{ translatedLocales(item) }}</p>
         </CardContent>
         <CardFooter class="justify-between gap-3"><span class="font-mono text-xs text-muted-foreground">{{ item.scene }}</span><Button size="sm" @click="openEditor(item)">编辑模板</Button></CardFooter>
       </Card>
@@ -43,6 +44,13 @@
               </FieldGroup>
               <FieldSet class="mt-5 flex min-h-0 flex-1 flex-col">
                 <FieldLegend class="shrink-0">消息内容</FieldLegend>
+                <FieldGroup class="mb-4 shrink-0">
+                  <Field>
+                    <FieldLabel for="template-locale">编辑语言</FieldLabel>
+                    <Select :model-value="editorLocale" @update:model-value="switchLocale"><SelectTrigger id="template-locale" class="w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in localeOptions" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select>
+                    <FieldDescription>简体中文是默认模板；其他语言留空时回退到简体中文。</FieldDescription>
+                  </Field>
+                </FieldGroup>
                 <FieldGroup class="flex min-h-0 flex-1 flex-col">
                   <VeeField v-slot="{ componentField, errors: fieldErrors }" name="subject" :validate-on-input="true"><Field :data-invalid="fieldErrors.length > 0"><FieldLabel for="template-subject">标题</FieldLabel><Input id="template-subject" v-bind="componentField" :aria-invalid="fieldErrors.length > 0" /><FieldError v-if="fieldErrors.length" :errors="fieldErrors" /></Field></VeeField>
                   <VeeField v-slot="{ componentField, errors: fieldErrors }" name="body" :validate-on-input="true"><Field class="min-h-0 flex-1" :data-invalid="fieldErrors.length > 0"><FieldLabel for="template-body">正文</FieldLabel><Textarea id="template-body" v-bind="componentField" rows="16" class="min-h-0 flex-1 resize-none" :aria-invalid="fieldErrors.length > 0" /><FieldDescription>点击右侧变量会插入正文末尾。使用 <code v-pre>{{variable}}</code> 引用变量。</FieldDescription><FieldError v-if="fieldErrors.length" :errors="fieldErrors" /></Field></VeeField>
@@ -75,17 +83,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { Textarea } from "@/components/ui/textarea";
 
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
+import { isStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 import { onGetEmailTemplates, onSaveEmailTemplate } from "@/server/email/admin.telefunc";
 
 type Template = Awaited<ReturnType<typeof onGetEmailTemplates>>[number];
 type Form = { name: string; subject: string; body: string };
+const localeOptions: Array<{ value: StorefrontLocale; label: string }> = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "zh-TW", label: "繁體中文" },
+  { value: "en-US", label: "English" },
+];
+const localeLabels: Record<StorefrontLocale, string> = { "zh-CN": "简体中文", "zh-TW": "繁體中文", "en-US": "English" };
 const formSchema = z.object({ name: z.string().trim().min(1, "请输入显示名称。"), subject: z.string().trim().min(1, "请输入消息标题。"), body: z.string().trim().min(1, "请输入消息正文。") });
 const templates = ref<Template[]>([]);
 const currentTemplate = ref<Template | null>(null);
+const editorLocale = ref<StorefrontLocale>("zh-CN");
 const editorOpen = ref(false);
 const loading = ref(false);
 const saving = ref(false);
@@ -98,8 +115,17 @@ const previewBody = computed(() => renderPreview(values.body ?? ""));
 function variableToken(key: string) { return `{{${key}}}`; }
 function renderPreview(value: string) { return value.replace(/{{\s*([A-Za-z0-9_.-]+)\s*}}/g, (_match, key: string) => examples.value[key] ?? variableToken(key)); }
 function appendVariable(key: string) { setFieldValue("body", `${values.body?.replace(/\s+$/, "") ?? ""}${values.body?.trim() ? "\n" : ""}${variableToken(key)}`); }
-function openEditor(item: Template) { currentTemplate.value = item; resetForm({ values: { name: item.name, subject: item.subject, body: item.body } }); editorOpen.value = true; }
+function openEditor(item: Template) { currentTemplate.value = item; editorLocale.value = "zh-CN"; resetForm({ values: { name: item.name, subject: item.subject, body: item.body } }); editorOpen.value = true; }
+function translatedLocales(item: Template) { const locales = (["zh-TW", "en-US"] as const).filter((locale) => Boolean(item.translations?.[locale])); return locales.length ? locales.map((locale) => localeLabels[locale]).join("、") : "无"; }
+function switchLocale(next: unknown) {
+  if (typeof next !== "string" || !isStorefrontLocale(next)) return;
+  const item = currentTemplate.value;
+  editorLocale.value = next;
+  const content = !item ? undefined : next === "zh-CN" ? { subject: item.subject, body: item.body } : item.translations?.[next];
+  setFieldValue("subject", content?.subject ?? "");
+  setFieldValue("body", content?.body ?? "");
+}
 async function loadTemplates() { loading.value = true; error.value = null; try { templates.value = await runTelefunc(() => onGetEmailTemplates(), { notifyError: false }); } catch (cause) { error.value = userErrorMessage(cause); } finally { loading.value = false; } }
-const saveTemplate = handleSubmit(async (form) => { const item = currentTemplate.value; if (!item) return; saving.value = true; try { await runTelefunc(() => onSaveEmailTemplate({ scene: item.scene, ...form }), { successMessage: "消息模板已保存。" }); editorOpen.value = false; await loadTemplates(); } catch { /* runTelefunc owns feedback */ } finally { saving.value = false; } });
+const saveTemplate = handleSubmit(async (form) => { const item = currentTemplate.value; if (!item) return; saving.value = true; try { await runTelefunc(() => onSaveEmailTemplate({ scene: item.scene, ...form, locale: editorLocale.value }), { successMessage: "消息模板已保存。" }); editorOpen.value = false; await loadTemplates(); } catch { /* runTelefunc owns feedback */ } finally { saving.value = false; } });
 onMounted(loadTemplates);
 </script>

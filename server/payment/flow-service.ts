@@ -4,6 +4,7 @@ import { createDrizzleDb } from "@/database/drizzle";
 import { card, order, productSku } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { normalizeOrderEmail } from "@/lib/local-orders";
+import { isStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 import { reportUnexpectedServerError } from "@/server/error-handling";
 import { enqueueOrderEvent } from "@/server/email/order-events";
 import { closePendingOrder, confirmOrderPayment, createOrder, type CreateOrderInput } from "@/server/order/service";
@@ -26,6 +27,12 @@ function safePaymentCreateError(cause: unknown) {
   const name = cause.name.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
   const detail = cause.message.replace(/https?:\/\/[^\s]+/gi, "[url]").replace(/[A-Za-z0-9_-]{32,}/g, "[token]").replace(/\s+/g, " ").trim().slice(0, 100);
   return name ? `PAYMENT_RUNTIME_${name}${detail ? `:${detail}` : ""}` : "PAYMENT_CREATE_FAILED";
+}
+
+function paymentSubject(locale: StorefrontLocale | undefined, orderNo: string) {
+  if (locale === "en-US") return `Order ${orderNo}`;
+  if (locale === "zh-TW") return `訂單 ${orderNo}`;
+  return `订单 ${orderNo}`;
 }
 
 function paymentReturnUrl(value: unknown, orderNo: string) {
@@ -53,14 +60,14 @@ function orderAccess(ownerUserId: string | null, email?: string) {
 export class PaymentFlowService {
   constructor(private readonly database: D1Database, private readonly runtime: Record<string, unknown> = {}) {}
 
-  async create(input: PaymentCreateInput, ownerUserId: string | null): Promise<PaymentCreateResult> {
+  async create(input: PaymentCreateInput, ownerUserId: string | null, locale?: StorefrontLocale): Promise<PaymentCreateResult> {
     const definition = getProviderDefinition(input.paymentProvider);
     if (!definition) appError("PAYMENT_PROVIDER_NOT_AVAILABLE");
     const provider = await getEnabledPaymentProvider(this.database, input.paymentProvider);
     if (!provider) appError("PAYMENT_PROVIDER_NOT_AVAILABLE");
     const channel = input.paymentChannel ?? provider.channels[0];
     if (provider.channels.length > 0 && (!channel || !provider.channels.includes(channel))) appError("PAYMENT_CHANNEL_INVALID");
-    const created = await createOrder(this.database, { ...input, paymentChannel: channel, allowPendingPayment: true } as CreateOrderInput, ownerUserId);
+    const created = await createOrder(this.database, { ...input, locale, paymentChannel: channel, allowPendingPayment: true } as CreateOrderInput, ownerUserId);
     const logs = new PaymentLogService(this.database);
     if (created.amount === 0) {
       try {
@@ -85,7 +92,7 @@ export class PaymentFlowService {
       const site = await getSiteSettings(this.database);
       const urls = resolvePaymentUrls(provider.provider, site.siteUrl, config);
       const adapter = definition.createAdapter(config);
-      const result = await adapter.create({ orderNo: created.orderNo, amount: created.amount, subject: `订单 ${created.orderNo}`, channel, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, created.orderNo) });
+      const result = await adapter.create({ orderNo: created.orderNo, amount: created.amount, subject: paymentSubject(locale, created.orderNo), channel, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, created.orderNo) });
       await repository.completeAttempt(attemptId, result.paymentOrderNo);
       await logs.writeBestEffort({ orderId: created.id, provider: provider.provider, orderNo: created.orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "CREATE", verifyStatus: "PENDING", payload: result });
       return { ...created, payment: result };
@@ -98,12 +105,12 @@ export class PaymentFlowService {
     }
   }
 
-  async resume(orderNo: string, ownerUserId: string | null, email?: string): Promise<PaymentCreateResult> {
+  async resume(orderNo: string, ownerUserId: string | null, email?: string, locale?: StorefrontLocale): Promise<PaymentCreateResult> {
     const access = orderAccess(ownerUserId, email);
     if (!orderNo.trim() || !access) appError("ORDER_NOT_FOUND");
     const db = createDrizzleDb(this.database);
     const [record] = await db
-      .select({ id: order.id, orderNo: order.orderNo, amount: order.amount, quantity: order.quantity, productId: order.productId, productSkuId: order.productSkuId, deliveryType: order.deliveryTypeSnapshot, physicalStockReserved: order.physicalStockReserved, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel })
+      .select({ id: order.id, orderNo: order.orderNo, amount: order.amount, quantity: order.quantity, productId: order.productId, productSkuId: order.productSkuId, deliveryType: order.deliveryTypeSnapshot, physicalStockReserved: order.physicalStockReserved, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, locale: order.locale })
       .from(order)
       .where(and(eq(order.orderNo, orderNo.trim()), access, eq(order.status, "PENDING"), eq(order.paymentStatus, "UNPAID")))
       .limit(1);
@@ -130,7 +137,7 @@ export class PaymentFlowService {
       const config = JSON.parse(provider.configJson) as Record<string, unknown>;
       const site = await getSiteSettings(this.database);
       const urls = resolvePaymentUrls(provider.provider, site.siteUrl, config);
-      const payment = await definition.createAdapter(config).create({ orderNo: record.orderNo, amount: record.amount, subject: `订单 ${record.orderNo}`, channel: record.paymentChannel as PaymentChannel | undefined, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, record.orderNo) });
+      const payment = await definition.createAdapter(config).create({ orderNo: record.orderNo, amount: record.amount, subject: paymentSubject(locale ?? (isStorefrontLocale(record.locale) ? record.locale : undefined), record.orderNo), channel: record.paymentChannel as PaymentChannel | undefined, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, record.orderNo) });
       await repository.completeAttempt(attemptId, payment.paymentOrderNo);
       await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: provider.provider, orderNo: record.orderNo, paymentOrderNo: payment.paymentOrderNo, eventType: "RESUME", verifyStatus: "PENDING", payload: payment });
       return { orderNo: record.orderNo, amount: record.amount, paymentStatus: "UNPAID", payment };

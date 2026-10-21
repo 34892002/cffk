@@ -18,14 +18,14 @@
           <template v-else-if="order">
             <dl class="grid grid-cols-2 gap-x-6 gap-y-5 text-sm sm:grid-cols-3">
               <div><dt class="text-xs text-muted-foreground">{{ messages.checkout.product }}</dt><dd class="mt-1 font-medium">{{ order.productName }}</dd></div>
-              <div><dt class="text-xs text-muted-foreground">{{ messages.checkout.orderAmount }}</dt><dd class="mt-1 font-medium">¥{{ order.amount }}</dd></div>
+              <div><dt class="text-xs text-muted-foreground">{{ messages.checkout.orderAmount }}</dt><dd class="mt-1 font-medium">¥{{ order.amount }}<CurrencyHint v-if="payableAmount === null" /></dd></div>
               <div v-if="payableAmount !== null"><dt class="text-xs text-muted-foreground">{{ messages.checkout.scanPayment }}</dt><dd class="mt-1 font-medium">¥{{ formatCentsAsYuan(payableAmount) }}</dd></div>
               <div><dt class="text-xs text-muted-foreground">{{ messages.checkout.paymentStatusLabel }}</dt><dd class="mt-1 font-medium">{{ paymentStatusLabel(order.paymentStatus) }}</dd></div>
             </dl>
             <div v-if="order.paymentStatus === 'UNPAID'" class="grid justify-items-center gap-4 border-t pt-6 text-center">
               <template v-if="isQrPaymentOrder(order)">
                 <div v-if="isPerpayQrPaymentOrder(order) && payableAmount !== null" class="w-full rounded-xl border-2 border-primary/35 px-5 py-4 text-center shadow-sm" aria-live="polite">
-                  <p class="mt-1 text-4xl font-bold tracking-tight text-primary sm:text-5xl"><span class="text-2xl sm:text-3xl">¥</span>{{ formatCentsAsYuan(payableAmount) }}</p>
+                  <p class="mt-1 text-4xl font-bold tracking-tight text-primary sm:text-5xl"><span class="text-2xl sm:text-3xl">¥</span>{{ formatCentsAsYuan(payableAmount) }}<CurrencyHint /></p>
                   <p class="mt-3 text-sm font-medium leading-6 text-foreground">{{ messages.checkout.exactAmountNotice }}</p>
                 </div>
                 <p class="font-medium">{{ messages.checkout.scanWithAlipay }}</p>
@@ -58,6 +58,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { getLocalOrderGroups } from "@/lib/local-orders";
+import CurrencyHint from "@/components/storefront/CurrencyHint.vue";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onQueryOrder, onResumeOrderPayment, type PublicOrder } from "@/server/order/public.telefunc";

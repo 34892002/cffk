@@ -134,7 +134,7 @@
     </section>
 
     <Dialog :open="editorOpen" @update:open="onEditorOpenChange">
-      <DialogContent class="grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0">
+      <DialogContent :close-label="messages.common.close" class="grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0">
         <DialogHeader class="border-b px-6 py-5 pr-14">
           <DialogTitle>{{ editingAddress ? messages.account.addresses.editTitle : messages.account.addresses.createTitle }}</DialogTitle>
           <DialogDescription>{{ messages.account.addresses.editorDescription }}</DialogDescription>
@@ -164,7 +164,7 @@
     </Dialog>
 
     <Dialog :open="deleteOpen" @update:open="onDeleteOpenChange">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent :close-label="messages.common.close" class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{{ messages.account.addresses.deleteTitle }}</DialogTitle>
           <DialogDescription>{{ t(messages.account.addresses.deleteDescription, { recipientName: deletingAddress?.recipientName ?? "" }) }}</DialogDescription>

@@ -106,6 +106,9 @@ import "vue-sonner/style.css";
 
 金额采用明确的双层单位边界，禁止在同一业务边界混用“元”和“分”：
 
+- 商城金额始终以人民币（CNY）结算，不做汇率换算。非简体中文界面在金额后显示小号 `CNY`（`components/storefront/CurrencyHint.vue`），避免用户误认为本币。
+- 如需展示外币估算，必须明确标注“估算 / estimated”，且不得用于下单或支付金额校验。
+
 - 数据库金额列、订单计算、库存和优惠结算、支付回调核验及支付渠道适配器内部，统一使用非负整数“分”。
 - 前端输入、页面展示、公开和后台 Telefunc 的业务 DTO、运营文案及校验提示，统一使用“元”。用户可见的标签、说明和错误信息不得出现“分”。
 - 元金额必须以最多两位小数的字符串传递，例如 `"12.30"`；不得以 JavaScript 浮点数作为金额契约。
@@ -171,7 +174,61 @@ async function deleteRow() {
 - 字典位于 `lib/i18n/`。`zh-CN.ts` 是 key 的唯一来源，并导出 `Messages` 类型；`en-US.ts` 与 `zh-TW.ts` 必须用 `satisfies Messages` 校验，禁止 `as unknown as`、展开中文对象兜底或任何自动简繁转换。繁体必须人工撰写。
 - 公开页面的可见文案与可访问性标签必须来自 `useStorefrontPreferences().messages`，不得在页面硬编码中文或英文。
 - 服务端只返回稳定错误码，文案位于 `lib/i18n/error-messages/`，`lib/error-messages.ts` 仍是唯一读取入口。新增错误码必须三语齐全，`tests/core/i18n.test.ts` 会校验 key 对齐、占位符一致和英文/繁体纯净度。
-- 语言偏好只保存在浏览器 `localStorage`，不写入数据库。禁止为语言展示新增 D1 读写或额外查询。
+- 语言偏好保存在 `storefront-locale` cookie 中，服务端在 `+onBeforeRender` 读取 cookie / `Accept-Language` 得到 `pageContext.locale`，再由 `+lang` 输出 `<html lang>`，避免首屏闪中文。`localStorage` 只用于旧版偏好的一次性迁移，不得重新引入。
+- 下单时由服务端从请求上下文（Telefunc `locale`）写入 `order.locale`，不要在客户端请求参数里传递语言。客户邮件按订单语言选择模板，管理员邮件固定简体中文；不得为语言新增额外 D1 查询。
+- 邮件模板的多语言文案存在 `templateJson.translations`，缺失时回退到简体中文主模板。`renderPushMessageTemplate` 是唯一选文入口。
+- SEO 兜底文案、`_error` 页、二维码与品牌 `aria-label` 也必须来自字典或 `seoTextFor()`，不得写死单一语言。
+
+### 1.10 商品与站点内容多语言
+
+- 商品（名称/副标题/详情）、SKU（名称）、分类（名称/描述）和站点（副标题/公告/页脚/下单提示/客服联系方式）的译文保存在各自的 `translationsJson` 列，不拆表、不新增查询。
+- 公开 DTO 用 `lib/i18n/localized-text.ts` 的 `buildLocalizedText*()` 一次性携带三种语言，组件按当前 `locale` 取值；切换语言只更新响应式状态，不得刷新页面。
+- 服务端内部判断（下单快照、邮件变量）继续用 `readContentTranslations()` + `localizeContentText()`，按字段回退到原列（简体中文）。
+- 后台在商品编辑器、分类、系统设置中用“编辑语言”维护译文；新增可译字段时必须复用 `PRODUCT_TRANSLATION_FIELDS` / `CATEGORY_TRANSLATION_FIELDS` / `SITE_TRANSLATION_FIELDS` 白名单。
+- 下单时按 `order.locale` 写入 `productNameSnapshot`，使订单、邮件与历史快照和买家看到的语言一致。
+- 支付渠道的默认名称（支付宝 / 易支付）在商城侧按语言显示；管理员自定义过的名称原样显示，不覆盖。后台列表仍显示 D1 中的名称。
+- 内置默认分类（`slug = default`）不允许后台编辑，其名称使用 `lib/i18n/category-names.ts` 的本地化标签（General / 預設分類）。
+- Slug、价格、封面、客服联系方式和自定义代码不参与翻译。
+- Telefunc 入参类型不要使用带连字符的字面量联合键（例如 `Record<"zh-TW" | "en-US", ...>`）：Telefunc 的 shield 会生成 `en-US: ...` 这类未加引号的非法代码。统一使用 `ContentTranslations`（字符串索引 + 运行时校验）。
+
+### 1.11 新增一种界面语言
+
+新增语言分两类：**类型会强制你补全**的，和**不会报错、必须手动改**的。按下面顺序处理。
+
+#### 1. 语言定义与字典（漏改会编译报错）
+
+1. `lib/i18n/locale.ts`：把新 locale 加入 `storefrontLocales`。
+2. `lib/i18n/locale.ts`：在 `isStorefrontLocale()` 中加上新值。这一步**不会报错**，但漏了会导致 cookie / 请求头里的新语言永远被当成默认值。
+3. `lib/i18n/locale.ts`：在 `detectBrowserLocale()` 中补浏览器语言前缀映射（例如 `fr`），否则新语言用户首次访问仍回退简体中文。
+4. `lib/i18n/<locale>.ts`：新建字典并 `satisfies Messages`，key 必须与 `zh-CN.ts` 完全一致（含占位符）。
+5. `lib/storefront-preferences.ts`：在 `locales` 映射中加入新字典（类型会报错）。
+6. `lib/i18n/error-messages/<locale>.ts`：补齐全部错误码；在 `error-messages/index.ts` 注册（类型会报错）。
+7. `lib/i18n/seo.ts`、`lib/i18n/payment-providers.ts`、`lib/i18n/category-names.ts`：分别补 SEO 兜底文案、支付渠道默认名、默认分类标签（均为 `Record<StorefrontLocale, ...>`，类型会报错）。
+8. `lib/i18n/localized-text.ts` 的 `buildLocalizedText*()` 与 `server/catalog/public.ts` 的 `categoryNameMap()`：返回的是 `LocalizedText`，漏 key 会编译报错。
+
+#### 2. 内容翻译的读写（不会报错，需手动补）
+
+9. `lib/content-translations.ts`：把新 locale 加入 `contentTranslationLocales`。漏改时后台能填、但读取时会被当成未知语言丢弃。
+10. `components/storefront/PublicNav.vue` 与 `components/storefront/StorefrontPreferences.vue`：语言菜单目前逐项列出字典，需新增菜单项。
+11. 后台三个“编辑语言”下拉：
+    - `pages/@adminPath/system/settings/+Page.vue`
+    - `pages/@adminPath/catalog/categories/+Page.vue`
+    - `pages/@adminPath/catalog/products/ProductEditorPage.vue`
+
+    每个文件都要同步 `EditorLocale` 类型、`localeOptions`、`translations` 初始对象/`syncTranslations` 的 `["zh-TW", "en-US"]` 循环，以及 SKU 草案的 `SkuDraftTranslations`。
+12. `scripts/seed.sql` 的 `emailTemplate.templateJson.translations`：可选；缺失时回退简体中文，但新环境建议补齐客户邮件场景。
+13. 测试：`tests/core/i18n.test.ts` 目前对比 `zh-CN` / `en-US` / `zh-TW`，新增语言后把新字典加入 key 对齐与纯净度检查；`tests/core/storefront-preferences.test.ts` 补一条浏览器语言识别断言。
+
+#### 3. 无需修改
+
+- `pages/+onBeforeRoute.ts`、`pages/+onBeforeRender.ts`、`pages/+lang.ts`、`resolveHeadersLocale()`：语言解析本身与具体语言无关。
+- `lib/currency.ts`：非 `zh-CN` 自动显示 `CNY`。
+- 数据库：`translationsJson` 是 JSON，新增语言不需要迁移，也不增加 D1 查询次数。
+
+#### 4. 验收
+
+1. `bun test tests/core` 与 `bun run build`。
+2. 手动检查：浏览器语言首次访问、语言菜单切换（不刷新页面）、商品/分类/SKU/站点文案、订单邮件与下单快照、错误提示、`<html lang>`、SEO 标题与描述。
 
 ## 2. 后台信息架构、目录与导航元数据
 
@@ -551,6 +608,8 @@ return body.data;
 电子邮件只作为“推送管理”下的一个二级模块显示一次；邮件统计和通道配置只能作为该模块的三级页面出现。消息模板是推送管理的并列二级项，供电子邮件、微信三方和 Telegram 共用。不得在推送模块新增或保留 `/mail/*`、`/notifications/*` 等平行路径。推送规则统一由 `server/push` 管理，页面通过推送配置决定订单事件是否向客户或唯一 root 投递。渠道实现实际投递时，必须同步写入 `pushLog`；不要为电子邮件、微信三方或 Telegram 分别创建重复的发送日志页面。
 
 `pushLog` 是后台“发送日志”的唯一数据源。渠道尚未具备发送能力时，只保存配置，不得生成伪造的成功或失败记录。
+
+消息模板以简体中文为默认正文，`templateJson.translations` 保存 `zh-TW` / `en-US` 版本；客户消息按收件人语言选择，管理员消息固定简体中文。模板新增语言时必须在后台“推送管理 → 消息模板”中编辑，不得在代码里硬编码第二套文案。
 
 ## 7. 新功能完成前检查
 

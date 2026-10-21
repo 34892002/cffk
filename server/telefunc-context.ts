@@ -1,12 +1,14 @@
 import { getContext } from "telefunc";
 import { createDrizzleDb } from "@/database/drizzle";
 import { appError } from "@/lib/app-error";
+import type { StorefrontLocale } from "@/lib/i18n/locale";
 
 export type TelefuncContext = {
   env?: Record<string, unknown> & { DB?: D1Database };
   user?: { id: string } | null;
   isAdmin?: boolean;
   clientIp?: string | null;
+  locale?: StorefrontLocale;
 };
 
 export function requireDatabase() {

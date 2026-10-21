@@ -8,7 +8,7 @@ const config: Config = {
   title: "CFFK-Shop",
   description: "",
 
-  passToClient: ["user", "site", "rootInitialized", "registrationEnabled"],
+  passToClient: ["user", "site", "locale", "rootInitialized", "registrationEnabled"],
   extends: [vikeVue],
 };
 

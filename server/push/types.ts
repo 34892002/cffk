@@ -1,3 +1,5 @@
+import type { StorefrontLocale } from "@/lib/i18n/locale";
+
 export const pushChannels = ["EMAIL", "WECHAT", "TELEGRAM"] as const;
 export const pushMessageTypes = ["NORMAL", "ADMIN"] as const;
 export const pushScenes = [
@@ -24,6 +26,8 @@ export type PushDispatchInput = {
   source: string;
   recipient?: PushRecipient;
   providerConfigId?: number;
+  /** Locale of the recipient; falls back to the site default template. */
+  locale?: StorefrontLocale;
 };
 
 export type PushDispatchResult = {

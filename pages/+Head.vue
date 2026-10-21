@@ -21,10 +21,12 @@
 import { computed } from "vue";
 import { usePageContext } from "vike-vue/usePageContext";
 import defaultLogoUrl from "@/assets/logo.svg?url";
+import { seoTextFor } from "@/lib/i18n/seo";
+import { pickLocalizedText, resolveLocale, type LocalizedNullableText, type LocalizedText } from "@/lib/i18n/localized-text";
 
-type Site = { name?: string; subtitle?: string | null; siteUrl?: string | null; logo?: string | null; logoIcon?: string | null };
-type ProductData = { name?: string; subtitle?: string | null; description?: string | null; coverImage?: string | null };
-type SeoPageContext = { site?: Site; data?: ProductData; urlPathname?: string; routeParams?: { adminPath?: string }; urlParsed?: { origin?: string } };
+type Site = { name?: string; subtitle?: LocalizedNullableText | null; siteUrl?: string | null; logo?: string | null; logoIcon?: string | null };
+type ProductData = { name?: LocalizedText; subtitle?: LocalizedNullableText | null; description?: LocalizedNullableText | null; coverImage?: string | null };
+type SeoPageContext = { site?: Site; data?: ProductData; urlPathname?: string; locale?: string; routeParams?: { adminPath?: string }; urlParsed?: { origin?: string } };
 
 const pageContext = usePageContext() as SeoPageContext;
 const isPrivatePage = computed(() => {
@@ -34,13 +36,20 @@ const isPrivatePage = computed(() => {
 const siteUrl = computed(() => normalizeOrigin(pageContext.site?.siteUrl) || normalizeOrigin(pageContext.urlParsed?.origin));
 const iconUrl = computed(() => pageContext.site?.logoIcon || pageContext.site?.logo || defaultLogoUrl);
 const seo = computed(() => {
-  const siteName = pageContext.site?.name || "CFFK-Shop";
+  const locale = resolveLocale(pageContext.locale);
+  const fallback = seoTextFor(locale);
+  const siteName = pageContext.site?.name || fallback.siteName;
   const product = pageContext.data;
-  const isProductPage = Boolean(product?.name && (pageContext.urlPathname || "").startsWith("/product/"));
-  const title = isProductPage ? `${product?.name} - ${siteName}` : siteName;
+  const productName = product?.name ? pickLocalizedText(product.name, locale) : "";
+  const siteSubtitle = pageContext.site?.subtitle ? pickLocalizedText(pageContext.site.subtitle, locale) : "";
+  const isProductPage = Boolean(productName && (pageContext.urlPathname || "").startsWith("/product/"));
+  const title = isProductPage ? `${productName} - ${siteName}` : siteName;
   const description = isProductPage
-    ? product?.subtitle?.trim() || toPlainText(product?.description) || pageContext.site?.subtitle || "自动发卡系统"
-    : pageContext.site?.subtitle || "自动发卡系统";
+    ? (product?.subtitle ? pickLocalizedText(product.subtitle, locale).trim() : "")
+      || (product?.description ? toPlainText(pickLocalizedText(product.description, locale)) : "")
+      || siteSubtitle
+      || fallback.description
+    : siteSubtitle || fallback.description;
   const canonicalUrl = !isPrivatePage.value && siteUrl.value ? new URL(pageContext.urlPathname || "/", `${siteUrl.value}/`).toString() : null;
   const imageUrl = !isPrivatePage.value ? toAbsoluteUrl(product?.coverImage || pageContext.site?.logoIcon || pageContext.site?.logo || defaultLogoUrl, siteUrl.value) : null;
 

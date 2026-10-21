@@ -6,6 +6,7 @@ import zhTW from "../../lib/i18n/zh-TW.ts";
 import { enUSErrorMessages } from "../../lib/i18n/error-messages/en-US.ts";
 import { zhCNErrorMessages } from "../../lib/i18n/error-messages/zh-CN.ts";
 import { zhTWErrorMessages } from "../../lib/i18n/error-messages/zh-TW.ts";
+import { parseEmailTemplateConfig } from "../../lib/config-schemas.ts";
 
 // Common simplified-only characters used by this project. Traditional text must
 // never contain them; the guard is intentionally a curated list so the test has
@@ -73,5 +74,30 @@ describe("error message dictionaries", () => {
 
   test("Traditional error messages have no simplified characters left", () => {
     expect(simplifiedCharactersIn(zhTWErrorMessages)).toEqual([]);
+  });
+});
+
+describe("email template translations", () => {
+  const legacyTemplate = JSON.stringify({ subject: "[{{siteName}}] Hello", body: "Body {{actionUrl}}", format: "text", variables: ["siteName", "actionUrl"] });
+
+  test("accepts templates without translations", () => {
+    expect(parseEmailTemplateConfig(legacyTemplate).translations).toBeUndefined();
+  });
+
+  test("keeps localized content", () => {
+    const config = parseEmailTemplateConfig(JSON.stringify({
+      ...JSON.parse(legacyTemplate),
+      translations: { "en-US": { subject: "Hello", body: "Body" }, "zh-TW": { subject: "您好", body: "內容" } },
+    }));
+    expect(config.translations?.["en-US"]).toEqual({ subject: "Hello", body: "Body" });
+    expect(config.translations?.["zh-TW"]).toEqual({ subject: "您好", body: "內容" });
+  });
+
+  test("rejects unsupported locales", () => {
+    expect(() => parseEmailTemplateConfig(JSON.stringify({ ...JSON.parse(legacyTemplate), translations: { "fr-FR": { subject: "x", body: "y" } } }))).toThrow();
+  });
+
+  test("rejects incomplete translations", () => {
+    expect(() => parseEmailTemplateConfig(JSON.stringify({ ...JSON.parse(legacyTemplate), translations: { "en-US": { subject: "x", body: "" } } }))).toThrow();
   });
 });

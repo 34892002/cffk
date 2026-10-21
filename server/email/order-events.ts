@@ -25,16 +25,16 @@ export async function enqueueOrderEvent(database: D1Database, input: { eventKey:
 
 
 async function dispatchEvent(database: D1Database, runtime: EmailRuntime, event: typeof orderEvent.$inferSelect) {
-  const variables = await orderPushVariables(database, event.orderId);
-  if (!variables) throw new Error("ORDER_PUSH_VARIABLES_UNAVAILABLE");
-  const payload = { ...variables, ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}) };
+  const orderPayload = await orderPushVariables(database, event.orderId);
+  if (!orderPayload) throw new Error("ORDER_PUSH_VARIABLES_UNAVAILABLE");
+  const variables = { ...orderPayload.variables, ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}) };
   const source = `order-event:${event.id}`;
   if (event.scene === "DELIVERY_FAILED" || event.scene === "PAYMENT_EXCEPTION") {
-    return dispatchPush(database, runtime, { scene: event.scene, messageType: "ADMIN", orderId: event.orderId, variables: payload, source });
+    return dispatchPush(database, runtime, { scene: event.scene, messageType: "ADMIN", orderId: event.orderId, variables, locale: "zh-CN", source });
   }
   return (await Promise.all([
-    dispatchPush(database, runtime, { scene: event.scene, messageType: "NORMAL", orderId: event.orderId, variables: payload, source }),
-    dispatchPush(database, runtime, { scene: event.scene, messageType: "ADMIN", orderId: event.orderId, variables: payload, source }),
+    dispatchPush(database, runtime, { scene: event.scene, messageType: "NORMAL", orderId: event.orderId, variables, locale: orderPayload.locale, source }),
+    dispatchPush(database, runtime, { scene: event.scene, messageType: "ADMIN", orderId: event.orderId, variables, locale: "zh-CN", source }),
   ])).flat();
 }
 

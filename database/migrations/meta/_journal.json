@@ -29,6 +29,13 @@
       "when": 1789300432870,
       "tag": "0003_normal_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792561810472,
+      "tag": "0004_shiny_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

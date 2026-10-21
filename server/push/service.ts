@@ -2,6 +2,8 @@ import { and, eq, lte, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { adminBootstrap, emailTemplate, order, orderDelivery, pushChannelConfig, pushLog, pushPolicy, pushRetry, siteSetting, user } from "@/database/drizzle/schema";
 import { parseEmailTemplateConfig } from "@/lib/config-schemas";
+import { defaultStorefrontLocale, isStorefrontLocale } from "@/lib/i18n/locale";
+import { SITE_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
 import { parseEmailProviderConfigForKind, type EmailProviderKind } from "@/server/push/provider-definitions";
 import { parseThirdPartyProviderConfig, sendThirdPartyPush } from "@/server/push/third-party-provider";
 import { parseTelegramProviderConfig, sendTelegramPush } from "@/server/push/telegram-provider";
@@ -216,13 +218,14 @@ async function schedulePushRetry(database: D1Database, input: {
   return !exhausted;
 }
 
-export async function renderPushMessageTemplate(database: D1Database, input: Pick<PushDispatchInput, "scene" | "variables">) {
+export async function renderPushMessageTemplate(database: D1Database, input: Pick<PushDispatchInput, "scene" | "variables" | "locale">) {
   const [templateRecord] = await createDrizzleDb(database).select({ templateJson: emailTemplate.templateJson }).from(emailTemplate).where(eq(emailTemplate.scene, input.scene)).limit(1);
   if (!templateRecord) throw new Error("EMAIL_TEMPLATE_NOT_AVAILABLE");
   const template = parseEmailTemplateConfig(templateRecord.templateJson);
+  const localized = input.locale && input.locale !== defaultStorefrontLocale ? template.translations?.[input.locale] : undefined;
   return {
-    title: renderPushTemplate(template.subject, input.variables),
-    content: renderPushTemplate(template.body, input.variables),
+    title: renderPushTemplate(localized?.subject ?? template.subject, input.variables),
+    content: renderPushTemplate(localized?.body ?? template.body, input.variables),
   };
 }
 
@@ -469,10 +472,18 @@ export function orderQueryUrl(siteUrl: string | null | undefined, orderNo: strin
 export async function orderPushVariables(database: D1Database, orderId: number) {
   const db = createDrizzleDb(database);
   const [[record], [settings], deliveries] = await Promise.all([
-    db.select({ orderNo: order.orderNo, ownerUserId: order.ownerUserId, contactEmail: order.contactValue, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, buyerNote: order.buyerNote }).from(order).where(eq(order.id, orderId)).limit(1),
-    db.select({ siteName: siteSetting.siteName, siteUrl: siteSetting.siteUrl, footerText: siteSetting.footerText, supportContact: siteSetting.supportContact }).from(siteSetting).where(eq(siteSetting.id, 1)).limit(1),
+    db.select({ orderNo: order.orderNo, ownerUserId: order.ownerUserId, contactEmail: order.contactValue, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, buyerNote: order.buyerNote, locale: order.locale }).from(order).where(eq(order.id, orderId)).limit(1),
+    db.select({ siteName: siteSetting.siteName, siteUrl: siteSetting.siteUrl, footerText: siteSetting.footerText, supportContact: siteSetting.supportContact, translationsJson: siteSetting.translationsJson }).from(siteSetting).where(eq(siteSetting.id, 1)).limit(1),
     db.select({ contentSnapshot: orderDelivery.contentSnapshot }).from(orderDelivery).where(and(eq(orderDelivery.orderId, orderId), eq(orderDelivery.status, "SUCCESS"))),
   ]);
   if (!record) return null;
-  return { siteName: settings?.siteName || "CFFK", orderNo: record.orderNo, contactEmail: record.contactEmail || "未提供", productName: record.productName, quantity: record.quantity, amount: new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(record.amount / 100), buyerNote: record.buyerNote || "无", deliveryItems: deliveryItemsFromSnapshots(deliveries.flatMap((item) => item.contentSnapshot ? [item.contentSnapshot] : [])), queryUrl: orderQueryUrl(settings?.siteUrl, record.orderNo, record.ownerUserId), footerText: settings?.footerText || "", supportContact: settings?.supportContact || "" };
+  const locale = isStorefrontLocale(record.locale) ? record.locale : defaultStorefrontLocale;
+  const siteTranslations = readContentTranslations(settings?.translationsJson, SITE_TRANSLATION_FIELDS);
+  const notProvided = locale === "en-US" ? "Not provided" : "未提供";
+  const none = locale === "en-US" ? "None" : locale === "zh-TW" ? "無" : "无";
+  const formattedAmount = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(record.amount / 100);
+  return {
+    locale,
+    variables: { siteName: settings?.siteName || "CFFK", orderNo: record.orderNo, contactEmail: record.contactEmail || notProvided, productName: record.productName, quantity: record.quantity, amount: locale === "zh-CN" ? formattedAmount : `${formattedAmount} CNY`, buyerNote: record.buyerNote || none, deliveryItems: deliveryItemsFromSnapshots(deliveries.flatMap((item) => item.contentSnapshot ? [item.contentSnapshot] : [])), queryUrl: orderQueryUrl(settings?.siteUrl, record.orderNo, record.ownerUserId), footerText: localizeContentText(settings?.footerText, siteTranslations, locale, "footerText") || "", supportContact: localizeContentText(settings?.supportContact, siteTranslations, locale, "supportContact") || "" },
+  };
 }

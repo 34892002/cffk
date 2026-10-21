@@ -1,17 +1,21 @@
 import { eq } from "drizzle-orm";
 import { siteSetting } from "@/database/drizzle/schema";
 import { createDrizzleDb } from "@/database/drizzle";
+import { SITE_TRANSLATION_FIELDS, readContentTranslations } from "@/lib/content-translations";
+import { buildLocalizedOptionalText, buildLocalizedText, type LocalizedNullableText, type LocalizedText } from "@/lib/i18n/localized-text";
+
+export { SITE_TRANSLATION_FIELDS };
 
 export type PublicSiteSettings = {
   name: string;
-  subtitle: string | null;
+  subtitle: LocalizedNullableText;
   siteUrl: string | null;
   logo: string | null;
   logoIcon: string | null;
-  notice: string | null;
-  supportContact: string | null;
-  footerText: string | null;
-  orderNotice: string | null;
+  notice: LocalizedNullableText;
+  supportContact: LocalizedText;
+  footerText: LocalizedText;
+  orderNotice: LocalizedNullableText;
 };
 
 type SiteSettingRecord = typeof siteSetting.$inferSelect;
@@ -40,6 +44,7 @@ const defaultSettings: SiteSettingRecord = {
   orderNotice: null,
   headCode: null,
   footerCode: null,
+  translationsJson: null,
   registrationEnabled: false,
   timezone: "Asia/Shanghai",
   createdAt: new Date(0),
@@ -65,15 +70,16 @@ export function invalidateSiteSettings(_database?: D1Database) {
 }
 
 export function toPublicSiteSettings(record: SiteSettingRecord): PublicSiteSettings {
+  const translations = readContentTranslations(record.translationsJson, SITE_TRANSLATION_FIELDS);
   return {
     name: record.siteName,
-    subtitle: record.siteSubtitle,
+    subtitle: buildLocalizedOptionalText(record.siteSubtitle, translations, "subtitle"),
     siteUrl: record.siteUrl,
     logo: record.logo,
     logoIcon: record.logoIcon || record.logo,
-    notice: record.notice,
-    supportContact: record.supportContact?.trim() || DEFAULT_SUPPORT_CONTACT,
-    footerText: record.footerText?.trim() || DEFAULT_FOOTER_TEXT,
-    orderNotice: record.orderNotice,
+    notice: buildLocalizedOptionalText(record.notice, translations, "notice"),
+    supportContact: buildLocalizedText(record.supportContact?.trim() || DEFAULT_SUPPORT_CONTACT, translations, "supportContact"),
+    footerText: buildLocalizedText(record.footerText?.trim() || DEFAULT_FOOTER_TEXT, translations, "footerText"),
+    orderNotice: buildLocalizedOptionalText(record.orderNotice, translations, "orderNotice"),
   };
 }
