@@ -1,4 +1,7 @@
-ALTER TABLE `order` ADD `locale` text;
+ALTER TABLE `category` ADD `translationsJson` text;--> statement-breakpoint
+ALTER TABLE `order` ADD `locale` text;--> statement-breakpoint
+ALTER TABLE `product_v2` ADD `translationsJson` text;--> statement-breakpoint
+ALTER TABLE `siteSetting` ADD `translationsJson` text;
 --> statement-breakpoint
 UPDATE `emailTemplate`
 SET `templateJson` = json_set(`templateJson`, '$.translations', json('{"zh-TW":{"subject":"[{{siteName}}] 驗證您的電子郵件","body":"請點擊以下連結驗證您的電子郵件：\n\n{{actionUrl}}\n\n如果這不是您的操作，請忽略此郵件。"},"en-US":{"subject":"[{{siteName}}] Verify your email","body":"Click the link below to verify your email address:\n\n{{actionUrl}}\n\nIf you did not request this, you can ignore this email."}}')),

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b1cea587-7153-4ebe-9122-71e600e28a81",
+  "id": "b67618d0-f59c-40de-ac99-89cd939b76b5",
   "prevId": "eabd07db-70c7-4fb7-aed5-c998d00da297",
   "tables": {
     "account": {
@@ -434,6 +434,13 @@
         },
         "description": {
           "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "translationsJson": {
+          "name": "translationsJson",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -2155,6 +2162,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "translationsJson": {
+          "name": "translationsJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "status": {
           "name": "status",
           "type": "text",
@@ -3026,6 +3040,13 @@
         },
         "footerCode": {
           "name": "footerCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "translationsJson": {
+          "name": "translationsJson",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
