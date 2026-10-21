@@ -1,3 +1,5 @@
-export default function description(pageContext: { site?: { subtitle?: string | null } }) {
-  return pageContext.site?.subtitle || "自动发卡系统";
+import { seoTextFor } from "@/lib/i18n/seo";
+
+export default function description(pageContext: { site?: { subtitle?: string | null }; locale?: string }) {
+  return pageContext.site?.subtitle || seoTextFor(pageContext.locale).description;
 }

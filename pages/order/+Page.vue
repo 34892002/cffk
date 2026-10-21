@@ -147,7 +147,7 @@
     </section>
 
     <Dialog :open="clearTarget !== undefined" @update:open="open => { if (!open) clearTarget = undefined; }">
-      <DialogContent>
+      <DialogContent :close-label="messages.common.close">
         <DialogHeader>
           <DialogTitle>{{ clearTarget ? t(messages.guestOrders.clear.titleOne, { email: clearTarget }) : messages.guestOrders.clear.titleAll }}</DialogTitle>
           <DialogDescription>{{ clearTarget ? messages.guestOrders.clear.descriptionOne : messages.guestOrders.clear.descriptionAll }}</DialogDescription>

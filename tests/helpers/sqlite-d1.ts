@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // @ts-expect-error Tests run with Bun, while this project intentionally omits Bun's global type package.
 import { Database } from "bun:sqlite";
@@ -60,16 +60,25 @@ class SqliteD1Statement {
   }
 }
 
-export function createTestDatabase() {
-  const sqlite = new Database(":memory:");
-  sqlite.run("PRAGMA foreign_keys = ON");
-  for (const migrationName of ["0000_initial.sql", "0001_flowery_doomsday.sql", "0002_glamorous_daimon_hellstrom.sql", "0003_normal_forge.sql"]) {
+export function listMigrationFiles() {
+  const migrationsDirectory = fileURLToPath(new URL("../../database/migrations/", import.meta.url));
+  return readdirSync(migrationsDirectory).filter((name) => name.endsWith(".sql")).sort();
+}
+
+export function applyMigrationFiles(sqlite: Database, migrationNames: readonly string[]) {
+  for (const migrationName of migrationNames) {
     const migrationPath = fileURLToPath(new URL(`../../database/migrations/${migrationName}`, import.meta.url));
     const migration = readFileSync(migrationPath, "utf8");
     for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
       sqlite.run(statement);
     }
   }
+}
+
+export function createTestDatabase() {
+  const sqlite = new Database(":memory:");
+  sqlite.run("PRAGMA foreign_keys = ON");
+  applyMigrationFiles(sqlite, listMigrationFiles());
 
   const database = {
     prepare(sql: string) {

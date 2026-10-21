@@ -1,5 +1,5 @@
 <template>
-  <a href="/" class="flex min-w-0 items-center gap-2 font-semibold" aria-label="返回首页">
+  <a href="/" class="flex min-w-0 items-center gap-2 font-semibold" :aria-label="messages.nav.home">
     <img :src="brandLogoUrl" :alt="`${siteName} Logo`" class="size-9 shrink-0 rounded-md object-contain" />
     <span class="truncate">{{ siteName }}</span>
   </a>
@@ -10,11 +10,13 @@ import { computed } from "vue";
 import { usePageContext } from "vike-vue/usePageContext";
 
 import logoUrl from "@/assets/logo.svg?url";
+import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 
 type Site = { name?: string | null; logo?: string | null };
 type PageContext = ReturnType<typeof usePageContext> & { site?: Site | null };
 
 const pageContext = usePageContext() as PageContext;
+const { messages } = useStorefrontPreferences();
 const siteName = computed(() => pageContext.site?.name?.trim() || "CFFK-Shop");
 const brandLogoUrl = computed(() => pageContext.site?.logo || logoUrl);
 </script>

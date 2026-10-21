@@ -7,6 +7,7 @@ import { isJsonFormEmail } from "@/lib/json-form-values";
 import { normalizeOrderEmail } from "@/lib/local-orders";
 import { canConfirmPayment } from "@/lib/order-state";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
+import type { StorefrontLocale } from "@/lib/i18n/locale";
 import { validateDiscountForItem, positiveInteger } from "@/server/discount/service";
 import { allocateCardsForPaidOrder, countAvailableCards } from "@/server/inventory/allocator";
 import { validateAddressId, validateAddressInput } from "@/server/address/validation";
@@ -33,6 +34,7 @@ export type CreateOrderInput = {
   contactType: ContactType;
   contactValue?: string;
   buyerNote?: string;
+  locale?: StorefrontLocale;
   addressId?: number;
   address?: PaymentAddressInput;
   discountCode?: string;
@@ -145,9 +147,10 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
   const orderNo = generateOrderNo();
   const paymentChannel = normalizePaymentChannel(input.paymentProvider, input.paymentChannel);
   const statements: D1PreparedStatement[] = [
-    database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productSkuId, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, contactType, contactValue, contactEmailNormalized, buyerNote, addressSnapshotJson, paymentProvider, paymentChannel, fulfillmentSourceSnapshot, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
+    database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productSkuId, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, contactType, contactValue, contactEmailNormalized, buyerNote, locale, addressSnapshotJson, paymentProvider, paymentChannel, fulfillmentSourceSnapshot, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
       orderNo, ownerUserId, item.id, sku.id, item.name, sku.name, sku.price, quantity, amount, input.contactType, contactValue,
       input.contactType === "EMAIL" ? normalizeOrderEmail(contactValue) : null, input.buyerNote?.trim() || null,
+      input.locale ?? null,
       addressSnapshotJson, input.paymentProvider, paymentChannel, sku.fulfillmentSource, sku.deliveryType,
       sku.deliveryType === "FIXED_CARD" ? sku.fixedDeliveryContent!.trim() : null, reservePhysical ? 1 : 0,
       discountId, discountCodeValue, discountId === null ? null : originalAmount, discountId === null ? null : discountAmount,

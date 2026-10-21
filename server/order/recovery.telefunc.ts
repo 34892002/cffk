@@ -4,6 +4,7 @@ import { guestOrderRecoveryChallenge, order } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 
 import { formatCentsAsYuan } from "@/lib/payment-utils";
+import type { StorefrontLocale } from "@/lib/i18n/locale";
 import { dispatchPush } from "@/server/push/service";
 import type { PushDispatchInput } from "@/server/push/types";
 import { getSiteSettings } from "@/server/site/public-settings";
@@ -26,6 +27,7 @@ type RecoveryRuntime = Record<string, unknown> & {
 type TelefuncContext = {
   env?: RecoveryRuntime;
   clientIp?: string | null;
+  locale?: StorefrontLocale;
 };
 
 export type GuestOrderRecoverySummary = {
@@ -41,11 +43,12 @@ export type GuestOrderRecoveryResult = {
 };
 
 function recoveryContext() {
-  const runtime = getContext<TelefuncContext>().env;
+  const context = getContext<TelefuncContext>();
+  const runtime = context.env;
   if (!runtime?.DB) appError("DATABASE_UNAVAILABLE");
   const secret = runtime.BETTER_AUTH_SECRET?.trim();
   if (!secret) appError("DATABASE_UNAVAILABLE");
-  return { database: runtime.DB, runtime, secret, clientIp: getContext<TelefuncContext>().clientIp };
+  return { database: runtime.DB, runtime, secret, clientIp: context.clientIp, locale: context.locale };
 }
 
 
@@ -92,7 +95,7 @@ async function insertRateLimitedChallenge(database: D1Database, values: {
 
 async function internalOnSendGuestOrderRecoveryCode(input: { email: string }) {
   const emailNormalized = normalizeRecoveryEmail(input?.email);
-  const { database, runtime, secret, clientIp } = recoveryContext();
+  const { database, runtime, secret, clientIp, locale } = recoveryContext();
   await enforceOrderRequestRateLimit(database, { action: "RECOVERY", userId: null, clientIp });
   const [matchingOrder] = await createDrizzleDb(database).select({ id: order.id }).from(order).where(and(
     isNull(order.ownerUserId),
@@ -119,6 +122,7 @@ async function internalOnSendGuestOrderRecoveryCode(input: { email: string }) {
     recipient: { type: "CUSTOMER", address: emailNormalized },
     variables: { siteName: settings.siteName, code, expiresMinutes: CODE_TTL_MS / 60_000 },
     source: `guest-order-recovery:${challengeId}`,
+    ...(locale ? { locale } : {}),
   } as PushDispatchInput;
 
   try {

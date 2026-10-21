@@ -4,6 +4,7 @@ export default {
   languageName: "繁體中文",
   nav: {
     main: "主導覽",
+    home: "返回首頁",
     myOrders: "我的訂單",
     orderLookup: "訂單查詢",
     signIn: "登入",
@@ -128,6 +129,13 @@ export default {
     requestFailed: "系統異常，請稍後再試。",
     queryFailed: "查詢失敗",
     loading: "載入中...",
+    close: "關閉",
+  },
+  errorPage: {
+    notFoundTitle: "頁面不存在",
+    notFoundDescription: "你造訪的頁面不存在或已被移除。",
+    errorTitle: "頁面發生錯誤",
+    errorDescription: "頁面暫時無法載入，請稍後再試。",
   },
   productCheckout: {
     defaultCategory: "商品",
@@ -213,6 +221,7 @@ export default {
     paymentStatusLabel: "付款狀態",
     exactAmountNotice: "請依此金額付款，金額必須完全一致",
     scanWithAlipay: "請使用支付寶掃碼付款",
+    qrCodeLabel: "支付寶付款 QR Code",
     preparingQrCode: "正在準備收款 QR Code...",
     autoRefreshNotice: "付款完成後，頁面會自動更新訂單狀態。",
     notQrPayment: "該訂單不使用站內掃碼付款，請返回訂單頁面繼續付款。",

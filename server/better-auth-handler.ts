@@ -6,6 +6,7 @@ import {
 } from "@universal-middleware/core";
 import { betterAuth } from "better-auth";
 import { getAuthConfig } from "./better-auth";
+import { resolveRequestLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 import { resolveAuthOrigin, rewriteRequestOrigin, withAuthNoStore } from "./auth-origin";
 import { eq, sql } from "drizzle-orm";
 import { schema } from "../database/drizzle/schema";
@@ -13,8 +14,8 @@ import { getDrizzleDb } from "../database/drizzle";
 import { hasRoot } from "./admin";
 
 // On Cloudflare the D1 binding is request-scoped (fresh instance per request); elsewhere it's memoized.
-function getAuth(runtime: RuntimeAdapter, publicOrigin?: string) {
-  return betterAuth(getAuthConfig(runtime, publicOrigin));
+function getAuth(runtime: RuntimeAdapter, publicOrigin?: string, locale?: StorefrontLocale) {
+  return betterAuth(getAuthConfig(runtime, publicOrigin, locale ? { locale } : {}));
 }
 
 // Note: You can directly define a server middleware instead of defining a Universal Middleware. (You can remove @universal-middleware/* — Vike's scaffolder uses it only to simplify its internal logic, see https://github.com/vikejs/vike/discussions/3116)
@@ -84,6 +85,10 @@ export const betterAuthHandler = enhance(
   async (request, _context, runtime) => {
     const publicOrigin = await resolveAuthOrigin(request, runtime);
     const authRequest = rewriteRequestOrigin(request, publicOrigin);
+    const locale = resolveRequestLocale({
+      cookie: request.headers.get("cookie"),
+      acceptLanguage: request.headers.get("accept-language"),
+    });
     const authPath = new URL(authRequest.url).pathname;
     const isEmailSignUp = authRequest.method === "POST" && authPath.endsWith("/sign-up/email");
 
@@ -123,7 +128,7 @@ export const betterAuthHandler = enhance(
       }
     }
 
-    return withAuthNoStore(await getAuth(runtime, publicOrigin).handler(authRequest));
+    return withAuthNoStore(await getAuth(runtime, publicOrigin, locale).handler(authRequest));
   },
   {
     name: "my-app:better-auth-handler",

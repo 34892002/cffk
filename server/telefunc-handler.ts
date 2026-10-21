@@ -1,5 +1,6 @@
 import { enhance, type UniversalHandler } from "@universal-middleware/core";
 import { onBug, serve } from "telefunc";
+import { resolveRequestLocale } from "@/lib/i18n/locale";
 import { reportUnexpectedRequestError, reportUnexpectedServerError } from "./error-handling";
 
 onBug((cause) => {
@@ -19,6 +20,10 @@ export const telefuncHandler: UniversalHandler = enhance(
           // Cloudflare writes this header at the edge. Do not trust arbitrary
           // forwarding headers for abuse-prevention identity.
           clientIp: request.headers.get("CF-Connecting-IP"),
+          locale: resolveRequestLocale({
+            cookie: request.headers.get("cookie"),
+            acceptLanguage: request.headers.get("accept-language"),
+          }),
         },
       });
 

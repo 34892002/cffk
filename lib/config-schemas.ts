@@ -1,3 +1,4 @@
+import { isStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 
 export type AlipayMode = "web" | "face_to_face";
 
@@ -76,11 +77,17 @@ export type S3Config = {
   forcePathStyle: boolean;
 };
 
+export type EmailTemplateContent = {
+  subject: string;
+  body: string;
+};
+
 export type EmailTemplateConfig = {
   subject: string;
   body: string;
   format: "text";
   variables?: string[];
+  translations?: Partial<Record<StorefrontLocale, EmailTemplateContent>>;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -334,10 +341,27 @@ export function parseEmailTemplateConfig(json: string): EmailTemplateConfig {
   }
 
   if (value.format !== "text") throw new Error("Invalid configuration: format must be text");
+  const translations = parseEmailTemplateTranslations(value.translations);
   return {
     subject: normalizeTemplateText(requireString(value.subject, "subject")),
     body: normalizeTemplateText(requireString(value.body, "body")),
     format: "text",
     ...(variables ? { variables } : {}),
+    ...(translations ? { translations } : {}),
   };
+}
+
+function parseEmailTemplateTranslations(value: unknown): EmailTemplateConfig["translations"] | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error("Invalid configuration: translations must be an object");
+  const translations: Partial<Record<StorefrontLocale, EmailTemplateContent>> = {};
+  for (const [locale, content] of Object.entries(value)) {
+    if (!isStorefrontLocale(locale)) throw new Error("Invalid configuration: unsupported template locale");
+    if (!isRecord(content)) throw new Error("Invalid configuration: template locale content must be an object");
+    translations[locale] = {
+      subject: normalizeTemplateText(requireString(content.subject, `${locale}.subject`)),
+      body: normalizeTemplateText(requireString(content.body, `${locale}.body`)),
+    };
+  }
+  return Object.keys(translations).length > 0 ? translations : undefined;
 }

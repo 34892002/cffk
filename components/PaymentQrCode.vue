@@ -1,12 +1,15 @@
 <template>
-  <canvas ref="canvas" class="mx-auto rounded-md bg-white p-2" aria-label="支付宝付款二维码" role="img" />
+  <canvas ref="canvas" class="mx-auto rounded-md bg-white p-2" :aria-label="messages.checkout.qrCodeLabel" role="img" />
 </template>
 
 <script lang="ts" setup>
 import QRCode from "qrcode";
 import { onMounted, ref, watch } from "vue";
 
+import { useStorefrontPreferences } from "@/lib/storefront-preferences";
+
 const props = defineProps<{ value: string }>();
+const { messages } = useStorefrontPreferences();
 const canvas = ref<HTMLCanvasElement | null>(null);
 
 async function renderCode() {

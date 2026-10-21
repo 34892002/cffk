@@ -232,6 +232,7 @@ export const order = sqliteTable(
     contactValue: text("contactValue"),
     contactEmailNormalized: text("contactEmailNormalized"),
     buyerNote: text("buyerNote"),
+    locale: text("locale"),
     addressSnapshotJson: text("addressSnapshotJson"),
     paymentProvider: text("paymentProvider").notNull(),
     paymentChannel: text("paymentChannel"),

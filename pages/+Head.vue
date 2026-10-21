@@ -21,10 +21,11 @@
 import { computed } from "vue";
 import { usePageContext } from "vike-vue/usePageContext";
 import defaultLogoUrl from "@/assets/logo.svg?url";
+import { seoTextFor } from "@/lib/i18n/seo";
 
 type Site = { name?: string; subtitle?: string | null; siteUrl?: string | null; logo?: string | null; logoIcon?: string | null };
 type ProductData = { name?: string; subtitle?: string | null; description?: string | null; coverImage?: string | null };
-type SeoPageContext = { site?: Site; data?: ProductData; urlPathname?: string; routeParams?: { adminPath?: string }; urlParsed?: { origin?: string } };
+type SeoPageContext = { site?: Site; data?: ProductData; urlPathname?: string; locale?: string; routeParams?: { adminPath?: string }; urlParsed?: { origin?: string } };
 
 const pageContext = usePageContext() as SeoPageContext;
 const isPrivatePage = computed(() => {
@@ -34,13 +35,14 @@ const isPrivatePage = computed(() => {
 const siteUrl = computed(() => normalizeOrigin(pageContext.site?.siteUrl) || normalizeOrigin(pageContext.urlParsed?.origin));
 const iconUrl = computed(() => pageContext.site?.logoIcon || pageContext.site?.logo || defaultLogoUrl);
 const seo = computed(() => {
-  const siteName = pageContext.site?.name || "CFFK-Shop";
+  const fallback = seoTextFor(pageContext.locale);
+  const siteName = pageContext.site?.name || fallback.siteName;
   const product = pageContext.data;
   const isProductPage = Boolean(product?.name && (pageContext.urlPathname || "").startsWith("/product/"));
   const title = isProductPage ? `${product?.name} - ${siteName}` : siteName;
   const description = isProductPage
-    ? product?.subtitle?.trim() || toPlainText(product?.description) || pageContext.site?.subtitle || "自动发卡系统"
-    : pageContext.site?.subtitle || "自动发卡系统";
+    ? product?.subtitle?.trim() || toPlainText(product?.description) || pageContext.site?.subtitle || fallback.description
+    : pageContext.site?.subtitle || fallback.description;
   const canonicalUrl = !isPrivatePage.value && siteUrl.value ? new URL(pageContext.urlPathname || "/", `${siteUrl.value}/`).toString() : null;
   const imageUrl = !isPrivatePage.value ? toAbsoluteUrl(product?.coverImage || pageContext.site?.logoIcon || pageContext.site?.logo || defaultLogoUrl, siteUrl.value) : null;
 

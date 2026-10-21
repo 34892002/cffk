@@ -171,7 +171,10 @@ async function deleteRow() {
 - 字典位于 `lib/i18n/`。`zh-CN.ts` 是 key 的唯一来源，并导出 `Messages` 类型；`en-US.ts` 与 `zh-TW.ts` 必须用 `satisfies Messages` 校验，禁止 `as unknown as`、展开中文对象兜底或任何自动简繁转换。繁体必须人工撰写。
 - 公开页面的可见文案与可访问性标签必须来自 `useStorefrontPreferences().messages`，不得在页面硬编码中文或英文。
 - 服务端只返回稳定错误码，文案位于 `lib/i18n/error-messages/`，`lib/error-messages.ts` 仍是唯一读取入口。新增错误码必须三语齐全，`tests/core/i18n.test.ts` 会校验 key 对齐、占位符一致和英文/繁体纯净度。
-- 语言偏好只保存在浏览器 `localStorage`，不写入数据库。禁止为语言展示新增 D1 读写或额外查询。
+- 语言偏好保存在 `storefront-locale` cookie 中，服务端在 `+onBeforeRender` 读取 cookie / `Accept-Language` 得到 `pageContext.locale`，再由 `+lang` 输出 `<html lang>`，避免首屏闪中文。`localStorage` 只用于旧版偏好的一次性迁移，不得重新引入。
+- 下单时由服务端从请求上下文（Telefunc `locale`）写入 `order.locale`，不要在客户端请求参数里传递语言。客户邮件按订单语言选择模板，管理员邮件固定简体中文；不得为语言新增额外 D1 查询。
+- 邮件模板的多语言文案存在 `templateJson.translations`，缺失时回退到简体中文主模板。`renderPushMessageTemplate` 是唯一选文入口。
+- SEO 兜底文案、`_error` 页、二维码与品牌 `aria-label` 也必须来自字典或 `seoTextFor()`，不得写死单一语言。
 
 ## 2. 后台信息架构、目录与导航元数据
 
@@ -551,6 +554,8 @@ return body.data;
 电子邮件只作为“推送管理”下的一个二级模块显示一次；邮件统计和通道配置只能作为该模块的三级页面出现。消息模板是推送管理的并列二级项，供电子邮件、微信三方和 Telegram 共用。不得在推送模块新增或保留 `/mail/*`、`/notifications/*` 等平行路径。推送规则统一由 `server/push` 管理，页面通过推送配置决定订单事件是否向客户或唯一 root 投递。渠道实现实际投递时，必须同步写入 `pushLog`；不要为电子邮件、微信三方或 Telegram 分别创建重复的发送日志页面。
 
 `pushLog` 是后台“发送日志”的唯一数据源。渠道尚未具备发送能力时，只保存配置，不得生成伪造的成功或失败记录。
+
+消息模板以简体中文为默认正文，`templateJson.translations` 保存 `zh-TW` / `en-US` 版本；客户消息按收件人语言选择，管理员消息固定简体中文。模板新增语言时必须在后台“推送管理 → 消息模板”中编辑，不得在代码里硬编码第二套文案。
 
 ## 7. 新功能完成前检查
 

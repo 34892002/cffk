@@ -88,7 +88,7 @@
     </Dialog>
 
     <Dialog :open="clearAddressesDialogOpen" @update:open="(open) => { clearAddressesDialogOpen = open; if (!open) selectedAddress = previousAddressSelection; }">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent :close-label="messages.common.close" class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{{ messages.productCheckout.confirmClearAddressesTitle }}</DialogTitle>
           <DialogDescription>{{ messages.productCheckout.confirmClearAddressesDescription }}</DialogDescription>

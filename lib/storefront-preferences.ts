@@ -1,7 +1,9 @@
 import { computed, onMounted, ref, type ComputedRef } from "vue";
+import { usePageContext } from "vike-vue/usePageContext";
 
 import { setActiveLocale } from "@/lib/active-locale";
 import enUS from "@/lib/i18n/en-US";
+import { defaultStorefrontLocale, isStorefrontLocale, legacyLocaleStorageKey, readCookieValue, storefrontLocaleCookie, type StorefrontLocale } from "@/lib/i18n/locale";
 import zhCN from "@/lib/i18n/zh-CN";
 import zhTW from "@/lib/i18n/zh-TW";
 
@@ -11,55 +13,50 @@ const locales = {
   "zh-TW": zhTW,
 } as const;
 
-export type StorefrontLocale = keyof typeof locales;
+export type { StorefrontLocale } from "@/lib/i18n/locale";
 export type StorefrontTheme = "light" | "dark";
 type Messages = (typeof locales)[StorefrontLocale];
 
-const localeStorageKey = "storefront-locale";
 const themeStorageKey = "storefront-theme";
-const locale = ref<StorefrontLocale>("zh-CN");
+const localeOverride = ref<StorefrontLocale | null>(null);
 const theme = ref<StorefrontTheme>("light");
 let initialized = false;
-
-function isLocale(value: string | null): value is StorefrontLocale {
-  return value === "zh-CN" || value === "zh-TW" || value === "en-US";
-}
 
 function isTheme(value: string | null): value is StorefrontTheme {
   return value === "light" || value === "dark";
 }
 
-export function detectBrowserLocale(browserLocales: readonly string[]): StorefrontLocale {
-  for (const browserLocale of browserLocales) {
-    const normalizedLocale = browserLocale.toLowerCase();
-    if (normalizedLocale === "zh-tw" || normalizedLocale.startsWith("zh-hant") || normalizedLocale.startsWith("zh-hk") || normalizedLocale.startsWith("zh-mo")) return "zh-TW";
-    if (normalizedLocale.startsWith("en")) return "en-US";
-    if (normalizedLocale.startsWith("zh")) return "zh-CN";
-  }
-
-  return "zh-CN";
+function writeLocaleCookie(value: StorefrontLocale) {
+  const secure = window.location.protocol === "https:" ? "; secure" : "";
+  document.cookie = `${storefrontLocaleCookie}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax${secure}`;
 }
 
-function applyDocumentPreferences() {
+function applyDocumentPreferences(locale: StorefrontLocale) {
   document.documentElement.classList.toggle("dark", theme.value === "dark");
-  document.documentElement.lang = locale.value;
+  document.documentElement.lang = locale;
 }
 
-function initialize() {
+function initialize(serverLocale: StorefrontLocale) {
   if (initialized || typeof window === "undefined") return;
   initialized = true;
 
-  const savedLocale = window.localStorage.getItem(localeStorageKey);
-  const savedTheme = window.localStorage.getItem(themeStorageKey);
-  if (isLocale(savedLocale)) {
-    locale.value = savedLocale;
-  } else {
-    locale.value = detectBrowserLocale(navigator.languages.length > 0 ? navigator.languages : [navigator.language]);
-    window.localStorage.setItem(localeStorageKey, locale.value);
+  // Locale used to live only in localStorage. Adopt it once, then keep the
+  // cookie as the single source so the server can render the right language.
+  if (!isStorefrontLocale(readCookieValue(document.cookie, storefrontLocaleCookie))) {
+    const legacyLocale = window.localStorage.getItem(legacyLocaleStorageKey);
+    if (isStorefrontLocale(legacyLocale)) {
+      localeOverride.value = legacyLocale;
+      writeLocaleCookie(legacyLocale);
+    }
   }
+  window.localStorage.removeItem(legacyLocaleStorageKey);
+
+  const savedTheme = window.localStorage.getItem(themeStorageKey);
   if (isTheme(savedTheme)) theme.value = savedTheme;
-  setActiveLocale(locale.value);
-  applyDocumentPreferences();
+
+  const activeLocale = localeOverride.value ?? serverLocale;
+  setActiveLocale(activeLocale);
+  applyDocumentPreferences(activeLocale);
 }
 
 function replaceParams(value: string, params: Record<string, string | number>) {
@@ -67,30 +64,33 @@ function replaceParams(value: string, params: Record<string, string | number>) {
 }
 
 export function useStorefrontPreferences(): {
-  locale: typeof locale;
+  locale: ComputedRef<StorefrontLocale>;
   theme: typeof theme;
   messages: ComputedRef<Messages>;
   setLocale: (nextLocale: StorefrontLocale) => void;
   setTheme: (nextTheme: StorefrontTheme) => void;
   t: (value: string, params?: Record<string, string | number>) => string;
 } {
-  onMounted(initialize);
-
+  const pageContext = usePageContext() as { locale?: string };
+  const serverLocale = isStorefrontLocale(pageContext.locale) ? pageContext.locale : defaultStorefrontLocale;
+  const locale = computed<StorefrontLocale>(() => localeOverride.value ?? serverLocale);
   const messages = computed(() => locales[locale.value]);
 
+  onMounted(() => initialize(serverLocale));
+
   function setLocale(nextLocale: StorefrontLocale) {
-    locale.value = nextLocale;
+    localeOverride.value = nextLocale;
     setActiveLocale(nextLocale);
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(localeStorageKey, nextLocale);
-    applyDocumentPreferences();
+    writeLocaleCookie(nextLocale);
+    applyDocumentPreferences(nextLocale);
   }
 
   function setTheme(nextTheme: StorefrontTheme) {
     theme.value = nextTheme;
     if (typeof window === "undefined") return;
     window.localStorage.setItem(themeStorageKey, nextTheme);
-    applyDocumentPreferences();
+    applyDocumentPreferences(locale.value);
   }
 
   function t(value: string, params: Record<string, string | number> = {}) {

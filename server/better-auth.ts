@@ -1,5 +1,6 @@
 import { env } from "./env";
 import { getTurnstileConfig } from "@/lib/turnstile-config";
+import type { StorefrontLocale } from "@/lib/i18n/locale";
 import type { RuntimeAdapter } from "@universal-middleware/core";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
@@ -17,6 +18,7 @@ type AuthRuntimeEnv = Record<string, unknown> & { DB?: D1Database };
 
 type AuthConfigOptions = {
   allowSetupRegistration?: boolean;
+  locale?: StorefrontLocale;
 };
 
 const REGISTRATION_DISABLED_MESSAGE = "本站还未开启注册功能，如需帮助请联系客服。";
@@ -44,6 +46,7 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, o
         variables: { siteName: settings?.siteName || APP_NAME, actionUrl },
         source: `better-auth:${scene.toLowerCase()}:${crypto.randomUUID()}`,
         recipient: { type: "CUSTOMER", address: recipient },
+        ...(options.locale ? { locale: options.locale } : {}),
       });
       if (!results.some((result) => result.status === "SUCCESS")) {
         console.error(`Better Auth ${scene.toLowerCase()} email delivery did not succeed`);

@@ -2,6 +2,7 @@ const messages = {
   languageName: "简体中文",
   nav: {
     main: "主导航",
+    home: "返回首页",
     myOrders: "我的订单",
     orderLookup: "订单查询",
     signIn: "登录",
@@ -107,6 +108,13 @@ const messages = {
     requestFailed: "接口异常，请稍后重试。",
     queryFailed: "查询失败",
     loading: "加载中...",
+    close: "关闭",
+  },
+  errorPage: {
+    notFoundTitle: "页面不存在",
+    notFoundDescription: "你访问的页面不存在或已被移除。",
+    errorTitle: "页面出错",
+    errorDescription: "页面暂时无法加载，请稍后重试。",
   },
   productCheckout: {
     defaultCategory: "商品",
@@ -177,6 +185,7 @@ const messages = {
     paymentStatusLabel: "支付状态",
     exactAmountNotice: "请按此金额付款，金额必须完全一致",
     scanWithAlipay: "请使用支付宝扫码付款",
+    qrCodeLabel: "支付宝付款二维码",
     preparingQrCode: "正在准备收款二维码...",
     autoRefreshNotice: "支付完成后，页面会自动更新订单状态。",
     notQrPayment: "该订单不使用站内扫码支付，请返回订单页面继续支付。",

@@ -1,10 +1,13 @@
 import type { PageContextServer } from "vike/types";
 import { env } from "@/server/env";
+import { resolveHeadersLocale } from "@/lib/i18n/locale";
 import { DEFAULT_FOOTER_TEXT, DEFAULT_SUPPORT_CONTACT, getSiteSettings, toPublicSiteSettings } from "@/server/site/public-settings";
 
-export async function onBeforeRender(_pageContext: PageContextServer) {
+export async function onBeforeRender(pageContext: PageContextServer) {
+  const locale = resolveHeadersLocale(pageContext.headers as Record<string, string | undefined> | undefined);
+
   try {
-    return { pageContext: { site: toPublicSiteSettings(await getSiteSettings(env.DB)) } };
+    return { pageContext: { site: toPublicSiteSettings(await getSiteSettings(env.DB)), locale } };
   } catch {
     return {
       pageContext: {
@@ -19,6 +22,7 @@ export async function onBeforeRender(_pageContext: PageContextServer) {
           footerText: DEFAULT_FOOTER_TEXT,
           orderNotice: null,
         },
+        locale,
       },
     };
   }

@@ -138,6 +138,9 @@ dist
 !.dev.vars.example
 !.env.example
 
+# Zed review worktrees
+.review-*/
+
 # Vercel
 .vercel/
 

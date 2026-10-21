@@ -244,7 +244,7 @@ import PaymentQrCode from "@/components/PaymentQrCode.vue";
 | --- | --- |
 | `value` | 二维码承载的支付 URL；为空时不渲染内容 |
 
-组件使用 canvas 并提供 `role="img"` 和“支付宝付款二维码”标签。调用方只传后端返回的支付 URL，不记录或展示支付签名、密钥等敏感配置。
+组件使用 canvas 并提供 `role="img"` 和 `checkout.qrCodeLabel` 字典标签（随当前界面语言切换）。调用方只传后端返回的支付 URL，不记录或展示支付签名、密钥等敏感配置。
 
 ## 新增组件规则
 

@@ -120,10 +120,11 @@ async function internalOnRetryPushLog(id: number) {
   });
   if (log.orderId) {
     const { orderPushVariables } = await import("./service");
-    const variables = await orderPushVariables(database, log.orderId);
-    if (!variables) appError("PUSH_LOG_NOT_RETRYABLE");
-    const parsed = JSON.parse(payload) as { input: { variables: Record<string, string | number> } };
-    parsed.input.variables = variables;
+    const orderPayload = await orderPushVariables(database, log.orderId);
+    if (!orderPayload) appError("PUSH_LOG_NOT_RETRYABLE");
+    const parsed = JSON.parse(payload) as { input: { variables: Record<string, string | number>; locale?: string } };
+    parsed.input.variables = orderPayload.variables;
+    parsed.input.locale = log.messageType === "ADMIN" ? "zh-CN" : orderPayload.locale;
     await db.insert(pushRetry).values({ pushLogId: id, payloadJson: JSON.stringify(parsed), status: "PENDING", attemptCount: 0, maxAttempts: PUSH_MAX_ATTEMPTS, nextAttemptAt: now, lastError: null, createdAt: now, updatedAt: now }).onConflictDoUpdate({ target: pushRetry.pushLogId, set: { payloadJson: JSON.stringify(parsed), status: "PENDING", attemptCount: 0, maxAttempts: PUSH_MAX_ATTEMPTS, nextAttemptAt: now, lastError: null, updatedAt: now } });
   } else {
     await db.insert(pushRetry).values({ pushLogId: id, payloadJson: payload, status: "PENDING", attemptCount: 0, maxAttempts: PUSH_MAX_ATTEMPTS, nextAttemptAt: now, lastError: null, createdAt: now, updatedAt: now }).onConflictDoUpdate({ target: pushRetry.pushLogId, set: { payloadJson: payload, status: "PENDING", attemptCount: 0, maxAttempts: PUSH_MAX_ATTEMPTS, nextAttemptAt: now, lastError: null, updatedAt: now } });

@@ -76,35 +76,35 @@ INSERT INTO `emailTemplate` (
   (
     'EMAIL_VERIFICATION',
     '邮箱验证',
-    '{"subject":"[{{siteName}}] 验证您的邮箱","body":"请点击以下链接验证您的邮箱：\n\n{{actionUrl}}\n\n如果这不是您的操作，请忽略此邮件。","format":"text","variables":["siteName","actionUrl"]}',
+    '{"subject":"[{{siteName}}] 验证您的邮箱","body":"请点击以下链接验证您的邮箱：\n\n{{actionUrl}}\n\n如果这不是您的操作，请忽略此邮件。","format":"text","variables":["siteName","actionUrl"],"translations":{"zh-TW":{"subject":"[{{siteName}}] 驗證您的電子郵件","body":"請點擊以下連結驗證您的電子郵件：\n\n{{actionUrl}}\n\n如果這不是您的操作，請忽略此郵件。"},"en-US":{"subject":"[{{siteName}}] Verify your email","body":"Click the link below to verify your email address:\n\n{{actionUrl}}\n\nIf you did not request this, you can ignore this email."}}}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'PASSWORD_RESET',
     '密码重置',
-    '{"subject":"[{{siteName}}] 重置您的密码","body":"请点击以下链接重置您的密码：\n\n{{actionUrl}}\n\n如果这不是您的操作，请忽略此邮件。","format":"text","variables":["siteName","actionUrl"]}',
+    '{"subject":"[{{siteName}}] 重置您的密码","body":"请点击以下链接重置您的密码：\n\n{{actionUrl}}\n\n如果这不是您的操作，请忽略此邮件。","format":"text","variables":["siteName","actionUrl"],"translations":{"zh-TW":{"subject":"[{{siteName}}] 重設您的密碼","body":"請點擊以下連結重設您的密碼：\n\n{{actionUrl}}\n\n如果這不是您的操作，請忽略此郵件。"},"en-US":{"subject":"[{{siteName}}] Reset your password","body":"Click the link below to reset your password:\n\n{{actionUrl}}\n\nIf you did not request this, you can ignore this email."}}}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'GUEST_ORDER_RECOVERY',
     '游客订单找回',
-    '{"subject":"订单找回验证码","body":"您的订单找回验证码是：{{code}}\n\n验证码将在 {{expiresMinutes}} 分钟后失效。若非本人操作，请忽略此邮件。","format":"text","variables":["code","expiresMinutes"]}',
+    '{"subject":"订单找回验证码","body":"您的订单找回验证码是：{{code}}\n\n验证码将在 {{expiresMinutes}} 分钟后失效。若非本人操作，请忽略此邮件。","format":"text","variables":["code","expiresMinutes"],"translations":{"zh-TW":{"subject":"訂單復原驗證碼","body":"您的訂單復原驗證碼是：{{code}}\n\n驗證碼將在 {{expiresMinutes}} 分鐘後失效。若非本人操作，請忽略此郵件。"},"en-US":{"subject":"Order recovery code","body":"Your order recovery code is: {{code}}\n\nThis code expires in {{expiresMinutes}} minutes. If you did not request it, you can ignore this email."}}}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'ORDER_PAID',
     '支付成功通知',
-    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 支付成功","body":"您的订单已支付成功。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n金额：{{amount}}\n备注：{{buyerNote}}\n查询地址：{{queryUrl}}\n\n{{footerText}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","amount","buyerNote","queryUrl","footerText"]}',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 支付成功","body":"您的订单已支付成功。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n金额：{{amount}}\n备注：{{buyerNote}}\n查询地址：{{queryUrl}}\n\n{{footerText}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","amount","buyerNote","queryUrl","footerText"],"translations":{"zh-TW":{"subject":"[{{siteName}}] 訂單 {{orderNo}} 付款成功","body":"您的訂單已付款成功。\n\n訂單號碼：{{orderNo}}\n顧客電子郵件：{{contactEmail}}\n商品：{{productName}}\n金額：{{amount}}\n備註：{{buyerNote}}\n查詢位址：{{queryUrl}}\n\n{{footerText}}"},"en-US":{"subject":"[{{siteName}}] Order {{orderNo}} paid","body":"Your order has been paid successfully.\n\nOrder number: {{orderNo}}\nCustomer email: {{contactEmail}}\nProduct: {{productName}}\nAmount: {{amount}}\nNote: {{buyerNote}}\nOrder lookup: {{queryUrl}}\n\n{{footerText}}"}}}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),
   (
     'DELIVERY_SUCCESS',
     '发货成功通知',
-    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 已发货","body":"您的订单已完成发货。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n数量：{{quantity}}\n备注：{{buyerNote}}\n发货内容：\n{{deliveryItems}}\n\n查询地址：{{queryUrl}}\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","quantity","buyerNote","deliveryItems","queryUrl","supportContact"]}',
+    '{"subject":"[{{siteName}}] 订单 {{orderNo}} 已发货","body":"您的订单已完成发货。\n\n订单号：{{orderNo}}\n顾客邮箱：{{contactEmail}}\n商品：{{productName}}\n数量：{{quantity}}\n备注：{{buyerNote}}\n发货内容：\n{{deliveryItems}}\n\n查询地址：{{queryUrl}}\n客服联系方式：{{supportContact}}","format":"text","variables":["siteName","orderNo","contactEmail","productName","quantity","buyerNote","deliveryItems","queryUrl","supportContact"],"translations":{"zh-TW":{"subject":"[{{siteName}}] 訂單 {{orderNo}} 已出貨","body":"您的訂單已完成出貨。\n\n訂單號碼：{{orderNo}}\n顧客電子郵件：{{contactEmail}}\n商品：{{productName}}\n數量：{{quantity}}\n備註：{{buyerNote}}\n出貨內容：\n{{deliveryItems}}\n\n查詢位址：{{queryUrl}}\n客服聯絡方式：{{supportContact}}"},"en-US":{"subject":"[{{siteName}}] Order {{orderNo}} delivered","body":"Your order has been delivered.\n\nOrder number: {{orderNo}}\nCustomer email: {{contactEmail}}\nProduct: {{productName}}\nQuantity: {{quantity}}\nNote: {{buyerNote}}\nDelivery contents:\n{{deliveryItems}}\n\nOrder lookup: {{queryUrl}}\nSupport: {{supportContact}}"}}}',
     unixepoch('now') * 1000,
     unixepoch('now') * 1000
   ),

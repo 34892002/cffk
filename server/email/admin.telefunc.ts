@@ -5,7 +5,8 @@ import { emailTemplate, pushChannelConfig, pushLog, user } from "@/database/driz
 import { appError } from "@/lib/app-error";
 import { isJsonFormEmail } from "@/lib/json-form-values";
 import { formatDateInTimezone } from "@/lib/site-timezone";
-import { parseEmailTemplateConfig } from "@/lib/config-schemas";
+import { parseEmailTemplateConfig, type EmailTemplateConfig } from "@/lib/config-schemas";
+import { isStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 import { emailTemplateDefinitions, getEmailTemplateDefinition } from "@/server/email/template-definitions";
 import { dispatchPush } from "@/server/push/service";
 import { getSiteSettings } from "@/server/site/public-settings";
@@ -118,9 +119,9 @@ async function internalOnGetEmailTemplates() {
     const record = recordByScene.get(definition.scene)!;
     try {
       const config = parseEmailTemplateConfig(record.templateJson);
-      return { id: record.id, scene: record.scene, name: record.name, subject: config.subject, body: config.body, description: definition.description, variables: definition.variables, updatedAt: record.updatedAt, configurationError: false, builtIn: true };
+      return { id: record.id, scene: record.scene, name: record.name, subject: config.subject, body: config.body, translations: config.translations ?? {}, description: definition.description, variables: definition.variables, updatedAt: record.updatedAt, configurationError: false, builtIn: true };
     } catch {
-      return { id: record.id, scene: record.scene, name: record.name, subject: "", body: "", description: definition.description, variables: definition.variables, updatedAt: record.updatedAt, configurationError: true, builtIn: true };
+      return { id: record.id, scene: record.scene, name: record.name, subject: "", body: "", translations: {}, description: definition.description, variables: definition.variables, updatedAt: record.updatedAt, configurationError: true, builtIn: true };
     }
   });
 }
@@ -129,17 +130,32 @@ function templateVariables(value: string) {
   return [...value.matchAll(/{{\s*([A-Za-z0-9_.-]+)\s*}}/g)].map((match) => match[1]).filter((key): key is string => Boolean(key));
 }
 
-async function saveEmailTemplate(input: { scene: PushScene; name: string; subject: string; body: string }) {
+async function saveEmailTemplate(input: { scene: PushScene; name: string; subject: string; body: string; locale?: StorefrontLocale }) {
   const { db } = getAdminContext();
   if (!input || !emailTemplateDefinitions.some((definition) => definition.scene === input.scene)) appError("EMAIL_TEMPLATE_NOT_FOUND");
   const name = requiredText(input.name, "EMAIL_TEMPLATE_NAME");
   const definition = getEmailTemplateDefinition(input.scene);
+  const locale = isStorefrontLocale(input.locale) ? input.locale : "zh-CN";
   const subject = input.subject.trim();
   const body = input.body.trim();
   const allowedVariables = new Set(definition.variables.map((variable) => variable.key));
-  const variables = [...new Set([...templateVariables(subject), ...templateVariables(body)])];
+
+  const [record] = await db.select({ templateJson: emailTemplate.templateJson }).from(emailTemplate).where(eq(emailTemplate.scene, input.scene)).limit(1);
+  if (!record) appError("EMAIL_TEMPLATE_NOT_FOUND");
+  let existing: EmailTemplateConfig | null = null;
+  try { existing = parseEmailTemplateConfig(record.templateJson); } catch { existing = null; }
+
+  const translations = { ...(existing?.translations ?? {}) };
+  const baseSubject = locale === "zh-CN" ? subject : existing?.subject ?? subject;
+  const baseBody = locale === "zh-CN" ? body : existing?.body ?? body;
+  if (locale === "zh-CN") delete translations[locale];
+  else translations[locale] = { subject, body };
+
+  const contents = [{ subject: baseSubject, body: baseBody }, ...Object.values(translations)];
+  const variables = [...new Set(contents.flatMap((content) => [...templateVariables(content.subject), ...templateVariables(content.body)]))];
   if (variables.some((variable) => !allowedVariables.has(variable))) appError("EMAIL_TEMPLATE_VARIABLE_INVALID");
-  const templateJson = JSON.stringify({ subject, body, format: "text", variables });
+
+  const templateJson = JSON.stringify({ subject: baseSubject, body: baseBody, format: "text", variables, ...(Object.keys(translations).length > 0 ? { translations } : {}) });
   try { parseEmailTemplateConfig(templateJson); } catch { appError("EMAIL_TEMPLATE_INVALID"); }
   const result = await db.update(emailTemplate).set({ name, templateJson, updatedAt: new Date() }).where(eq(emailTemplate.scene, input.scene)).returning({ id: emailTemplate.id, scene: emailTemplate.scene });
   if (!result[0]) appError("EMAIL_TEMPLATE_NOT_FOUND");
