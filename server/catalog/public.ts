@@ -1,13 +1,14 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, category, productV2, productSku } from "@/database/drizzle/schema";
-import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
-import { defaultStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
+import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, readContentTranslations } from "@/lib/content-translations";
+import { displayCategoryName } from "@/lib/i18n/category-names";
+import { buildLocalizedOptionalText, buildLocalizedText, type LocalizedNullableText, type LocalizedText } from "@/lib/i18n/localized-text";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
 
 export type PublicSku = {
   id: number;
-  name: string;
+  name: LocalizedText;
   price: string;
   deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS" | "SUPPLIER";
   physicalStock: number | null;
@@ -19,17 +20,17 @@ export type PublicSku = {
 export type PublicCatalog = {
   categories: Array<{
     id: number;
-    name: string;
+    name: LocalizedText;
     slug: string;
-    description: string | null;
+    description: LocalizedNullableText;
   }>;
   products: Array<{
     id: number;
     categoryId: number | null;
-    categoryName: string | null;
-    name: string;
+    categoryName: LocalizedNullableText | null;
+    name: LocalizedText;
     slug: string;
-    subtitle: string | null;
+    subtitle: LocalizedNullableText;
     coverImage: string | null;
     price: string;
     deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS" | "SUPPLIER";
@@ -43,14 +44,22 @@ export type PublicCatalog = {
 };
 
 export type PublicProductDetail = PublicCatalog["products"][number] & {
-  description: string | null;
+  description: LocalizedNullableText;
   purchaseNote: string | null;
   manualDeliveryHint: string | null;
   skus: PublicSku[];
-
 };
 
-export async function getPublicProductDetail(database: D1Database, slug: string, locale: StorefrontLocale = defaultStorefrontLocale): Promise<PublicProductDetail | null> {
+function categoryNameMap(item: { slug: string | null; name: string; translationsJson: string | null }): LocalizedText {
+  const translations = readContentTranslations(item.translationsJson, CATEGORY_TRANSLATION_FIELDS);
+  return {
+    "zh-CN": displayCategoryName({ slug: item.slug, name: item.name, translations, locale: "zh-CN" }) ?? item.name,
+    "zh-TW": displayCategoryName({ slug: item.slug, name: item.name, translations, locale: "zh-TW" }) ?? item.name,
+    "en-US": displayCategoryName({ slug: item.slug, name: item.name, translations, locale: "en-US" }) ?? item.name,
+  };
+}
+
+export async function getPublicProductDetail(database: D1Database, slug: string): Promise<PublicProductDetail | null> {
   const normalizedSlug = slug.trim().toLowerCase();
   if (!normalizedSlug) return null;
 
@@ -68,6 +77,7 @@ export async function getPublicProductDetail(database: D1Database, slug: string,
       manualDeliveryHint: productV2.manualDeliveryHint,
       translationsJson: productV2.translationsJson,
       categoryName: category.name,
+      categorySlug: category.slug,
       categoryTranslationsJson: category.translationsJson,
     })
     .from(productV2)
@@ -79,7 +89,7 @@ export async function getPublicProductDetail(database: D1Database, slug: string,
   const skuRows = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy, translationsJson: productSku.translationsJson }).from(productSku).where(and(eq(productSku.productId, item.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id));
   const skus = await Promise.all(skuRows.map(async (sku) => ({
     id: sku.id,
-    name: localizeContentText(sku.name, readContentTranslations(sku.translationsJson, SKU_TRANSLATION_FIELDS), locale, "name") ?? sku.name,
+    name: buildLocalizedText(sku.name, readContentTranslations(sku.translationsJson, SKU_TRANSLATION_FIELDS), "name"),
     price: formatCentsAsYuan(sku.price),
     deliveryType: sku.deliveryType,
     physicalStock: sku.physicalStock,
@@ -90,18 +100,17 @@ export async function getPublicProductDetail(database: D1Database, slug: string,
   const primary = skus[0];
   if (!primary) return null;
   const translations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
-  const categoryTranslations = readContentTranslations(item.categoryTranslationsJson, CATEGORY_TRANSLATION_FIELDS);
   return {
     id: item.id,
     categoryId: item.categoryId,
-    name: localizeContentText(item.name, translations, locale, "name") ?? item.name,
+    name: buildLocalizedText(item.name, translations, "name"),
     slug: item.slug,
-    subtitle: localizeContentText(item.subtitle, translations, locale, "subtitle"),
+    subtitle: buildLocalizedOptionalText(item.subtitle, translations, "subtitle"),
     coverImage: item.coverImage,
-    description: localizeContentText(item.description, translations, locale, "description"),
+    description: buildLocalizedOptionalText(item.description, translations, "description"),
     purchaseNote: item.purchaseNote,
     manualDeliveryHint: item.manualDeliveryHint,
-    categoryName: localizeContentText(item.categoryName, categoryTranslations, locale, "name"),
+    categoryName: item.categoryName === null ? null : categoryNameMap({ slug: item.categorySlug, name: item.categoryName, translationsJson: item.categoryTranslationsJson }),
     price: primary.price,
     deliveryType: primary.deliveryType,
     physicalStock: primary.physicalStock,
@@ -117,8 +126,7 @@ async function countAvailableCardStockBySku(db: ReturnType<typeof createDrizzleD
   return result?.count ?? 0;
 }
 
-
-export async function getPublicCatalog(database: D1Database, locale: StorefrontLocale = defaultStorefrontLocale): Promise<PublicCatalog> {
+export async function getPublicCatalog(database: D1Database): Promise<PublicCatalog> {
   const db = createDrizzleDb(database);
   const [categories, products] = await Promise.all([
     db
@@ -149,13 +157,13 @@ export async function getPublicCatalog(database: D1Database, locale: StorefrontL
   ]);
 
   const categoryIds = [...new Set(products.flatMap((item) => (item.categoryId === null ? [] : [item.categoryId])))];
-  const categoryNames = categoryIds.length
+  const categoryRows = categoryIds.length
     ? await db
-        .select({ id: category.id, name: category.name, translationsJson: category.translationsJson })
+        .select({ id: category.id, name: category.name, slug: category.slug, translationsJson: category.translationsJson })
         .from(category)
         .where(and(eq(category.status, "ACTIVE"), inArray(category.id, categoryIds)))
     : [];
-  const categoryNameById = new Map(categoryNames.map((item) => [item.id, localizedCategoryName(item, locale)]));
+  const categoryNameById = new Map(categoryRows.map((item) => [item.id, categoryNameMap(item)]));
   const itemIds = products.map((item) => item.id);
   const skuRows = itemIds.length
     ? await db.select({ productId: productSku.productId, id: productSku.id, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy })
@@ -175,7 +183,7 @@ export async function getPublicCatalog(database: D1Database, locale: StorefrontL
           id: item.id,
           name: categoryNameById.get(item.id)!,
           slug: item.slug,
-          description: localizeContentText(item.description, readContentTranslations(item.translationsJson, CATEGORY_TRANSLATION_FIELDS), locale, "description"),
+          description: buildLocalizedOptionalText(item.description, readContentTranslations(item.translationsJson, CATEGORY_TRANSLATION_FIELDS), "description"),
         }]
       : []),
     products: products.flatMap((item) => {
@@ -186,9 +194,9 @@ export async function getPublicCatalog(database: D1Database, locale: StorefrontL
         id: item.id,
         categoryId: item.categoryId,
         categoryName: item.categoryId === null ? null : categoryNameById.get(item.categoryId) ?? null,
-        name: localizeContentText(item.name, translations, locale, "name") ?? item.name,
+        name: buildLocalizedText(item.name, translations, "name"),
         slug: item.slug,
-        subtitle: localizeContentText(item.subtitle, translations, locale, "subtitle"),
+        subtitle: buildLocalizedOptionalText(item.subtitle, translations, "subtitle"),
         coverImage: item.coverImage,
         price: formatCentsAsYuan(sku.price),
         deliveryType: sku.deliveryType,
@@ -199,8 +207,4 @@ export async function getPublicCatalog(database: D1Database, locale: StorefrontL
       }];
     }),
   };
-}
-
-function localizedCategoryName(item: { name: string; translationsJson: string | null }, locale: StorefrontLocale) {
-  return localizeContentText(item.name, readContentTranslations(item.translationsJson, CATEGORY_TRANSLATION_FIELDS), locale, "name") ?? item.name;
 }

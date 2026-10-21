@@ -7,7 +7,7 @@ export type ContentTranslationLocale = (typeof contentTranslationLocales)[number
 export const PRODUCT_TRANSLATION_FIELDS = ["name", "subtitle", "description"] as const;
 export const SKU_TRANSLATION_FIELDS = ["name"] as const;
 export const CATEGORY_TRANSLATION_FIELDS = ["name", "description"] as const;
-export const SITE_TRANSLATION_FIELDS = ["subtitle", "notice", "footerText", "orderNotice"] as const;
+export const SITE_TRANSLATION_FIELDS = ["subtitle", "notice", "footerText", "orderNotice", "supportContact"] as const;
 
 export type ContentTranslation = Partial<Record<string, string>>;
 // Keys are validated at runtime (`isContentTranslationLocale`); keeping the type

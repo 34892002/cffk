@@ -24,6 +24,7 @@ function normalizeSiteTranslations(input: unknown) {
     if ((content.notice?.length ?? 0) > 2_000) appError("SITE_NOTICE_TOO_LONG");
     if ((content.footerText?.length ?? 0) > 1_000) appError("SITE_FOOTER_TEXT_TOO_LONG");
     if ((content.orderNotice?.length ?? 0) > 2_000) appError("SITE_ORDER_NOTICE_TOO_LONG");
+    if ((content.supportContact?.length ?? 0) > 2_000) appError("SITE_SUPPORT_CONTACT_TOO_LONG");
     values[locale as ContentTranslationLocale] = content;
   }
   return values;

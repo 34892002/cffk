@@ -49,29 +49,28 @@ describe("localized site settings", () => {
     logo: null,
     logoIcon: null,
     notice: "中文公告",
-    supportContact: null,
+    supportContact: "TG互助群|https://t.me/example",
     footerText: "中文页脚",
     orderNotice: "中文提示",
     headCode: null,
     footerCode: null,
-    translationsJson: JSON.stringify({ "en-US": { subtitle: "EN subtitle", notice: "EN notice" } }),
+    translationsJson: JSON.stringify({ "en-US": { subtitle: "EN subtitle", notice: "EN notice", supportContact: "Telegram support|https://t.me/example" } }),
     registrationEnabled: false,
     timezone: "Asia/Shanghai",
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };
 
-  test("uses the translated values and falls back per field", () => {
-    const en = toPublicSiteSettings(record, "en-US");
-    expect(en.subtitle).toBe("EN subtitle");
-    expect(en.notice).toBe("EN notice");
-    expect(en.footerText).toBe("中文页脚");
-    expect(en.orderNotice).toBe("中文提示");
-  });
-
-  test("keeps the base content for Chinese and untranslated locales", () => {
-    expect(toPublicSiteSettings(record, "zh-CN").subtitle).toBe("中文副标题");
-    expect(toPublicSiteSettings(record, "zh-TW").subtitle).toBe("中文副标题");
+  test("ships every locale and falls back per field", () => {
+    const site = toPublicSiteSettings(record);
+    expect(site.subtitle["en-US"]).toBe("EN subtitle");
+    expect(site.subtitle["zh-CN"]).toBe("中文副标题");
+    expect(site.subtitle["zh-TW"]).toBe("中文副标题");
+    expect(site.notice["en-US"]).toBe("EN notice");
+    expect(site.supportContact["en-US"]).toBe("Telegram support|https://t.me/example");
+    expect(site.supportContact["zh-CN"]).toBe("TG互助群|https://t.me/example");
+    expect(site.footerText["en-US"]).toBe("中文页脚");
+    expect(site.orderNotice["en-US"]).toBe("中文提示");
   });
 });
 
@@ -91,25 +90,35 @@ describe("localized catalog", () => {
     return context;
   }
 
-  test("localizes names, subtitles, descriptions and category names", async () => {
+  test("ships localized names, subtitles, descriptions and categories", async () => {
     const context = seed();
-    const catalog = await getPublicCatalog(context.database, "en-US");
-    expect(catalog.categories.map((item) => item.name)).toEqual(["Cards EN"]);
-    expect(catalog.products[0]).toMatchObject({ name: "Card EN", subtitle: "Sub EN", categoryName: "Cards EN" });
+    const catalog = await getPublicCatalog(context.database);
+    expect(catalog.categories.map((item) => item.name)).toEqual([
+      { "zh-CN": "卡密分类", "zh-TW": "卡密分类", "en-US": "Cards EN" },
+    ]);
+    expect(catalog.products[0]).toMatchObject({
+      name: { "zh-CN": "卡密商品", "zh-TW": "卡密商品", "en-US": "Card EN" },
+      subtitle: { "zh-CN": "中文副标题", "zh-TW": "中文副标题", "en-US": "Sub EN" },
+      categoryName: { "zh-CN": "卡密分类", "zh-TW": "卡密分类", "en-US": "Cards EN" },
+    });
 
-    const detail = await getPublicProductDetail(context.database, "card", "en-US");
-    expect(detail).toMatchObject({ name: "Card EN", subtitle: "Sub EN", description: "<p>EN details</p>", categoryName: "Cards EN" });
-    expect(detail?.skus[0]?.name).toBe("Default EN");
+    const detail = await getPublicProductDetail(context.database, "card");
+    expect(detail).toMatchObject({
+      name: { "zh-CN": "卡密商品", "en-US": "Card EN" },
+      subtitle: { "zh-CN": "中文副标题", "en-US": "Sub EN" },
+      description: { "zh-CN": "<p>中文详情</p>", "en-US": "<p>EN details</p>" },
+      categoryName: { "zh-CN": "卡密分类", "en-US": "Cards EN" },
+    });
+    expect(detail?.skus[0]?.name).toEqual({ "zh-CN": "Default", "zh-TW": "Default", "en-US": "Default EN" });
   });
 
   test("falls back to the base content", async () => {
     const context = seed();
-    const catalog = await getPublicCatalog(context.database, "zh-CN");
-    expect(catalog.categories.map((item) => item.name)).toEqual(["卡密分类"]);
-    expect(catalog.products[0]).toMatchObject({ name: "卡密商品", subtitle: "中文副标题", categoryName: "卡密分类" });
+    const catalog = await getPublicCatalog(context.database);
+    expect(catalog.products[0]?.name["zh-TW"]).toBe("卡密商品");
 
-    const detail = await getPublicProductDetail(context.database, "card", "zh-TW");
-    expect(detail).toMatchObject({ name: "卡密商品", description: "<p>中文详情</p>" });
-    expect(detail?.skus[0]?.name).toBe("Default");
+    const detail = await getPublicProductDetail(context.database, "card");
+    expect(detail?.name["zh-TW"]).toBe("卡密商品");
+    expect(detail?.skus[0]?.name["zh-TW"]).toBe("Default");
   });
 });

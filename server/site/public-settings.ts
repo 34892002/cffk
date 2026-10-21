@@ -1,21 +1,21 @@
 import { eq } from "drizzle-orm";
 import { siteSetting } from "@/database/drizzle/schema";
 import { createDrizzleDb } from "@/database/drizzle";
-import { SITE_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
-import { defaultStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
+import { SITE_TRANSLATION_FIELDS, readContentTranslations } from "@/lib/content-translations";
+import { buildLocalizedOptionalText, buildLocalizedText, type LocalizedNullableText, type LocalizedText } from "@/lib/i18n/localized-text";
 
 export { SITE_TRANSLATION_FIELDS };
 
 export type PublicSiteSettings = {
   name: string;
-  subtitle: string | null;
+  subtitle: LocalizedNullableText;
   siteUrl: string | null;
   logo: string | null;
   logoIcon: string | null;
-  notice: string | null;
-  supportContact: string | null;
-  footerText: string | null;
-  orderNotice: string | null;
+  notice: LocalizedNullableText;
+  supportContact: LocalizedText;
+  footerText: LocalizedText;
+  orderNotice: LocalizedNullableText;
 };
 
 type SiteSettingRecord = typeof siteSetting.$inferSelect;
@@ -69,17 +69,17 @@ export function invalidateSiteSettings(_database?: D1Database) {
   settingsCache = null;
 }
 
-export function toPublicSiteSettings(record: SiteSettingRecord, locale: StorefrontLocale = defaultStorefrontLocale): PublicSiteSettings {
+export function toPublicSiteSettings(record: SiteSettingRecord): PublicSiteSettings {
   const translations = readContentTranslations(record.translationsJson, SITE_TRANSLATION_FIELDS);
   return {
     name: record.siteName,
-    subtitle: localizeContentText(record.siteSubtitle, translations, locale, "subtitle"),
+    subtitle: buildLocalizedOptionalText(record.siteSubtitle, translations, "subtitle"),
     siteUrl: record.siteUrl,
     logo: record.logo,
     logoIcon: record.logoIcon || record.logo,
-    notice: localizeContentText(record.notice, translations, locale, "notice"),
-    supportContact: record.supportContact?.trim() || DEFAULT_SUPPORT_CONTACT,
-    footerText: localizeContentText(record.footerText, translations, locale, "footerText")?.trim() || DEFAULT_FOOTER_TEXT,
-    orderNotice: localizeContentText(record.orderNotice, translations, locale, "orderNotice"),
+    notice: buildLocalizedOptionalText(record.notice, translations, "notice"),
+    supportContact: buildLocalizedText(record.supportContact?.trim() || DEFAULT_SUPPORT_CONTACT, translations, "supportContact"),
+    footerText: buildLocalizedText(record.footerText?.trim() || DEFAULT_FOOTER_TEXT, translations, "footerText"),
+    orderNotice: buildLocalizedOptionalText(record.orderNotice, translations, "orderNotice"),
   };
 }

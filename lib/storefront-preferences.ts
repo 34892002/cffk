@@ -32,19 +32,10 @@ function writeLocaleCookie(value: StorefrontLocale) {
 }
 
 /**
- * Content such as product names and site settings is localized on the server.
- * After switching language the current page must be reloaded so that payload is
- * fetched again with the new locale cookie.
+ * Content such as product names, site settings and the footer is shipped for
+ * every locale, so switching language only needs to update the cookie and the
+ * reactive locale ref.
  */
-async function reloadForLocale() {
-  if (typeof window === "undefined") return;
-  try {
-    const { reload } = await import("vike/client/router");
-    await reload();
-  } catch {
-    window.location.reload();
-  }
-}
 
 function applyDocumentPreferences(locale: StorefrontLocale) {
   document.documentElement.classList.toggle("dark", theme.value === "dark");
@@ -57,13 +48,11 @@ function initialize(serverLocale: StorefrontLocale) {
 
   // Locale used to live only in localStorage. Adopt it once, then keep the
   // cookie as the single source so the server can render the right language.
-  let migratedLocale: StorefrontLocale | null = null;
   if (!isStorefrontLocale(readCookieValue(document.cookie, storefrontLocaleCookie))) {
     const legacyLocale = window.localStorage.getItem(legacyLocaleStorageKey);
     if (isStorefrontLocale(legacyLocale)) {
       localeOverride.value = legacyLocale;
       writeLocaleCookie(legacyLocale);
-      migratedLocale = legacyLocale;
     }
   }
   window.localStorage.removeItem(legacyLocaleStorageKey);
@@ -74,7 +63,6 @@ function initialize(serverLocale: StorefrontLocale) {
   const activeLocale = localeOverride.value ?? serverLocale;
   setActiveLocale(activeLocale);
   applyDocumentPreferences(activeLocale);
-  if (migratedLocale && migratedLocale !== serverLocale) void reloadForLocale();
 }
 
 function replaceParams(value: string, params: Record<string, string | number>) {
@@ -103,7 +91,6 @@ export function useStorefrontPreferences(): {
     if (typeof window === "undefined") return;
     writeLocaleCookie(nextLocale);
     applyDocumentPreferences(nextLocale);
-    void reloadForLocale();
   }
 
   function setTheme(nextTheme: StorefrontTheme) {

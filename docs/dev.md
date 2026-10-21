@@ -181,13 +181,54 @@ async function deleteRow() {
 
 ### 1.10 商品与站点内容多语言
 
-- 商品（名称/副标题/详情）、SKU（名称）、分类（名称/描述）和站点（副标题/公告/页脚/下单提示）的译文保存在各自的 `translationsJson` 列，不拆表、不新增查询。
-- 读取必须通过 `lib/content-translations.ts` 的 `readContentTranslations()` 与 `localizeContentText()`，按字段逐项回退到原列（简体中文）。
+- 商品（名称/副标题/详情）、SKU（名称）、分类（名称/描述）和站点（副标题/公告/页脚/下单提示/客服联系方式）的译文保存在各自的 `translationsJson` 列，不拆表、不新增查询。
+- 公开 DTO 用 `lib/i18n/localized-text.ts` 的 `buildLocalizedText*()` 一次性携带三种语言，组件按当前 `locale` 取值；切换语言只更新响应式状态，不得刷新页面。
+- 服务端内部判断（下单快照、邮件变量）继续用 `readContentTranslations()` + `localizeContentText()`，按字段回退到原列（简体中文）。
 - 后台在商品编辑器、分类、系统设置中用“编辑语言”维护译文；新增可译字段时必须复用 `PRODUCT_TRANSLATION_FIELDS` / `CATEGORY_TRANSLATION_FIELDS` / `SITE_TRANSLATION_FIELDS` 白名单。
 - 下单时按 `order.locale` 写入 `productNameSnapshot`，使订单、邮件与历史快照和买家看到的语言一致。
 - 支付渠道的默认名称（支付宝 / 易支付）在商城侧按语言显示；管理员自定义过的名称原样显示，不覆盖。后台列表仍显示 D1 中的名称。
+- 内置默认分类（`slug = default`）不允许后台编辑，其名称使用 `lib/i18n/category-names.ts` 的本地化标签（General / 預設分類）。
 - Slug、价格、封面、客服联系方式和自定义代码不参与翻译。
 - Telefunc 入参类型不要使用带连字符的字面量联合键（例如 `Record<"zh-TW" | "en-US", ...>`）：Telefunc 的 shield 会生成 `en-US: ...` 这类未加引号的非法代码。统一使用 `ContentTranslations`（字符串索引 + 运行时校验）。
+
+### 1.11 新增一种界面语言
+
+新增语言分两类：**类型会强制你补全**的，和**不会报错、必须手动改**的。按下面顺序处理。
+
+#### 1. 语言定义与字典（漏改会编译报错）
+
+1. `lib/i18n/locale.ts`：把新 locale 加入 `storefrontLocales`。
+2. `lib/i18n/locale.ts`：在 `isStorefrontLocale()` 中加上新值。这一步**不会报错**，但漏了会导致 cookie / 请求头里的新语言永远被当成默认值。
+3. `lib/i18n/locale.ts`：在 `detectBrowserLocale()` 中补浏览器语言前缀映射（例如 `fr`），否则新语言用户首次访问仍回退简体中文。
+4. `lib/i18n/<locale>.ts`：新建字典并 `satisfies Messages`，key 必须与 `zh-CN.ts` 完全一致（含占位符）。
+5. `lib/storefront-preferences.ts`：在 `locales` 映射中加入新字典（类型会报错）。
+6. `lib/i18n/error-messages/<locale>.ts`：补齐全部错误码；在 `error-messages/index.ts` 注册（类型会报错）。
+7. `lib/i18n/seo.ts`、`lib/i18n/payment-providers.ts`、`lib/i18n/category-names.ts`：分别补 SEO 兜底文案、支付渠道默认名、默认分类标签（均为 `Record<StorefrontLocale, ...>`，类型会报错）。
+8. `lib/i18n/localized-text.ts` 的 `buildLocalizedText*()` 与 `server/catalog/public.ts` 的 `categoryNameMap()`：返回的是 `LocalizedText`，漏 key 会编译报错。
+
+#### 2. 内容翻译的读写（不会报错，需手动补）
+
+9. `lib/content-translations.ts`：把新 locale 加入 `contentTranslationLocales`。漏改时后台能填、但读取时会被当成未知语言丢弃。
+10. `components/storefront/PublicNav.vue` 与 `components/storefront/StorefrontPreferences.vue`：语言菜单目前逐项列出字典，需新增菜单项。
+11. 后台三个“编辑语言”下拉：
+    - `pages/@adminPath/system/settings/+Page.vue`
+    - `pages/@adminPath/catalog/categories/+Page.vue`
+    - `pages/@adminPath/catalog/products/ProductEditorPage.vue`
+
+    每个文件都要同步 `EditorLocale` 类型、`localeOptions`、`translations` 初始对象/`syncTranslations` 的 `["zh-TW", "en-US"]` 循环，以及 SKU 草案的 `SkuDraftTranslations`。
+12. `scripts/seed.sql` 的 `emailTemplate.templateJson.translations`：可选；缺失时回退简体中文，但新环境建议补齐客户邮件场景。
+13. 测试：`tests/core/i18n.test.ts` 目前对比 `zh-CN` / `en-US` / `zh-TW`，新增语言后把新字典加入 key 对齐与纯净度检查；`tests/core/storefront-preferences.test.ts` 补一条浏览器语言识别断言。
+
+#### 3. 无需修改
+
+- `pages/+onBeforeRoute.ts`、`pages/+onBeforeRender.ts`、`pages/+lang.ts`、`resolveHeadersLocale()`：语言解析本身与具体语言无关。
+- `lib/currency.ts`：非 `zh-CN` 自动显示 `CNY`。
+- 数据库：`translationsJson` 是 JSON，新增语言不需要迁移，也不增加 D1 查询次数。
+
+#### 4. 验收
+
+1. `bun test tests/core` 与 `bun run build`。
+2. 手动检查：浏览器语言首次访问、语言菜单切换（不刷新页面）、商品/分类/SKU/站点文案、订单邮件与下单快照、错误提示、`<html lang>`、SEO 标题与描述。
 
 ## 2. 后台信息架构、目录与导航元数据
 

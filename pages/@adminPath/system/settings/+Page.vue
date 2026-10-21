@@ -131,13 +131,19 @@
 
               <div class="grid gap-4 md:grid-cols-2">
                 <VeeField v-slot="{ componentField, errors }" name="supportContact" :validate-on-input="true">
-                  <Field :data-invalid="errors.length > 0">
+                  <Field v-show="editorLocale === 'zh-CN'" :data-invalid="errors.length > 0">
                     <FieldLabel for="site-support-contact">客服联系方式</FieldLabel>
                     <Textarea id="site-support-contact" v-bind="componentField" rows="3" placeholder="每行一条，例如：Telegram 客服|https://t.me/example" :aria-invalid="errors.length > 0" />
                     <FieldDescription>每行一条。使用“显示文字|链接地址”格式可生成可点击联系方式。</FieldDescription>
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
                 </VeeField>
+
+                <Field v-show="editorLocale !== 'zh-CN'">
+                  <FieldLabel for="site-support-contact">客服联系方式（{{ localeLabel(editorLocale) }}）</FieldLabel>
+                  <Textarea id="site-support-contact" v-model="activeTranslation.supportContact" rows="3" maxlength="2000" placeholder="每行一条，例如：Telegram Support|https://t.me/example" />
+                  <FieldDescription>每行一条。使用“显示文字|链接地址”格式可生成可点击联系方式。</FieldDescription>
+                </Field>
 
                 <VeeField v-slot="{ componentField, errors }" name="footerText" :validate-on-input="true">
                   <Field v-show="editorLocale === 'zh-CN'" :data-invalid="errors.length > 0">
@@ -288,7 +294,7 @@ type FormValues = {
 const timezones = SITE_TIMEZONES.map((value) => ({ value, label: value }));
 
 type EditorLocale = "zh-CN" | "zh-TW" | "en-US";
-type SiteTranslation = { subtitle: string; notice: string; footerText: string; orderNotice: string };
+type SiteTranslation = { subtitle: string; notice: string; footerText: string; orderNotice: string; supportContact: string };
 const localeOptions: Array<{ value: EditorLocale; label: string }> = [
   { value: "zh-CN", label: "简体中文" },
   { value: "zh-TW", label: "繁體中文" },
@@ -296,10 +302,10 @@ const localeOptions: Array<{ value: EditorLocale; label: string }> = [
 ];
 const editorLocale = ref<EditorLocale>("zh-CN");
 const translations = reactive<Record<"zh-TW" | "en-US", SiteTranslation>>({
-  "zh-TW": { subtitle: "", notice: "", footerText: "", orderNotice: "" },
-  "en-US": { subtitle: "", notice: "", footerText: "", orderNotice: "" },
+  "zh-TW": { subtitle: "", notice: "", footerText: "", orderNotice: "", supportContact: "" },
+  "en-US": { subtitle: "", notice: "", footerText: "", orderNotice: "", supportContact: "" },
 });
-const emptyTranslation: SiteTranslation = { subtitle: "", notice: "", footerText: "", orderNotice: "" };
+const emptyTranslation: SiteTranslation = { subtitle: "", notice: "", footerText: "", orderNotice: "", supportContact: "" };
 const activeTranslation = computed(() => (editorLocale.value === "zh-CN" ? emptyTranslation : translations[editorLocale.value]));
 
 function localeLabel(locale: EditorLocale) { return localeOptions.find((item) => item.value === locale)?.label ?? locale; }
@@ -369,6 +375,7 @@ function syncTranslations(settings: Awaited<ReturnType<typeof onGetSiteSettings>
       notice: content?.notice ?? "",
       footerText: content?.footerText ?? "",
       orderNotice: content?.orderNotice ?? "",
+      supportContact: content?.supportContact ?? "",
     };
   }
   editorLocale.value = "zh-CN";
