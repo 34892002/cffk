@@ -1,4 +1,5 @@
 import { normalizeSiteTimezone } from "@/lib/site-timezone";
+import type { ContentTranslations } from "@/lib/content-translations";
 
 const URL_PROTOCOLS = new Set(["http:", "https:"]);
 
@@ -37,6 +38,7 @@ export type SiteSettingsInput = {
   footerCode?: string | null;
   registrationEnabled?: boolean;
   timezone: string;
+  translations?: ContentTranslations;
 };
 
 export function validateSiteSettingsInput(input: SiteSettingsInput) {

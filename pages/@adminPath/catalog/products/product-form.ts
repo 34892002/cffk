@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { slugify } from "@/lib/slugify";
+import type { ContentTranslations } from "@/lib/content-translations";
 
 import type { onGetProductAdminDetail } from "@/server/catalog/admin.telefunc";
 
@@ -52,7 +53,7 @@ export type ProductSkuDraftInput = {
   sort: number;
 };
 
-export function formToSaveInput(form: ProductForm, skus: ProductSkuDraftInput[], deliveryType: ProductDeliveryType) {
+export function formToSaveInput(form: ProductForm, skus: ProductSkuDraftInput[], deliveryType: ProductDeliveryType, translations?: ContentTranslations) {
   // 发货方式在数据模型中仍属于 SKU；后台商品只允许一种方式，因此提交时统一写入每个 SKU。
   return {
     id: form.id,
@@ -68,5 +69,6 @@ export function formToSaveInput(form: ProductForm, skus: ProductSkuDraftInput[],
     sort: form.sort,
     deliveryType,
     skus,
+    translations,
   };
 }

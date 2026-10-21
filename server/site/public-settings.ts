@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
 import { siteSetting } from "@/database/drizzle/schema";
 import { createDrizzleDb } from "@/database/drizzle";
+import { SITE_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
+import { defaultStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
+
+export { SITE_TRANSLATION_FIELDS };
 
 export type PublicSiteSettings = {
   name: string;
@@ -40,6 +44,7 @@ const defaultSettings: SiteSettingRecord = {
   orderNotice: null,
   headCode: null,
   footerCode: null,
+  translationsJson: null,
   registrationEnabled: false,
   timezone: "Asia/Shanghai",
   createdAt: new Date(0),
@@ -64,16 +69,17 @@ export function invalidateSiteSettings(_database?: D1Database) {
   settingsCache = null;
 }
 
-export function toPublicSiteSettings(record: SiteSettingRecord): PublicSiteSettings {
+export function toPublicSiteSettings(record: SiteSettingRecord, locale: StorefrontLocale = defaultStorefrontLocale): PublicSiteSettings {
+  const translations = readContentTranslations(record.translationsJson, SITE_TRANSLATION_FIELDS);
   return {
     name: record.siteName,
-    subtitle: record.siteSubtitle,
+    subtitle: localizeContentText(record.siteSubtitle, translations, locale, "subtitle"),
     siteUrl: record.siteUrl,
     logo: record.logo,
     logoIcon: record.logoIcon || record.logo,
-    notice: record.notice,
+    notice: localizeContentText(record.notice, translations, locale, "notice"),
     supportContact: record.supportContact?.trim() || DEFAULT_SUPPORT_CONTACT,
-    footerText: record.footerText?.trim() || DEFAULT_FOOTER_TEXT,
-    orderNotice: record.orderNotice,
+    footerText: localizeContentText(record.footerText, translations, locale, "footerText")?.trim() || DEFAULT_FOOTER_TEXT,
+    orderNotice: localizeContentText(record.orderNotice, translations, locale, "orderNotice"),
   };
 }

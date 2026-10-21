@@ -1,6 +1,8 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, category, productV2, productSku } from "@/database/drizzle/schema";
+import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
+import { defaultStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
 
 export type PublicSku = {
@@ -48,7 +50,7 @@ export type PublicProductDetail = PublicCatalog["products"][number] & {
 
 };
 
-export async function getPublicProductDetail(database: D1Database, slug: string): Promise<PublicProductDetail | null> {
+export async function getPublicProductDetail(database: D1Database, slug: string, locale: StorefrontLocale = defaultStorefrontLocale): Promise<PublicProductDetail | null> {
   const normalizedSlug = slug.trim().toLowerCase();
   if (!normalizedSlug) return null;
 
@@ -64,7 +66,9 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
       description: productV2.description,
       purchaseNote: productV2.purchaseNote,
       manualDeliveryHint: productV2.manualDeliveryHint,
+      translationsJson: productV2.translationsJson,
       categoryName: category.name,
+      categoryTranslationsJson: category.translationsJson,
     })
     .from(productV2)
     .leftJoin(category, and(eq(productV2.categoryId, category.id), eq(category.status, "ACTIVE")))
@@ -76,8 +80,19 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
   const skus = await Promise.all(skuRows.map(async (sku) => ({ ...sku, price: formatCentsAsYuan(sku.price), availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock })));
   const primary = skus[0];
   if (!primary) return null;
+  const translations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
+  const categoryTranslations = readContentTranslations(item.categoryTranslationsJson, CATEGORY_TRANSLATION_FIELDS);
   return {
-    ...item,
+    id: item.id,
+    categoryId: item.categoryId,
+    name: localizeContentText(item.name, translations, locale, "name") ?? item.name,
+    slug: item.slug,
+    subtitle: localizeContentText(item.subtitle, translations, locale, "subtitle"),
+    coverImage: item.coverImage,
+    description: localizeContentText(item.description, translations, locale, "description"),
+    purchaseNote: item.purchaseNote,
+    manualDeliveryHint: item.manualDeliveryHint,
+    categoryName: localizeContentText(item.categoryName, categoryTranslations, locale, "name"),
     price: primary.price,
     deliveryType: primary.deliveryType,
     physicalStock: primary.physicalStock,
@@ -94,7 +109,7 @@ async function countAvailableCardStockBySku(db: ReturnType<typeof createDrizzleD
 }
 
 
-export async function getPublicCatalog(database: D1Database): Promise<PublicCatalog> {
+export async function getPublicCatalog(database: D1Database, locale: StorefrontLocale = defaultStorefrontLocale): Promise<PublicCatalog> {
   const db = createDrizzleDb(database);
   const [categories, products] = await Promise.all([
     db
@@ -103,6 +118,7 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
         name: category.name,
         slug: category.slug,
         description: category.description,
+        translationsJson: category.translationsJson,
       })
       .from(category)
       .where(eq(category.status, "ACTIVE"))
@@ -115,6 +131,7 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
         slug: productV2.slug,
         subtitle: productV2.subtitle,
         coverImage: productV2.coverImage,
+        translationsJson: productV2.translationsJson,
       })
       .from(productV2)
       .innerJoin(category, and(eq(productV2.categoryId, category.id), eq(category.status, "ACTIVE")))
@@ -125,11 +142,11 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
   const categoryIds = [...new Set(products.flatMap((item) => (item.categoryId === null ? [] : [item.categoryId])))];
   const categoryNames = categoryIds.length
     ? await db
-        .select({ id: category.id, name: category.name })
+        .select({ id: category.id, name: category.name, translationsJson: category.translationsJson })
         .from(category)
         .where(and(eq(category.status, "ACTIVE"), inArray(category.id, categoryIds)))
     : [];
-  const categoryNameById = new Map(categoryNames.map((item) => [item.id, item.name]));
+  const categoryNameById = new Map(categoryNames.map((item) => [item.id, localizedCategoryName(item, locale)]));
   const itemIds = products.map((item) => item.id);
   const skuRows = itemIds.length
     ? await db.select({ productId: productSku.productId, id: productSku.id, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy })
@@ -144,11 +161,37 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
   const cardStockBySkuId = new Map(cardStockRows.map((item) => [item.productSkuId, item.availableStock]));
 
   return {
-    categories: categories.filter((item) => categoryNameById.has(item.id)),
+    categories: categories.flatMap((item) => categoryNameById.has(item.id)
+      ? [{
+          id: item.id,
+          name: categoryNameById.get(item.id)!,
+          slug: item.slug,
+          description: localizeContentText(item.description, readContentTranslations(item.translationsJson, CATEGORY_TRANSLATION_FIELDS), locale, "description"),
+        }]
+      : []),
     products: products.flatMap((item) => {
       const sku = primaryByProduct.get(item.id);
       if (!sku) return [];
-      return [{ ...item, price: formatCentsAsYuan(sku.price), deliveryType: sku.deliveryType, physicalStock: sku.physicalStock, availableStock: sku.deliveryType === "CARD_AUTO" ? cardStockBySkuId.get(sku.id) ?? 0 : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock, minBuy: sku.minBuy, maxBuy: sku.maxBuy, categoryName: item.categoryId === null ? null : categoryNameById.get(item.categoryId) ?? null }];
+      const translations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
+      return [{
+        id: item.id,
+        categoryId: item.categoryId,
+        categoryName: item.categoryId === null ? null : categoryNameById.get(item.categoryId) ?? null,
+        name: localizeContentText(item.name, translations, locale, "name") ?? item.name,
+        slug: item.slug,
+        subtitle: localizeContentText(item.subtitle, translations, locale, "subtitle"),
+        coverImage: item.coverImage,
+        price: formatCentsAsYuan(sku.price),
+        deliveryType: sku.deliveryType,
+        physicalStock: sku.physicalStock,
+        availableStock: sku.deliveryType === "CARD_AUTO" ? cardStockBySkuId.get(sku.id) ?? 0 : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock,
+        minBuy: sku.minBuy,
+        maxBuy: sku.maxBuy,
+      }];
     }),
   };
+}
+
+function localizedCategoryName(item: { name: string; translationsJson: string | null }, locale: StorefrontLocale) {
+  return localizeContentText(item.name, readContentTranslations(item.translationsJson, CATEGORY_TRANSLATION_FIELDS), locale, "name") ?? item.name;
 }

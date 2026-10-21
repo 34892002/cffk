@@ -46,9 +46,16 @@
           <DialogDescription>停用分类前，需要先下架该分类下的商品。</DialogDescription>
         </DialogHeader>
         <form class="grid gap-4" @submit.prevent="saveCategory">
-          <div class="grid gap-2"><Label for="category-name"><span class="text-destructive">*</span> 名称</Label><Input id="category-name" v-model="form.name" required /></div>
+          <div class="grid gap-2">
+            <Label for="category-locale">编辑语言</Label>
+            <Select :model-value="editorLocale" @update:model-value="setEditorLocale"><SelectTrigger id="category-locale" class="w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in localeOptions" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select>
+            <p class="text-xs text-muted-foreground">简体中文是默认内容；其他语言留空时回退到简体中文。</p>
+          </div>
+          <div v-if="editorLocale === 'zh-CN'" class="grid gap-2"><Label for="category-name"><span class="text-destructive">*</span> 名称</Label><Input id="category-name" v-model="form.name" required /></div>
+          <div v-else-if="activeTranslation" class="grid gap-2"><Label for="category-name">名称（{{ localeLabel(editorLocale) }}）</Label><Input id="category-name" v-model="activeTranslation.name" /></div>
           <div class="grid gap-2"><Label for="category-slug"><span class="text-destructive">*</span> Slug</Label><Input id="category-slug" v-model="form.slug" required placeholder="输入名称后自动生成，可手动修改" @update:model-value="onSlug" /></div>
-          <div class="grid gap-2"><Label for="category-description">描述</Label><Input id="category-description" v-model="form.description" /></div>
+          <div v-if="editorLocale === 'zh-CN'" class="grid gap-2"><Label for="category-description">描述</Label><Input id="category-description" v-model="form.description" /></div>
+          <div v-else-if="activeTranslation" class="grid gap-2"><Label for="category-description">描述（{{ localeLabel(editorLocale) }}）</Label><Input id="category-description" v-model="activeTranslation.description" /></div>
           <div class="grid gap-2"><Label for="category-sort"><span class="text-destructive">*</span> 排序</Label><Input id="category-sort" v-model.number="form.sort" type="number" min="0" required /></div>
           <DialogFooter>
             <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
@@ -81,6 +88,13 @@ import { onGetCatalogAdminData, onSaveCategory, onSetCategoryStatus } from "@/se
 
 type Catalog = Awaited<ReturnType<typeof onGetCatalogAdminData>>;
 type Category = Catalog["categories"][number];
+type EditorLocale = "zh-CN" | "zh-TW" | "en-US";
+type CategoryTranslation = { name: string; description: string };
+const localeOptions: Array<{ value: EditorLocale; label: string }> = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "zh-TW", label: "繁體中文" },
+  { value: "en-US", label: "English" },
+];
 const columns: AdminTableColumn<Category>[] = [
   { key: "id", label: "ID", class: "w-20 font-mono text-xs text-muted-foreground", headerClass: "w-20" },
   { key: "name", label: "分类名称", class: "font-medium" },
@@ -101,6 +115,12 @@ const saving = ref(false);
 const loadError = ref<string | null>(null);
 const dialogOpen = ref(false);
 const form = reactive({ id: undefined as number | undefined, name: "", slug: "", description: "", sort: 0 });
+const editorLocale = ref<EditorLocale>("zh-CN");
+const translations = reactive<Record<"zh-TW" | "en-US", CategoryTranslation>>({
+  "zh-TW": { name: "", description: "" },
+  "en-US": { name: "", description: "" },
+});
+const activeTranslation = computed(() => (editorLocale.value === "zh-CN" ? null : translations[editorLocale.value]));
 const slugTouched = ref(false);
 const filteredCategories = computed(() => {
   const value = query.value.trim().toLowerCase();
@@ -123,17 +143,30 @@ watch(pageSize, () => { currentPage.value = 1; });
 watch(totalPages, (pages) => { if (currentPage.value > pages) currentPage.value = pages; });
 async function loadCategories() { loading.value = true; loadError.value = null; try { categories.value = (await runTelefunc(() => onGetCatalogAdminData(), { notifyError: false })).categories; } catch (cause) { loadError.value = userErrorMessage(cause); } finally { loading.value = false; } }
 function isDefaultCategory(item: Category) { return item.slug === "default"; }
+function localeLabel(locale: EditorLocale) { return localeOptions.find((item) => item.value === locale)?.label ?? locale; }
+function setEditorLocale(next: unknown) {
+  if (next !== "zh-CN" && next !== "zh-TW" && next !== "en-US") return;
+  editorLocale.value = next;
+}
 function openCreate() { resetForm(); dialogOpen.value = true; }
 function openEdit(item: Category) {
   slugTouched.value = false;
   Object.assign(form, { id: item.id, name: item.name, slug: item.slug, description: item.description ?? "", sort: item.sort });
+  for (const locale of ["zh-TW", "en-US"] as const) {
+    const content = item.translations?.[locale];
+    translations[locale] = { name: content?.name ?? "", description: content?.description ?? "" };
+  }
+  editorLocale.value = "zh-CN";
   dialogOpen.value = true;
 }
-async function saveCategory() { saving.value = true; try { await runTelefunc(() => onSaveCategory({ ...form })); dialogOpen.value = false; resetForm(); await loadCategories(); } catch { /* runTelefunc 已显示统一错误提示。 */ } finally { saving.value = false; } }
+async function saveCategory() { saving.value = true; try { await runTelefunc(() => onSaveCategory({ ...form, translations: { ...translations } })); dialogOpen.value = false; resetForm(); await loadCategories(); } catch { /* runTelefunc 已显示统一错误提示。 */ } finally { saving.value = false; } }
 async function setStatus(item: Category) { try { await runTelefunc(() => onSetCategoryStatus({ id: item.id, status: item.status === "ACTIVE" ? "DISABLED" : "ACTIVE" })); await loadCategories(); } catch { /* runTelefunc 已显示统一错误提示。 */ } }
 function resetForm() {
   slugTouched.value = false;
   Object.assign(form, { id: undefined, name: "", slug: "", description: "", sort: 0 });
+  translations["zh-TW"] = { name: "", description: "" };
+  translations["en-US"] = { name: "", description: "" };
+  editorLocale.value = "zh-CN";
 }
 watch(() => form.name, (name) => {
   if (!slugTouched.value && !form.id) form.slug = slugify(name);

@@ -12,6 +12,17 @@
         <div class="px-6 py-6">
           <FieldGroup class="gap-5">
             <FieldSet class="gap-4">
+              <FieldLegend>多语言内容</FieldLegend>
+              <Field>
+                <FieldLabel for="site-locale">编辑语言</FieldLabel>
+                <Select :model-value="editorLocale" @update:model-value="setEditorLocale"><SelectTrigger id="site-locale" class="w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in localeOptions" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select>
+                <FieldDescription>切换语言只影响副标题、首页公告、页脚文案和下单提示；留空时回退到简体中文。其他设置对所有语言生效。</FieldDescription>
+              </Field>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet class="gap-4">
               <FieldLegend>基础信息</FieldLegend>
               <div class="grid gap-4 md:grid-cols-2">
                 <VeeField v-slot="{ componentField, errors }" name="siteName" :validate-on-input="true">
@@ -22,7 +33,7 @@
                   </Field>
                 </VeeField>
 
-                <VeeField v-slot="{ componentField, errors }" name="siteSubtitle" :validate-on-input="true">
+                <VeeField v-show="editorLocale === 'zh-CN'" v-slot="{ componentField, errors }" name="siteSubtitle" :validate-on-input="true">
                   <Field :data-invalid="errors.length > 0">
                     <FieldLabel for="site-subtitle">副标题 / 默认 SEO 描述</FieldLabel>
                     <Input id="site-subtitle" v-bind="componentField" placeholder="例如：安全、稳定的自动发卡商城" :aria-invalid="errors.length > 0" />
@@ -30,6 +41,11 @@
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
                 </VeeField>
+                <Field v-show="editorLocale !== 'zh-CN'">
+                  <FieldLabel for="site-subtitle">副标题 / 默认 SEO 描述（{{ localeLabel(editorLocale) }}）</FieldLabel>
+                  <Input id="site-subtitle" v-model="activeTranslation.subtitle" maxlength="300" placeholder="例如：安全、稳定的自动发卡商城" />
+                  <FieldDescription>同时用作公开首页副标题和默认 description。</FieldDescription>
+                </Field>
               </div>
 
               <div class="grid gap-4 md:grid-cols-2">
@@ -101,13 +117,17 @@
 
             <FieldSet class="gap-4">
               <FieldLegend>公开商城内容</FieldLegend>
-              <VeeField v-slot="{ componentField, errors }" name="notice" :validate-on-input="true">
+              <VeeField v-show="editorLocale === 'zh-CN'" v-slot="{ componentField, errors }" name="notice" :validate-on-input="true">
                 <Field :data-invalid="errors.length > 0">
                   <FieldLabel for="site-notice">首页公告</FieldLabel>
                   <Textarea id="site-notice" v-bind="componentField" rows="3" placeholder="展示在商城首页的公告内容。" :aria-invalid="errors.length > 0" />
                   <FieldError v-if="errors.length" :errors="errors" />
                 </Field>
               </VeeField>
+              <Field v-show="editorLocale !== 'zh-CN'">
+                <FieldLabel for="site-notice">首页公告（{{ localeLabel(editorLocale) }}）</FieldLabel>
+                <Textarea id="site-notice" v-model="activeTranslation.notice" rows="3" maxlength="2000" placeholder="展示在商城首页的公告内容。" />
+              </Field>
 
               <div class="grid gap-4 md:grid-cols-2">
                 <VeeField v-slot="{ componentField, errors }" name="supportContact" :validate-on-input="true">
@@ -119,22 +139,30 @@
                   </Field>
                 </VeeField>
 
-                <VeeField v-slot="{ componentField, errors }" name="footerText" :validate-on-input="true">
+                <VeeField v-show="editorLocale === 'zh-CN'" v-slot="{ componentField, errors }" name="footerText" :validate-on-input="true">
                   <Field :data-invalid="errors.length > 0">
                     <FieldLabel for="site-footer-text">页脚文案</FieldLabel>
                     <Textarea id="site-footer-text" v-bind="componentField" rows="3" placeholder="例如：© 2026 CFFK 版权所有" :aria-invalid="errors.length > 0" />
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
                 </VeeField>
+                <Field v-show="editorLocale !== 'zh-CN'">
+                  <FieldLabel for="site-footer-text">页脚文案（{{ localeLabel(editorLocale) }}）</FieldLabel>
+                  <Textarea id="site-footer-text" v-model="activeTranslation.footerText" rows="3" maxlength="1000" placeholder="例如：© 2026 CFFK 版权所有" />
+                </Field>
               </div>
 
-              <VeeField v-slot="{ componentField, errors }" name="orderNotice" :validate-on-input="true">
+              <VeeField v-show="editorLocale === 'zh-CN'" v-slot="{ componentField, errors }" name="orderNotice" :validate-on-input="true">
                 <Field :data-invalid="errors.length > 0">
                   <FieldLabel for="site-order-notice">下单提示</FieldLabel>
                   <Textarea id="site-order-notice" v-bind="componentField" rows="3" placeholder="展示在下单流程中的补充说明。" :aria-invalid="errors.length > 0" />
                   <FieldError v-if="errors.length" :errors="errors" />
                 </Field>
               </VeeField>
+              <Field v-show="editorLocale !== 'zh-CN'">
+                <FieldLabel for="site-order-notice">下单提示（{{ localeLabel(editorLocale) }}）</FieldLabel>
+                <Textarea id="site-order-notice" v-model="activeTranslation.orderNotice" rows="3" maxlength="2000" placeholder="展示在下单流程中的补充说明。" />
+              </Field>
             </FieldSet>
 
             <FieldSeparator />
@@ -190,7 +218,7 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog.vue";
 
@@ -204,6 +232,7 @@ import { Button } from "@/components/ui/button";
 
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
 import { Combobox, ComboboxAnchor, ComboboxEmpty, ComboboxGroup, ComboboxInput, ComboboxItem, ComboboxList, ComboboxTrigger, ComboboxViewport } from "@/components/ui/combobox";
@@ -258,6 +287,27 @@ type FormValues = {
 
 const timezones = SITE_TIMEZONES.map((value) => ({ value, label: value }));
 
+type EditorLocale = "zh-CN" | "zh-TW" | "en-US";
+type SiteTranslation = { subtitle: string; notice: string; footerText: string; orderNotice: string };
+const localeOptions: Array<{ value: EditorLocale; label: string }> = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "zh-TW", label: "繁體中文" },
+  { value: "en-US", label: "English" },
+];
+const editorLocale = ref<EditorLocale>("zh-CN");
+const translations = reactive<Record<"zh-TW" | "en-US", SiteTranslation>>({
+  "zh-TW": { subtitle: "", notice: "", footerText: "", orderNotice: "" },
+  "en-US": { subtitle: "", notice: "", footerText: "", orderNotice: "" },
+});
+const emptyTranslation: SiteTranslation = { subtitle: "", notice: "", footerText: "", orderNotice: "" };
+const activeTranslation = computed(() => (editorLocale.value === "zh-CN" ? emptyTranslation : translations[editorLocale.value]));
+
+function localeLabel(locale: EditorLocale) { return localeOptions.find((item) => item.value === locale)?.label ?? locale; }
+function setEditorLocale(next: unknown) {
+  if (next !== "zh-CN" && next !== "zh-TW" && next !== "en-US") return;
+  editorLocale.value = next;
+}
+
 const initialValues: FormValues = {
   siteName: "CFFK-Shop",
   siteUrl: "",
@@ -311,11 +361,26 @@ function toFormValues(settings: Awaited<ReturnType<typeof onGetSiteSettings>>): 
   };
 }
 
+function syncTranslations(settings: Awaited<ReturnType<typeof onGetSiteSettings>>) {
+  for (const locale of ["zh-TW", "en-US"] as const) {
+    const content = settings.translations?.[locale];
+    translations[locale] = {
+      subtitle: content?.subtitle ?? "",
+      notice: content?.notice ?? "",
+      footerText: content?.footerText ?? "",
+      orderNotice: content?.orderNotice ?? "",
+    };
+  }
+  editorLocale.value = "zh-CN";
+}
+
 async function loadSettings() {
   loading.value = true;
   error.value = null;
   try {
-    resetForm({ values: toFormValues(await runTelefunc(() => onGetSiteSettings(), { notifyError: false })) });
+    const settings = await runTelefunc(() => onGetSiteSettings(), { notifyError: false });
+    resetForm({ values: toFormValues(settings) });
+    syncTranslations(settings);
   } catch (cause) {
     error.value = userErrorMessage(cause);
   } finally {
@@ -327,8 +392,9 @@ const saveSettings = handleSubmit(async (values) => {
   loading.value = true;
   error.value = null;
   try {
-    const settings = await runTelefunc(() => onSaveSiteSettings(values), { successMessage: "站点设置已保存。" });
+    const settings = await runTelefunc(() => onSaveSiteSettings({ ...values, translations: { ...translations } }), { successMessage: "站点设置已保存。" });
     resetForm({ values: toFormValues(settings) });
+    syncTranslations(settings);
   } catch {
     // runTelefunc 已显示脱敏后的错误提示。
   } finally {

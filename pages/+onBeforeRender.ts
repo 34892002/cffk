@@ -7,7 +7,7 @@ export async function onBeforeRender(pageContext: PageContextServer) {
   const locale = resolveHeadersLocale(pageContext.headers as Record<string, string | undefined> | undefined);
 
   try {
-    return { pageContext: { site: toPublicSiteSettings(await getSiteSettings(env.DB)), locale } };
+    return { pageContext: { site: toPublicSiteSettings(await getSiteSettings(env.DB), locale), locale } };
   } catch {
     return {
       pageContext: {

@@ -32,8 +32,8 @@ function insertFixtures(sqlite: Database, identity: FlowIdentity) {
       .run(identity.ownerUserId, identity.name, identity.email, now, now);
   }
   sqlite.query("INSERT INTO siteSetting (id, siteName, siteUrl, registrationEnabled, timezone, createdAt, updatedAt) VALUES (1, 'Core Shop', 'https://shop.example.com', 1, 'Asia/Shanghai', ?, ?)").run(now, now);
-  sqlite.query("INSERT INTO product_v2 (name, slug, status, sort, createdAt, updatedAt) VALUES ('Core product', ?, 'ACTIVE', 0, ?, ?)")
-    .run(`core-${identity.ownerUserId ?? "guest"}`, now, now);
+  sqlite.query("INSERT INTO product_v2 (name, slug, status, sort, translationsJson, createdAt, updatedAt) VALUES ('Core product', ?, 'ACTIVE', 0, ?, ?, ?)")
+    .run(`core-${identity.ownerUserId ?? "guest"}`, JSON.stringify({ "en-US": { name: "Core product EN" } }), now, now);
   const product = sqlite.query("SELECT id FROM product_v2 WHERE slug = ?").get(`core-${identity.ownerUserId ?? "guest"}`) as { id: number };
   sqlite.query("INSERT INTO productSku (productId, name, price, status, deliveryType, fixedDeliveryContent, minBuy, maxBuy, sort, createdAt, updatedAt) VALUES (?, 'Default', 1000, 'ACTIVE', 'FIXED_CARD', 'LICENSE-CORE-001', 1, 1, 0, ?, ?)")
     .run(product.id, now, now);
@@ -68,8 +68,8 @@ async function runStorefrontFlow(identity: FlowIdentity) {
   expect(created).toMatchObject({ amount: 0, originalAmount: 1000, discountAmount: 1000, discountCode });
 
   expect(await confirmOrderPayment(context.database, created.id)).toEqual({ outcome: "CONFIRMED" });
-  const order = context.sqlite.query("SELECT ownerUserId, status, paymentStatus, deliveryStatus, locale FROM `order` WHERE id = ?").get(created.id);
-  expect(order).toEqual({ ownerUserId: identity.ownerUserId, status: "DELIVERED", paymentStatus: "PAID", deliveryStatus: "DELIVERED", locale: "en-US" });
+  const order = context.sqlite.query("SELECT ownerUserId, status, paymentStatus, deliveryStatus, locale, productNameSnapshot FROM `order` WHERE id = ?").get(created.id);
+  expect(order).toEqual({ ownerUserId: identity.ownerUserId, status: "DELIVERED", paymentStatus: "PAID", deliveryStatus: "DELIVERED", locale: "en-US", productNameSnapshot: "Core product EN" });
   expect(context.sqlite.query("SELECT usedCount, reservedCount FROM discountCode WHERE code = ?").get(discountCode)).toEqual({ usedCount: 1, reservedCount: 0 });
 
   const eventResult = await processOrderEvents(context.database, {
