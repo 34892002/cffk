@@ -33,8 +33,8 @@
                   </Field>
                 </VeeField>
 
-                <VeeField v-show="editorLocale === 'zh-CN'" v-slot="{ componentField, errors }" name="siteSubtitle" :validate-on-input="true">
-                  <Field :data-invalid="errors.length > 0">
+                <VeeField v-slot="{ componentField, errors }" name="siteSubtitle" :validate-on-input="true">
+                  <Field v-show="editorLocale === 'zh-CN'" :data-invalid="errors.length > 0">
                     <FieldLabel for="site-subtitle">副标题 / 默认 SEO 描述</FieldLabel>
                     <Input id="site-subtitle" v-bind="componentField" placeholder="例如：安全、稳定的自动发卡商城" :aria-invalid="errors.length > 0" />
                     <FieldDescription>同时用作公开首页副标题和默认 description。</FieldDescription>
@@ -117,8 +117,8 @@
 
             <FieldSet class="gap-4">
               <FieldLegend>公开商城内容</FieldLegend>
-              <VeeField v-show="editorLocale === 'zh-CN'" v-slot="{ componentField, errors }" name="notice" :validate-on-input="true">
-                <Field :data-invalid="errors.length > 0">
+              <VeeField v-slot="{ componentField, errors }" name="notice" :validate-on-input="true">
+                <Field v-show="editorLocale === 'zh-CN'" :data-invalid="errors.length > 0">
                   <FieldLabel for="site-notice">首页公告</FieldLabel>
                   <Textarea id="site-notice" v-bind="componentField" rows="3" placeholder="展示在商城首页的公告内容。" :aria-invalid="errors.length > 0" />
                   <FieldError v-if="errors.length" :errors="errors" />
@@ -139,8 +139,8 @@
                   </Field>
                 </VeeField>
 
-                <VeeField v-show="editorLocale === 'zh-CN'" v-slot="{ componentField, errors }" name="footerText" :validate-on-input="true">
-                  <Field :data-invalid="errors.length > 0">
+                <VeeField v-slot="{ componentField, errors }" name="footerText" :validate-on-input="true">
+                  <Field v-show="editorLocale === 'zh-CN'" :data-invalid="errors.length > 0">
                     <FieldLabel for="site-footer-text">页脚文案</FieldLabel>
                     <Textarea id="site-footer-text" v-bind="componentField" rows="3" placeholder="例如：© 2026 CFFK 版权所有" :aria-invalid="errors.length > 0" />
                     <FieldError v-if="errors.length" :errors="errors" />
@@ -152,8 +152,8 @@
                 </Field>
               </div>
 
-              <VeeField v-show="editorLocale === 'zh-CN'" v-slot="{ componentField, errors }" name="orderNotice" :validate-on-input="true">
-                <Field :data-invalid="errors.length > 0">
+              <VeeField v-slot="{ componentField, errors }" name="orderNotice" :validate-on-input="true">
+                <Field v-show="editorLocale === 'zh-CN'" :data-invalid="errors.length > 0">
                   <FieldLabel for="site-order-notice">下单提示</FieldLabel>
                   <Textarea id="site-order-notice" v-bind="componentField" rows="3" placeholder="展示在下单流程中的补充说明。" :aria-invalid="errors.length > 0" />
                   <FieldError v-if="errors.length" :errors="errors" />
