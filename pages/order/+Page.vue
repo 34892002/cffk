@@ -9,40 +9,40 @@
 
     <section class="mx-auto max-w-6xl px-4 pb-12 pt-24 sm:px-6 sm:pb-16 sm:pt-28">
       <div class="mb-6">
-        <h1 class="text-2xl font-semibold">订单中心</h1>
-        <p class="mt-1 text-sm text-muted-foreground">通过本机记录、订单号和下单邮箱查询或恢复匿名订单。</p>
+        <h1 class="text-2xl font-semibold">{{ messages.guestOrders.title }}</h1>
+        <p class="mt-1 text-sm text-muted-foreground">{{ messages.guestOrders.description }}</p>
       </div>
 
       <div class="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
         <aside ref="orderSidebar" class="flex flex-col gap-6">
           <Card>
             <CardHeader>
-              <CardTitle class="text-base">查询匿名订单</CardTitle>
-              <CardDescription>使用订单号和对应的下单邮箱查询详情。</CardDescription>
+              <CardTitle class="text-base">{{ messages.guestOrders.lookup.title }}</CardTitle>
+              <CardDescription>{{ messages.guestOrders.lookup.description }}</CardDescription>
             </CardHeader>
             <form novalidate @submit.prevent="submitQuery">
               <CardContent>
                 <FieldGroup>
                   <VeeField v-slot="{ componentField, errors }" name="orderNo" :validate-on-input="true">
                     <Field :data-invalid="errors.length > 0">
-                      <FieldLabel for="order-number">订单号</FieldLabel>
-                      <Input id="order-number" v-bind="componentField" autocomplete="off" placeholder="ORD..." :aria-invalid="errors.length > 0" />
+                      <FieldLabel for="order-number">{{ messages.guestOrders.lookup.orderNumber }}</FieldLabel>
+                      <Input id="order-number" v-bind="componentField" autocomplete="off" :placeholder="messages.guestOrders.lookup.placeholder" :aria-invalid="errors.length > 0" />
                       <FieldError v-if="errors.length" :errors="errors" />
                     </Field>
                   </VeeField>
                   <VeeField v-slot="{ componentField, errors }" name="email" :validate-on-input="true">
                     <Field :data-invalid="errors.length > 0">
-                      <FieldLabel for="order-email">下单邮箱</FieldLabel>
+                      <FieldLabel for="order-email">{{ messages.guestOrders.lookup.email }}</FieldLabel>
                       <Input id="order-email" v-bind="componentField" type="email" autocomplete="email" :aria-invalid="errors.length > 0" />
                       <FieldError v-if="errors.length" :errors="errors" />
                     </Field>
                   </VeeField>
                 </FieldGroup>
-                <Alert v-if="error" class="mt-4" variant="destructive"><AlertTitle>查询失败</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
+                <Alert v-if="error" class="mt-4" variant="destructive"><AlertTitle>{{ messages.guestOrders.lookup.failed }}</AlertTitle><AlertDescription>{{ error }}</AlertDescription></Alert>
               </CardContent>
               <CardFooter class="pt-5">
                 <Button type="submit" class="w-full" :disabled="querySubmitting">
-                  <SearchIcon data-icon="inline-start" />{{ querySubmitting ? "查询中..." : "查询匿名订单" }}
+                  <SearchIcon data-icon="inline-start" />{{ querySubmitting ? messages.guestOrders.lookup.loading : messages.guestOrders.lookup.title }}
                 </Button>
               </CardFooter>
             </form>
@@ -50,33 +50,33 @@
 
           <Card>
             <CardHeader>
-              <CardTitle class="text-base">邮箱 OTP 恢复</CardTitle>
-              <CardDescription>验证下单邮箱后，以服务端最近的匿名订单原子覆盖该邮箱的本机分组。</CardDescription>
+              <CardTitle class="text-base">{{ messages.guestOrders.recovery.title }}</CardTitle>
+              <CardDescription>{{ messages.guestOrders.recovery.description }}</CardDescription>
             </CardHeader>
             <VeeForm v-slot="{ isSubmitting: recoverySubmitting }" as="form" novalidate :validation-schema="recoverySchema" @submit="submitRecovery">
               <CardContent>
                 <FieldGroup>
                   <VeeField v-slot="{ componentField, errors }" name="recoveryEmail" :validate-on-input="true">
                     <Field :data-invalid="errors.length > 0">
-                      <FieldLabel for="recovery-email">下单邮箱</FieldLabel>
+                      <FieldLabel for="recovery-email">{{ messages.guestOrders.recovery.email }}</FieldLabel>
                       <Input id="recovery-email" v-bind="componentField" type="email" autocomplete="email" :disabled="Boolean(recoveryChallengeId)" :aria-invalid="errors.length > 0" />
                       <FieldError v-if="errors.length" :errors="errors" />
                     </Field>
                   </VeeField>
                   <VeeField v-if="recoveryChallengeId" v-slot="{ componentField, errors }" name="recoveryCode" :validate-on-input="true">
                     <Field :data-invalid="errors.length > 0">
-                      <FieldLabel for="recovery-code">6 位验证码</FieldLabel>
+                      <FieldLabel for="recovery-code">{{ messages.guestOrders.recovery.code }}</FieldLabel>
                       <Input id="recovery-code" v-bind="componentField" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :aria-invalid="errors.length > 0" />
                       <FieldError v-if="errors.length" :errors="errors" />
                     </Field>
                   </VeeField>
                 </FieldGroup>
-                <p v-if="recoveryTruncated" class="mt-4 text-xs leading-5 text-muted-foreground">仅恢复最近 50 个匿名订单；更早记录未写入本机。</p>
+                <p v-if="recoveryTruncated" class="mt-4 text-xs leading-5 text-muted-foreground">{{ messages.guestOrders.recovery.truncatedNote }}</p>
               </CardContent>
               <CardFooter class="gap-2 pt-5">
-                <Button v-if="recoveryChallengeId" type="button" variant="outline" :disabled="recoverySubmitting" @click="resetRecovery">更换邮箱</Button>
+                <Button v-if="recoveryChallengeId" type="button" variant="outline" :disabled="recoverySubmitting" @click="resetRecovery">{{ messages.guestOrders.recovery.changeEmail }}</Button>
                 <Button type="submit" class="flex-1" :disabled="recoverySubmitting">
-                  {{ recoverySubmitting ? "处理中..." : recoveryChallengeId ? "验证并恢复" : "发送验证码" }}
+                  {{ recoverySubmitting ? messages.guestOrders.recovery.submitting : recoveryChallengeId ? messages.guestOrders.recovery.verify : messages.guestOrders.recovery.sendCode }}
                 </Button>
               </CardFooter>
             </VeeForm>
@@ -87,10 +87,10 @@
           <Card v-if="result" class="h-full w-full overflow-hidden">
             <CardHeader class="border-b">
               <div class="flex items-center justify-between gap-4">
-                <div class="inline-flex cursor-pointer items-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground" role="link" aria-label="返回匿名订单列表" tabindex="0" @click="backToGuestList" @keydown.enter="backToGuestList" @keydown.space.prevent="backToGuestList"><ArrowLeftIcon class="size-4" />返回</div>
+                <div class="inline-flex cursor-pointer items-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground" role="link" :aria-label="messages.guestOrders.backAriaLabel" tabindex="0" @click="backToGuestList" @keydown.enter="backToGuestList" @keydown.space.prevent="backToGuestList"><ArrowLeftIcon class="size-4" />{{ messages.guestOrders.back }}</div>
                 <Badge :variant="statusVariant(result.status)">{{ statusLabel(result.status) }}</Badge>
               </div>
-              <CardDescription class="mt-3">订单详情</CardDescription>
+              <CardDescription class="mt-3">{{ messages.guestOrders.detail.title }}</CardDescription>
               <div class="flex min-w-0 items-baseline justify-between gap-4">
                 <CardTitle class="min-w-0 truncate text-xl">{{ result.productName }}</CardTitle>
                 <p class="shrink-0 break-all text-right font-mono text-xs leading-5 text-muted-foreground">{{ result.orderNo }}</p>
@@ -98,33 +98,33 @@
             </CardHeader>
             <CardContent class="flex min-h-0 flex-col gap-6 overflow-y-auto pt-6 text-sm">
               <dl class="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-                <div><dt class="text-xs text-muted-foreground">数量</dt><dd class="mt-1 font-medium">{{ result.quantity }}</dd></div>
-                <div><dt class="text-xs text-muted-foreground">金额</dt><dd class="mt-1 font-medium">¥{{ result.amount }}</dd></div>
-                <div><dt class="text-xs text-muted-foreground">支付状态</dt><dd class="mt-1 font-medium">{{ paymentStatusLabel(result.paymentStatus) }}</dd></div>
-                <div><dt class="text-xs text-muted-foreground">发货状态</dt><dd class="mt-1 font-medium">{{ deliveryStatusLabel(result.deliveryStatus) }}</dd></div>
+                <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.quantity }}</dt><dd class="mt-1 font-medium">{{ result.quantity }}</dd></div>
+                <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.amount }}</dt><dd class="mt-1 font-medium">¥{{ result.amount }}</dd></div>
+                <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.paymentStatus }}</dt><dd class="mt-1 font-medium">{{ paymentStatusLabel(result.paymentStatus) }}</dd></div>
+                <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.deliveryStatus }}</dt><dd class="mt-1 font-medium">{{ deliveryStatusLabel(result.deliveryStatus) }}</dd></div>
               </dl>
 
 
 
               <div v-if="result.deliveries.length" class="min-w-0 border-t pt-6">
-                <p class="mb-3 font-medium">发货内容</p>
+                <p class="mb-3 font-medium">{{ messages.guestOrders.detail.deliveryContents }}</p>
                 <pre class="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/50 p-4 font-mono text-xs leading-6">{{ result.deliveries.join("\n") }}</pre>
               </div>
               <Alert v-else-if="result.paymentStatus === 'PAID'">
-                <AlertTitle>等待发货</AlertTitle>
-                <AlertDescription>订单已支付，发货任务正在处理中。</AlertDescription>
+                <AlertTitle>{{ messages.guestOrders.detail.awaitingDeliveryTitle }}</AlertTitle>
+                <AlertDescription>{{ messages.guestOrders.detail.awaitingDeliveryDescription }}</AlertDescription>
               </Alert>
             </CardContent>
             <CardFooter v-if="result.paymentStatus === 'UNPAID'" class="justify-end border-t pt-5">
-              <Button v-if="isFaceToFacePayment" as-child><a :href="`/checkout?orderNo=${encodeURIComponent(result.orderNo)}`">前往支付</a></Button><Button v-else :disabled="resumingPayment" @click="resumePayment">{{ resumingPayment ? "正在生成支付信息..." : "继续支付" }}</Button>
+              <Button v-if="isFaceToFacePayment" as-child><a :href="`/checkout?orderNo=${encodeURIComponent(result.orderNo)}`">{{ messages.guestOrders.payment.goToPayment }}</a></Button><Button v-else :disabled="resumingPayment" @click="resumePayment">{{ resumingPayment ? messages.guestOrders.payment.generating : messages.guestOrders.payment.resume }}</Button>
             </CardFooter>
           </Card>
 
           <Card v-else class="h-full w-full overflow-hidden lg:flex lg:min-h-0 lg:flex-col">
             <CardHeader class="border-b">
-              <CardDescription>选择或查询订单</CardDescription>
-              <CardTitle class="text-xl">匿名订单列表</CardTitle>
-              <p class="text-sm leading-6 text-muted-foreground">本机保存的订单按下单邮箱分组。选择订单后可查看详情或继续支付。</p>
+              <CardDescription>{{ messages.guestOrders.list.eyebrow }}</CardDescription>
+              <CardTitle class="text-xl">{{ messages.guestOrders.list.title }}</CardTitle>
+              <p class="text-sm leading-6 text-muted-foreground">{{ messages.guestOrders.list.description }}</p>
             </CardHeader>
             <CardContent v-if="guestGroups.length" class="min-h-0 overflow-hidden p-0 lg:flex-1">
               <OrderList :groups="guestGroups.map(group => ({ key: group.email, title: group.email, orders: group.orders }))" :on-select="(item, email) => openGuestOrder(email, item as LocalOrder)" :on-delete-group="requestClearGuestOrders" />
@@ -132,13 +132,13 @@
             <CardContent v-else class="grid min-h-64 place-items-center p-8 text-center lg:flex-1">
               <div class="max-w-sm">
                 <SearchIcon class="mx-auto size-8 text-muted-foreground" />
-                <h2 class="mt-4 font-medium">暂无本机匿名订单</h2>
-                <p class="mt-2 text-sm leading-6 text-muted-foreground">请使用左侧表单按订单号和下单邮箱查询，或通过邮箱 OTP 恢复订单记录。</p>
+                <h2 class="mt-4 font-medium">{{ messages.guestOrders.list.emptyTitle }}</h2>
+                <p class="mt-2 text-sm leading-6 text-muted-foreground">{{ messages.guestOrders.list.emptyDescription }}</p>
               </div>
             </CardContent>
             <CardFooter v-if="guestGroups.length" class="justify-end border-t pt-5">
               <Button type="button" variant="outline" size="sm" @click="requestClearGuestOrders()">
-                <Trash2Icon data-icon="inline-start" />删除全部匿名订单
+                <Trash2Icon data-icon="inline-start" />{{ messages.guestOrders.list.deleteAll }}
               </Button>
             </CardFooter>
           </Card>
@@ -149,12 +149,12 @@
     <Dialog :open="clearTarget !== undefined" @update:open="open => { if (!open) clearTarget = undefined; }">
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{{ clearTarget ? `删除 ${clearTarget} 的匿名订单？` : "删除全部匿名订单？" }}</DialogTitle>
-          <DialogDescription>{{ clearTarget ? "此操作只会删除该邮箱分组，不影响其他邮箱的本机记录。" : "此操作会永久删除当前浏览器保存的全部匿名订单记录。" }}操作无法撤销。</DialogDescription>
+          <DialogTitle>{{ clearTarget ? t(messages.guestOrders.clear.titleOne, { email: clearTarget }) : messages.guestOrders.clear.titleAll }}</DialogTitle>
+          <DialogDescription>{{ clearTarget ? messages.guestOrders.clear.descriptionOne : messages.guestOrders.clear.descriptionAll }}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
-          <Button type="button" variant="destructive" @click="confirmClearGuestOrders">确认删除</Button>
+          <DialogClose as-child><Button type="button" variant="outline">{{ messages.guestOrders.clear.cancel }}</Button></DialogClose>
+          <Button type="button" variant="destructive" @click="confirmClearGuestOrders">{{ messages.guestOrders.clear.confirm }}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -184,6 +184,7 @@ import { Input } from "@/components/ui/input";
 
 import { clearAllLocalOrders, deleteLocalOrdersForEmail, getLocalOrderGroups, replaceLocalOrdersForEmail, type LocalOrder } from "@/lib/local-orders";
 import { cacheQrPayment } from "@/lib/payment-utils";
+import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onQueryOrder, onResumeOrderPayment, type PublicOrder } from "@/server/order/public.telefunc";
 import { onSendGuestOrderRecoveryCode, onVerifyGuestOrderRecoveryCode } from "@/server/order/recovery.telefunc";
@@ -193,6 +194,7 @@ type GuestGroup = { email: string; orders: LocalOrder[] };
 type RecoveryValues = { recoveryEmail: string; recoveryCode?: string };
 
 
+const { messages, t } = useStorefrontPreferences();
 const pageContext = usePageContext();
 const rawOrderNo = pageContext.urlParsed.search.orderNo;
 const requestedOrderNo = (typeof rawOrderNo === "string" ? rawOrderNo : "").trim();
@@ -213,17 +215,17 @@ const recoveryTruncated = ref(false);
 const isFaceToFacePayment = computed(() => result.value?.paymentChannel === "face_to_face");
 
 const { handleSubmit, isSubmitting: querySubmitting, setFieldValue } = useForm({
-  validationSchema: toTypedSchema(z.object({
-    orderNo: z.string().trim().min(1, "请输入订单号。"),
-    email: z.string().trim().email("请输入有效的下单邮箱。"),
-  })),
+  validationSchema: computed(() => toTypedSchema(z.object({
+    orderNo: z.string().trim().min(1, messages.value.guestOrders.validation.orderNumberRequired),
+    email: z.string().trim().email(messages.value.guestOrders.validation.emailInvalid),
+  }))),
   initialValues: { orderNo: "", email: "" },
 });
 
 const recoverySchema = computed(() => toTypedSchema(z.object({
-  recoveryEmail: z.string().trim().email("请输入有效的下单邮箱。"),
+  recoveryEmail: z.string().trim().email(messages.value.guestOrders.validation.emailInvalid),
   recoveryCode: recoveryChallengeId.value
-    ? z.string().trim().regex(/^\d{6}$/, "请输入 6 位数字验证码。")
+    ? z.string().trim().regex(/^\d{6}$/, messages.value.guestOrders.validation.codeInvalid)
     : z.string().optional(),
 })));
 
@@ -258,7 +260,7 @@ onMounted(() => {
     void queryOrder({ orderNo: requestedOrderNo, email });
   } else {
     setFieldValue("orderNo", requestedOrderNo);
-    toast.info("请输入该匿名订单的下单邮箱后查询。");
+    toast.info(messages.value.guestOrders.lookup.emailRequired);
   }
 });
 
@@ -292,12 +294,12 @@ function confirmClearGuestOrders() {
   if (target === undefined) return;
   const cleared = target === null ? clearAllLocalOrders() : deleteLocalOrdersForEmail(target);
   if (!cleared) {
-    toast.error("无法删除本机匿名订单，请检查浏览器存储权限。");
+    toast.error(messages.value.guestOrders.clear.storageFailed);
     return;
   }
   loadGuestGroups();
   clearTarget.value = undefined;
-  toast.success(target === null ? "全部本机匿名订单已删除。" : "该邮箱的本机匿名订单已删除。");
+  toast.success(target === null ? messages.value.guestOrders.clear.deletedAll : messages.value.guestOrders.clear.deletedOne);
 }
 
 async function submitRecovery(values: Record<string, unknown>, actions: { resetForm: (state?: { values?: RecoveryValues }) => void }) {
@@ -308,9 +310,9 @@ async function submitRecovery(values: Record<string, unknown>, actions: { resetF
       const response = await runTelefunc(() => onSendGuestOrderRecoveryCode({ email }), { notifyError: false });
       recoveryChallengeId.value = response.challengeId;
       actions.resetForm({ values: { recoveryEmail: email, recoveryCode: "" } });
-      toast.success("验证码已发送，请检查邮箱。");
+      toast.success(messages.value.guestOrders.recovery.codeSent);
     } catch (cause) {
-      toast.error(userErrorMessage(cause, "验证码发送失败，请稍后再试。"));
+      toast.error(userErrorMessage(cause, messages.value.guestOrders.recovery.sendFailed));
     }
     return;
   }
@@ -326,17 +328,17 @@ async function submitRecovery(values: Record<string, unknown>, actions: { resetF
       createdAt: new Date(order.createdAt).toISOString(),
     }));
     if (!replaceLocalOrdersForEmail(email, recoveredOrders)) {
-      toast.error("验证成功，但无法写入浏览器存储；原有本机订单未更改。");
+      toast.error(messages.value.guestOrders.recovery.storageFailed);
       return;
     }
     loadGuestGroups();
     recoveryTruncated.value = response.truncated;
     recoveryChallengeId.value = "";
     actions.resetForm({ values: { recoveryEmail: email, recoveryCode: "" } });
-    toast.success(`已恢复 ${recoveredOrders.length} 个匿名订单。`);
-    if (response.truncated) toast.info("仅恢复最近 50 个匿名订单，更早记录未写入本机。");
+    toast.success(t(messages.value.guestOrders.recovery.recovered, { count: recoveredOrders.length }));
+    if (response.truncated) toast.info(messages.value.guestOrders.recovery.truncated);
   } catch (cause) {
-    toast.error(userErrorMessage(cause, "验证失败，原有本机订单未更改。"));
+    toast.error(userErrorMessage(cause, messages.value.guestOrders.recovery.verifyFailed));
   }
 }
 
@@ -353,7 +355,7 @@ async function queryOrder(input: { orderNo: string; email?: string }) {
   try {
     const record = await runTelefunc(() => onQueryOrder(input), { notifyError: false });
     if (!record) {
-      error.value = input.email ? "订单不存在，或下单邮箱不匹配。" : "未找到当前账户下的该订单。";
+      error.value = input.email ? messages.value.guestOrders.lookup.notFound : messages.value.accountOrders.lookup.notFound;
       return;
     }
     result.value = record;
@@ -378,17 +380,17 @@ async function resumePayment() {
       window.location.assign(`/checkout?orderNo=${encodeURIComponent(payment.orderNo)}`);
       return;
     }
-    toast.error("暂时无法生成支付信息，请稍后再试。");
+    toast.error(messages.value.guestOrders.payment.generateFailed);
   } catch (cause) {
-    toast.error(userErrorMessage(cause, "暂时无法继续支付，请稍后再试。"));
+    toast.error(userErrorMessage(cause, messages.value.guestOrders.payment.resumeFailed));
   } finally {
     resumingPayment.value = false;
   }
 }
 
 
-function statusLabel(status: PublicOrder["status"]) { return { PENDING: "待支付", PAID: "已支付", DELIVERED: "已发货", CLOSED: "已关闭", FAILED: "失败" }[status]; }
-function paymentStatusLabel(status: PublicOrder["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[status]; }
-function deliveryStatusLabel(status: PublicOrder["deliveryStatus"]) { return { NOT_DELIVERED: "未发货", DELIVERING: "发货中", DELIVERED: "已发货", FAILED: "发货失败" }[status]; }
+function statusLabel(status: PublicOrder["status"]) { return { PENDING: messages.value.guestOrders.status.pending, PAID: messages.value.guestOrders.status.paid, DELIVERED: messages.value.guestOrders.status.delivered, CLOSED: messages.value.guestOrders.status.closed, FAILED: messages.value.guestOrders.status.failed }[status]; }
+function paymentStatusLabel(status: PublicOrder["paymentStatus"]) { return { UNPAID: messages.value.guestOrders.paymentStatus.unpaid, PAID: messages.value.guestOrders.paymentStatus.paid, FAILED: messages.value.guestOrders.paymentStatus.failed }[status]; }
+function deliveryStatusLabel(status: PublicOrder["deliveryStatus"]) { return { NOT_DELIVERED: messages.value.guestOrders.deliveryStatus.notDelivered, DELIVERING: messages.value.guestOrders.deliveryStatus.delivering, DELIVERED: messages.value.guestOrders.deliveryStatus.delivered, FAILED: messages.value.guestOrders.deliveryStatus.failed }[status]; }
 function statusVariant(status: PublicOrder["status"]) { return status === "DELIVERED" || status === "PAID" ? "secondary" : status === "FAILED" ? "destructive" : "outline"; }
 </script>

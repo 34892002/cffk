@@ -27,8 +27,8 @@
             <CardHeader><CardDescription>{{ messages.productCheckout.currentPrice }}</CardDescription><CardTitle class="text-3xl text-orange-600">¥{{ selectedSku.price }}</CardTitle></CardHeader><form class="grid min-w-0 gap-6" novalidate @submit.prevent="submit">
               <CardContent class="grid min-w-0 gap-4">
                 <div v-if="data.skus.length > 1" class="grid gap-2 text-sm font-medium">
-                  <span>选择规格</span>
-                  <div class="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label="选择规格">
+                  <span>{{ messages.productCheckout.selectSku }}</span>
+                  <div class="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" :aria-label="messages.productCheckout.selectSku">
                     <Button v-for="sku in data.skus" :key="sku.id" type="button" :variant="String(sku.id) === selectedSkuId ? 'default' : 'outline'" class="h-auto min-h-10 justify-start whitespace-normal px-3 py-2 text-left text-sm leading-5" :aria-pressed="String(sku.id) === selectedSkuId" @click="selectedSkuId = String(sku.id)">
                       {{ sku.name }} · ¥{{ sku.price }}
                     </Button>

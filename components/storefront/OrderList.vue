@@ -6,7 +6,7 @@
           <h2 class="truncate text-sm font-medium" :title="group.title">{{ group.title }}</h2>
           <div class="flex items-center gap-1">
             <Badge variant="outline">{{ group.orders.length }}</Badge>
-            <Button v-if="onDeleteGroup" type="button" variant="ghost" size="icon-sm" :aria-label="`删除 ${group.title} 的订单`" @click="onDeleteGroup(group.key)">
+            <Button v-if="onDeleteGroup" type="button" variant="ghost" size="icon-sm" :aria-label="t(messages.guestOrders.list.deleteGroup, { email: group.title })" @click="onDeleteGroup(group.key)">
               <Trash2Icon />
             </Button>
           </div>
@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { Trash2Icon } from "@lucide/vue";
 
 export type OrderListItem = {
@@ -63,8 +64,10 @@ defineProps<{
   statusVariant?: (status: string) => "default" | "secondary" | "destructive" | "outline";
 }>();
 
+const { messages, t, locale } = useStorefrontPreferences();
+
 function formatDate(value: string | Date) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("zh-CN");
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(locale.value);
 }
 </script>
