@@ -24,7 +24,7 @@
         </article>
         <aside class="h-fit lg:sticky lg:top-0">
           <Card>
-            <CardHeader><CardDescription>{{ messages.productCheckout.currentPrice }}</CardDescription><CardTitle class="text-3xl text-orange-600">¥{{ selectedSku.price }}</CardTitle></CardHeader><form class="grid min-w-0 gap-6" novalidate @submit.prevent="submit">
+            <CardHeader><CardDescription>{{ messages.productCheckout.currentPrice }}</CardDescription><CardTitle class="text-3xl text-orange-600">¥{{ selectedSku.price }}<CurrencyHint /></CardTitle></CardHeader><form class="grid min-w-0 gap-6" novalidate @submit.prevent="submit">
               <CardContent class="grid min-w-0 gap-4">
                 <div v-if="data.skus.length > 1" class="grid gap-2 text-sm font-medium">
                   <span>{{ messages.productCheckout.selectSku }}</span>
@@ -66,7 +66,7 @@
                   </div>
                 </div>
                 <div class="grid gap-2 text-sm font-medium"><span>{{ messages.productCheckout.discountCode }}</span><div class="flex gap-2"><Input v-model="discountCode" autocomplete="off" @keydown.enter.prevent="onApplyDiscount" /><Button type="button" variant="outline" :disabled="discountApplying || !discountCode.trim()" @click="onApplyDiscount">{{ discountApplying ? messages.productCheckout.applyingDiscount : messages.productCheckout.applyDiscount }}</Button></div></div>
-                <div v-if="discountPreview" class="grid gap-1 rounded-md border bg-muted/30 p-3 text-sm"><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.productCheckout.originalAmount }}</span><span>¥{{ discountPreview.originalAmount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ t(messages.productCheckout.appliedDiscount, { code: discountPreview.code }) }}</span><span class="text-destructive">-¥{{ discountPreview.discountAmount }}</span></div><div class="flex justify-between gap-4 border-t pt-2 font-medium"><span>{{ messages.productCheckout.amountDue }}</span><span>¥{{ discountPreview.finalAmount }}</span></div></div>
+                <div v-if="discountPreview" class="grid gap-1 rounded-md border bg-muted/30 p-3 text-sm"><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.productCheckout.originalAmount }}</span><span>¥{{ discountPreview.originalAmount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ t(messages.productCheckout.appliedDiscount, { code: discountPreview.code }) }}</span><span class="text-destructive">-¥{{ discountPreview.discountAmount }}</span></div><div class="flex justify-between gap-4 border-t pt-2 font-medium"><span>{{ messages.productCheckout.amountDue }}</span><span>¥{{ discountPreview.finalAmount }}<CurrencyHint /></span></div></div>
                 <label class="grid gap-2 text-sm font-medium">{{ messages.productCheckout.buyerNote }}<Textarea v-model="buyerNote" rows="3" /></label>
               </CardContent><CardFooter class="flex-col items-stretch gap-3"><Button type="submit" :disabled="loading || isOutOfStock || (requiresPayment && !methods.length)">{{ loading ? messages.productCheckout.processingOrder : isOutOfStock ? messages.storefront.outOfStock : requiresPayment ? messages.productCheckout.submitAndPay : messages.productCheckout.createFreeOrder }}</Button><p class="text-xs text-muted-foreground">{{ messages.productCheckout.paymentAmountNotice }}</p></CardFooter>
             </form>
@@ -125,6 +125,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import defaultProductImage from "@/assets/product_img.jpg?url";
 import { clearLocalAddresses, getLocalAddresses, saveLocalAddress, type LocalAddress } from "@/lib/local-addresses";
+import CurrencyHint from "@/components/storefront/CurrencyHint.vue";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { saveGuestOrder } from "@/lib/local-orders";
 import { cacheQrPayment } from "@/lib/payment-utils";

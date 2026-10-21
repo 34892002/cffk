@@ -19,7 +19,7 @@
           </Alert>
           <template v-if="order">
             <div class="flex items-center justify-between gap-4 rounded-md border p-4"><span>{{ messages.paymentResult.orderStatus }}</span><Badge :variant="statusVariant(order.status)">{{ statusLabel(order.status) }}</Badge></div>
-            <div class="grid gap-3 border-y py-4"><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.paymentResult.orderNumber }}</span><span class="font-mono text-xs">{{ order.orderNo }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.paymentResult.amount }}</span><span>¥{{ order.amount }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.paymentResult.paymentStatusLabel }}</span><span>{{ paymentStatusLabel(order.paymentStatus) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.paymentResult.deliveryStatusLabel }}</span><span>{{ deliveryStatusLabel(order.deliveryStatus) }}</span></div></div>
+            <div class="grid gap-3 border-y py-4"><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.paymentResult.orderNumber }}</span><span class="font-mono text-xs">{{ order.orderNo }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.paymentResult.amount }}</span><span>¥{{ order.amount }}<CurrencyHint /></span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.paymentResult.paymentStatusLabel }}</span><span>{{ paymentStatusLabel(order.paymentStatus) }}</span></div><div class="flex justify-between gap-4"><span class="text-muted-foreground">{{ messages.paymentResult.deliveryStatusLabel }}</span><span>{{ deliveryStatusLabel(order.deliveryStatus) }}</span></div></div>
             <div v-if="order.deliveries.length"><p class="font-medium">{{ messages.paymentResult.deliveryContents }}</p><pre class="overflow-x-auto whitespace-pre-wrap rounded-md border bg-muted/50 p-3 font-mono text-xs leading-6">{{ order.deliveries.join("\n") }}</pre></div>
             <p v-else class="text-muted-foreground">{{ messages.paymentResult.pendingDelivery }}</p>
           </template>
@@ -45,6 +45,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { getLocalOrderGroups } from "@/lib/local-orders";
+import CurrencyHint from "@/components/storefront/CurrencyHint.vue";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onQueryOrder, type PublicOrder } from "@/server/order/public.telefunc";

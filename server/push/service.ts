@@ -479,8 +479,9 @@ export async function orderPushVariables(database: D1Database, orderId: number) 
   const locale = isStorefrontLocale(record.locale) ? record.locale : defaultStorefrontLocale;
   const notProvided = locale === "en-US" ? "Not provided" : "未提供";
   const none = locale === "en-US" ? "None" : locale === "zh-TW" ? "無" : "无";
+  const formattedAmount = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(record.amount / 100);
   return {
     locale,
-    variables: { siteName: settings?.siteName || "CFFK", orderNo: record.orderNo, contactEmail: record.contactEmail || notProvided, productName: record.productName, quantity: record.quantity, amount: new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(record.amount / 100), buyerNote: record.buyerNote || none, deliveryItems: deliveryItemsFromSnapshots(deliveries.flatMap((item) => item.contentSnapshot ? [item.contentSnapshot] : [])), queryUrl: orderQueryUrl(settings?.siteUrl, record.orderNo, record.ownerUserId), footerText: settings?.footerText || "", supportContact: settings?.supportContact || "" },
+    variables: { siteName: settings?.siteName || "CFFK", orderNo: record.orderNo, contactEmail: record.contactEmail || notProvided, productName: record.productName, quantity: record.quantity, amount: locale === "zh-CN" ? formattedAmount : `${formattedAmount} CNY`, buyerNote: record.buyerNote || none, deliveryItems: deliveryItemsFromSnapshots(deliveries.flatMap((item) => item.contentSnapshot ? [item.contentSnapshot] : [])), queryUrl: orderQueryUrl(settings?.siteUrl, record.orderNo, record.ownerUserId), footerText: settings?.footerText || "", supportContact: settings?.supportContact || "" },
   };
 }

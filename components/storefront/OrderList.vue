@@ -24,7 +24,7 @@
               </span>
               <span class="mt-1 block break-all font-mono text-[11px] leading-4 text-muted-foreground">{{ item.orderNo }}</span>
             </span>
-            <span class="text-right text-xs text-muted-foreground">¥{{ item.amount }}<br>{{ formatDate(item.createdAt) }}</span>
+            <span class="text-right text-xs text-muted-foreground">¥{{ item.amount }}<CurrencyHint /><br>{{ formatDate(item.createdAt) }}</span>
           </button>
           <Separator v-if="itemIndex < group.orders.length - 1" />
         </template>
@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import CurrencyHint from "@/components/storefront/CurrencyHint.vue";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { Trash2Icon } from "@lucide/vue";
 

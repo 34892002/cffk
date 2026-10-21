@@ -99,7 +99,7 @@
             <CardContent class="flex min-h-0 flex-col gap-6 overflow-y-auto pt-6 text-sm">
               <dl class="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
                 <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.quantity }}</dt><dd class="mt-1 font-medium">{{ result.quantity }}</dd></div>
-                <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.amount }}</dt><dd class="mt-1 font-medium">¥{{ result.amount }}</dd></div>
+                <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.amount }}</dt><dd class="mt-1 font-medium">¥{{ result.amount }}<CurrencyHint /></dd></div>
                 <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.paymentStatus }}</dt><dd class="mt-1 font-medium">{{ paymentStatusLabel(result.paymentStatus) }}</dd></div>
                 <div><dt class="text-xs text-muted-foreground">{{ messages.guestOrders.detail.deliveryStatus }}</dt><dd class="mt-1 font-medium">{{ deliveryStatusLabel(result.deliveryStatus) }}</dd></div>
               </dl>
@@ -184,6 +184,7 @@ import { Input } from "@/components/ui/input";
 
 import { clearAllLocalOrders, deleteLocalOrdersForEmail, getLocalOrderGroups, replaceLocalOrdersForEmail, type LocalOrder } from "@/lib/local-orders";
 import { cacheQrPayment } from "@/lib/payment-utils";
+import CurrencyHint from "@/components/storefront/CurrencyHint.vue";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onQueryOrder, onResumeOrderPayment, type PublicOrder } from "@/server/order/public.telefunc";
