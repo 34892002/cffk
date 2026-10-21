@@ -1,5 +1,6 @@
 import { computed, onMounted, ref, type ComputedRef } from "vue";
 
+import { setActiveLocale } from "@/lib/active-locale";
 import enUS from "@/lib/i18n/en-US";
 import zhCN from "@/lib/i18n/zh-CN";
 import zhTW from "@/lib/i18n/zh-TW";
@@ -57,6 +58,7 @@ function initialize() {
     window.localStorage.setItem(localeStorageKey, locale.value);
   }
   if (isTheme(savedTheme)) theme.value = savedTheme;
+  setActiveLocale(locale.value);
   applyDocumentPreferences();
 }
 
@@ -78,6 +80,7 @@ export function useStorefrontPreferences(): {
 
   function setLocale(nextLocale: StorefrontLocale) {
     locale.value = nextLocale;
+    setActiveLocale(nextLocale);
     if (typeof window === "undefined") return;
     window.localStorage.setItem(localeStorageKey, nextLocale);
     applyDocumentPreferences();

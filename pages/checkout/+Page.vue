@@ -20,7 +20,7 @@
               <div><dt class="text-xs text-muted-foreground">{{ messages.checkout.product }}</dt><dd class="mt-1 font-medium">{{ order.productName }}</dd></div>
               <div><dt class="text-xs text-muted-foreground">{{ messages.checkout.orderAmount }}</dt><dd class="mt-1 font-medium">¥{{ order.amount }}</dd></div>
               <div v-if="payableAmount !== null"><dt class="text-xs text-muted-foreground">{{ messages.checkout.scanPayment }}</dt><dd class="mt-1 font-medium">¥{{ formatCentsAsYuan(payableAmount) }}</dd></div>
-              <div><dt class="text-xs text-muted-foreground">{{ messages.checkout.paymentStatus }}</dt><dd class="mt-1 font-medium">{{ paymentStatusLabel(order.paymentStatus) }}</dd></div>
+              <div><dt class="text-xs text-muted-foreground">{{ messages.checkout.paymentStatusLabel }}</dt><dd class="mt-1 font-medium">{{ paymentStatusLabel(order.paymentStatus) }}</dd></div>
             </dl>
             <div v-if="order.paymentStatus === 'UNPAID'" class="grid justify-items-center gap-4 border-t pt-6 text-center">
               <template v-if="isQrPaymentOrder(order)">

@@ -164,6 +164,15 @@ async function deleteRow() {
 }
 ```
 
+### 1.9 公开商城多语言
+
+公开商城支持 `zh-CN`、`zh-TW`、`en-US` 三种界面语言，后台页面保持中文、不做多语言：
+
+- 字典位于 `lib/i18n/`。`zh-CN.ts` 是 key 的唯一来源，并导出 `Messages` 类型；`en-US.ts` 与 `zh-TW.ts` 必须用 `satisfies Messages` 校验，禁止 `as unknown as`、展开中文对象兜底或任何自动简繁转换。繁体必须人工撰写。
+- 公开页面的可见文案与可访问性标签必须来自 `useStorefrontPreferences().messages`，不得在页面硬编码中文或英文。
+- 服务端只返回稳定错误码，文案位于 `lib/i18n/error-messages/`，`lib/error-messages.ts` 仍是唯一读取入口。新增错误码必须三语齐全，`tests/core/i18n.test.ts` 会校验 key 对齐、占位符一致和英文/繁体纯净度。
+- 语言偏好只保存在浏览器 `localStorage`，不写入数据库。禁止为语言展示新增 D1 读写或额外查询。
+
 ## 2. 后台信息架构、目录与导航元数据
 
 后台导航、路由、页面目录和面包屑必须使用同一棵层级树，唯一来源为 `lib/admin-navigation.ts`。禁止侧栏、模块内部导航、面包屑和文件目录各自维护一套层级或路径。
@@ -441,7 +450,7 @@ await runTelefunc(
 `runTelefunc()` 统一处理：
 
 - 成功时按需显示 `successMessage`；
-- 已知业务错误码从 `lib/error-messages.ts` 映射为中文 Toast；
+- 已知业务错误码从 `lib/error-messages.ts` 按当前界面语言映射为 Toast；
 - 未知业务错误、网络传输失败、Telefunc 服务端 `500` 等显示统一文案：`接口异常，请稍后重试。`；
 - 显示 Toast 后重新抛出异常，以便页面在 `finally` 里恢复 loading/saving 状态。
 
@@ -458,7 +467,7 @@ try {
 }
 ```
 
-`lib/error-messages.ts` 是业务错误码与用户中文文案的唯一映射源。新增 Telefunc 错误码时，必须同步添加该映射；不允许新增页面私有 `messageFor()`。
+`lib/error-messages.ts` 是业务错误码与用户文案的唯一读取入口，文案本身按语言存放在 `lib/i18n/error-messages/`。新增 Telefunc 错误码时，必须同步添加三语映射；不允许新增页面私有 `messageFor()`。
 
 只有确实需要表单附近持续错误信息的场景（例如结算表单字段校验）可以使用 `runTelefunc(..., { notifyError: false })`，再将 `userErrorMessage(cause)` 写入本地表单状态；不能同时显示 Alert 和 Toast。
 
@@ -513,7 +522,7 @@ Hono HTTP 接口在 `server/hono.ts` 统一处理未捕获异常：
 const response = await fetch(url, options);
 const body = await response.json();
 if (!response.ok || body.code !== 0) {
-  toast.error(errorMessages[body.code] ?? "接口异常，请稍后重试。");
+  toast.error(errorMessageForCode(body.code));
   throw new Error(body.code ?? "INTERNAL_ERROR");
 }
 return body.data;

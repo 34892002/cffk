@@ -1,4 +1,4 @@
-export default {
+const messages = {
   languageName: "简体中文",
   nav: {
     main: "主导航",
@@ -174,7 +174,7 @@ export default {
     product: "商品",
     orderAmount: "订单金额",
     scanPayment: "扫码支付",
-    paymentStatus: "支付状态",
+    paymentStatusLabel: "支付状态",
     exactAmountNotice: "请按此金额付款，金额必须完全一致",
     scanWithAlipay: "请使用支付宝扫码付款",
     preparingQrCode: "正在准备收款二维码...",
@@ -200,8 +200,8 @@ export default {
     orderStatus: "订单状态",
     orderNumber: "订单号",
     amount: "金额",
-    paymentStatus: "支付状态",
-    deliveryStatus: "发货状态",
+    paymentStatusLabel: "支付状态",
+    deliveryStatusLabel: "发货状态",
     deliveryContents: "发货内容",
     pendingDelivery: "支付通知可能仍在处理中，页面会自动查询订单状态。",
     openOrderLookup: "打开订单查询",
@@ -241,4 +241,8 @@ export default {
   accountOrders: {
     title: "我的订单", description: "仅显示当前登录账户创建的订单。", lookup: { title: "查询账户订单", description: "使用订单号查询当前登录账户的订单详情。", orderNumber: "订单号", placeholder: "ORD...", failed: "查询失败", loading: "查询中...", notFound: "未找到当前账户下的该订单。" }, guestLookup: { title: "找不到要查询的订单？", description: "如果是在登录前下单，请使用订单号和下单邮箱查询匿名订单。", action: "查询匿名订单" }, back: "返回", backAriaLabel: "返回账户订单列表", detail: { title: "订单详情", quantity: "数量", amount: "金额", paymentStatus: "支付状态", deliveryStatus: "发货状态", deliveryContents: "发货内容", awaitingDeliveryTitle: "等待发货", awaitingDeliveryDescription: "订单已支付，发货任务正在处理中。" }, payment: { goToPayment: "前往支付", generating: "正在生成支付信息...", resume: "继续支付", generateFailed: "暂时无法生成支付信息，请稍后再试。", resumeFailed: "暂时无法继续支付，请稍后再试。" }, list: { eyebrow: "选择或查询订单", title: "账户订单列表", description: "仅显示当前登录账户创建的订单。选择订单后可查看详情或继续支付。", loading: "正在加载订单...", loadFailed: "加载失败", reload: "重新加载", empty: "当前账户暂无订单。", truncated: "仅显示最近 {limit} 个账户订单。" }, status: { pending: "待支付", paid: "已支付", delivered: "已发货", closed: "已关闭", failed: "失败" }, paymentStatus: { unpaid: "待支付", paid: "已支付", failed: "支付失败" }, deliveryStatus: { notDelivered: "未发货", delivering: "发货中", delivered: "已发货", failed: "发货失败" },
   },
-} as const;
+};
+
+export type Messages = typeof messages;
+
+export default messages;

@@ -1,7 +1,6 @@
-import zhCN from "@/lib/i18n/zh-CN";
+import type { Messages } from "@/lib/i18n/zh-CN";
 
 export default {
-  ...zhCN,
   languageName: "English",
   nav: { main: "Main navigation", myOrders: "My orders", orderLookup: "Order lookup", signIn: "Sign in", accountMenu: "{name}'s account menu", account: "Account", accountSettings: "Account settings", signingOut: "Signing out...", signOut: "Sign out", signOutFailed: "Could not sign out. Please try again.", signedOut: "Signed out." },
   preferences: { language: "Language", theme: "Theme", light: "Light", dark: "Dark" },
@@ -29,7 +28,7 @@ export default {
     product: "Product",
     orderAmount: "Order amount",
     scanPayment: "Scan to pay",
-    paymentStatus: "Payment status",
+    paymentStatusLabel: "Payment status",
     exactAmountNotice: "Pay exactly this amount. The amount must match precisely.",
     scanWithAlipay: "Scan the code with Alipay to pay",
     preparingQrCode: "Preparing the payment QR code...",
@@ -55,8 +54,8 @@ export default {
     orderStatus: "Order status",
     orderNumber: "Order number",
     amount: "Amount",
-    paymentStatus: "Payment status",
-    deliveryStatus: "Delivery status",
+    paymentStatusLabel: "Payment status",
+    deliveryStatusLabel: "Delivery status",
     deliveryContents: "Delivery contents",
     pendingDelivery: "The payment notification may still be processing. This page checks the order automatically.",
     openOrderLookup: "Open order lookup",
@@ -95,4 +94,4 @@ export default {
   accountOrders: {
     title: "My orders", description: "Only orders created by the current signed-in account are shown.", lookup: { title: "Find an account order", description: "Use an order number to look up details for an order belonging to this account.", orderNumber: "Order number", placeholder: "ORD...", failed: "Lookup failed", loading: "Searching...", notFound: "No order with that number belongs to this account." }, guestLookup: { title: "Cannot find the order?", description: "For orders placed before signing in, use the order number and order email to look up the guest order.", action: "Find a guest order" }, back: "Back", backAriaLabel: "Return to account order list", detail: { title: "Order details", quantity: "Quantity", amount: "Amount", paymentStatus: "Payment status", deliveryStatus: "Delivery status", deliveryContents: "Delivery contents", awaitingDeliveryTitle: "Awaiting delivery", awaitingDeliveryDescription: "The order is paid and delivery is being processed." }, payment: { goToPayment: "Go to payment", generating: "Generating payment details...", resume: "Resume payment", generateFailed: "Payment details could not be generated. Please try again later.", resumeFailed: "Payment could not be resumed. Please try again later." }, list: { eyebrow: "Select or find an order", title: "Account order list", description: "Only orders created by the current signed-in account are shown. Select one to view details or resume payment.", loading: "Loading orders...", loadFailed: "Loading failed", reload: "Reload", empty: "This account has no orders yet.", truncated: "Only the most recent {limit} account orders are shown." }, status: { pending: "Pending payment", paid: "Paid", delivered: "Delivered", closed: "Closed", failed: "Failed" }, paymentStatus: { unpaid: "Pending payment", paid: "Paid", failed: "Payment failed" }, deliveryStatus: { notDelivered: "Not delivered", delivering: "Delivering", delivered: "Delivered", failed: "Delivery failed" },
   },
-} as unknown as typeof zhCN;
+} satisfies Messages;
