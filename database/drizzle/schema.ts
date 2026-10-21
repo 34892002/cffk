@@ -159,6 +159,7 @@ export const productSku = sqliteTable(
     name: text("name").notNull(),
     price: integer("price").notNull(),
     status: text("status", { enum: ["ACTIVE", "INACTIVE"] }).notNull().default("ACTIVE"),
+    translationsJson: text("translationsJson"),
     fulfillmentSource: text("fulfillmentSource", { enum: ["LOCAL", "SUPPLIER"] }).notNull().default("LOCAL"),
     deliveryType: text("deliveryType", { enum: ["CARD_AUTO", "FIXED_CARD", "MANUAL", "EXPRESS", "SUPPLIER"] }).notNull(),
     fixedDeliveryContent: text("fixedDeliveryContent"),

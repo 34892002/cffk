@@ -7,7 +7,7 @@ import { isJsonFormEmail } from "@/lib/json-form-values";
 import { normalizeOrderEmail } from "@/lib/local-orders";
 import { canConfirmPayment } from "@/lib/order-state";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
-import { PRODUCT_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
+import { PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
 import type { StorefrontLocale } from "@/lib/i18n/locale";
 import { validateDiscountForItem, positiveInteger } from "@/server/discount/service";
 import { allocateCardsForPaidOrder, countAvailableCards } from "@/server/inventory/allocator";
@@ -149,9 +149,10 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
   const paymentChannel = normalizePaymentChannel(input.paymentProvider, input.paymentChannel);
   const productTranslations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
   const productNameSnapshot = localizeContentText(item.name, productTranslations, input.locale, "name") ?? item.name;
+  const productSkuNameSnapshot = localizeContentText(sku.name, readContentTranslations(sku.translationsJson, SKU_TRANSLATION_FIELDS), input.locale, "name") ?? sku.name;
   const statements: D1PreparedStatement[] = [
     database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productSkuId, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, contactType, contactValue, contactEmailNormalized, buyerNote, locale, addressSnapshotJson, paymentProvider, paymentChannel, fulfillmentSourceSnapshot, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
-      orderNo, ownerUserId, item.id, sku.id, productNameSnapshot, sku.name, sku.price, quantity, amount, input.contactType, contactValue,
+      orderNo, ownerUserId, item.id, sku.id, productNameSnapshot, productSkuNameSnapshot, sku.price, quantity, amount, input.contactType, contactValue,
       input.contactType === "EMAIL" ? normalizeOrderEmail(contactValue) : null, input.buyerNote?.trim() || null,
       input.locale ?? null,
       addressSnapshotJson, input.paymentProvider, paymentChannel, sku.fulfillmentSource, sku.deliveryType,

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b67618d0-f59c-40de-ac99-89cd939b76b5",
+  "id": "c3760aa1-daf9-4eec-8aec-4dfbf127e67f",
   "prevId": "eabd07db-70c7-4fb7-aed5-c998d00da297",
   "tables": {
     "account": {
@@ -2003,6 +2003,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'ACTIVE'"
+        },
+        "translationsJson": {
+          "name": "translationsJson",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "fulfillmentSource": {
           "name": "fulfillmentSource",

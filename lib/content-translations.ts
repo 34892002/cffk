@@ -5,6 +5,7 @@ export const contentTranslationLocales = ["zh-TW", "en-US"] as const;
 export type ContentTranslationLocale = (typeof contentTranslationLocales)[number];
 
 export const PRODUCT_TRANSLATION_FIELDS = ["name", "subtitle", "description"] as const;
+export const SKU_TRANSLATION_FIELDS = ["name"] as const;
 export const CATEGORY_TRANSLATION_FIELDS = ["name", "description"] as const;
 export const SITE_TRANSLATION_FIELDS = ["subtitle", "notice", "footerText", "orderNotice"] as const;
 

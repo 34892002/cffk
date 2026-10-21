@@ -86,8 +86,8 @@ describe("localized catalog", () => {
     context.sqlite.query("INSERT INTO product_v2 (categoryId, name, slug, subtitle, description, status, sort, translationsJson, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, 'ACTIVE', 0, ?, ?, ?)")
       .run(category.id, "卡密商品", "card", "中文副标题", "<p>中文详情</p>", JSON.stringify({ "en-US": { name: "Card EN", subtitle: "Sub EN", description: "<p>EN details</p>" } }), now, now);
     const product = context.sqlite.query("SELECT id FROM product_v2 WHERE slug = 'card'").get() as { id: number };
-    context.sqlite.query("INSERT INTO productSku (productId, name, price, status, deliveryType, fixedDeliveryContent, minBuy, maxBuy, sort, createdAt, updatedAt) VALUES (?, 'Default', 1000, 'ACTIVE', 'FIXED_CARD', 'KEY', 1, 1, 0, ?, ?)")
-      .run(product.id, now, now);
+    context.sqlite.query("INSERT INTO productSku (productId, name, price, status, deliveryType, fixedDeliveryContent, minBuy, maxBuy, sort, translationsJson, createdAt, updatedAt) VALUES (?, 'Default', 1000, 'ACTIVE', 'FIXED_CARD', 'KEY', 1, 1, 0, ?, ?, ?)")
+      .run(product.id, JSON.stringify({ "en-US": { name: "Default EN" } }), now, now);
     return context;
   }
 
@@ -99,6 +99,7 @@ describe("localized catalog", () => {
 
     const detail = await getPublicProductDetail(context.database, "card", "en-US");
     expect(detail).toMatchObject({ name: "Card EN", subtitle: "Sub EN", description: "<p>EN details</p>", categoryName: "Cards EN" });
+    expect(detail?.skus[0]?.name).toBe("Default EN");
   });
 
   test("falls back to the base content", async () => {
@@ -109,5 +110,6 @@ describe("localized catalog", () => {
 
     const detail = await getPublicProductDetail(context.database, "card", "zh-TW");
     expect(detail).toMatchObject({ name: "卡密商品", description: "<p>中文详情</p>" });
+    expect(detail?.skus[0]?.name).toBe("Default");
   });
 });

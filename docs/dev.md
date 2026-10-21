@@ -181,11 +181,11 @@ async function deleteRow() {
 
 ### 1.10 商品与站点内容多语言
 
-- 商品（名称/副标题/详情）、分类（名称/描述）和站点（副标题/公告/页脚/下单提示）的译文保存在各自的 `translationsJson` 列，不拆表、不新增查询。
+- 商品（名称/副标题/详情）、SKU（名称）、分类（名称/描述）和站点（副标题/公告/页脚/下单提示）的译文保存在各自的 `translationsJson` 列，不拆表、不新增查询。
 - 读取必须通过 `lib/content-translations.ts` 的 `readContentTranslations()` 与 `localizeContentText()`，按字段逐项回退到原列（简体中文）。
 - 后台在商品编辑器、分类、系统设置中用“编辑语言”维护译文；新增可译字段时必须复用 `PRODUCT_TRANSLATION_FIELDS` / `CATEGORY_TRANSLATION_FIELDS` / `SITE_TRANSLATION_FIELDS` 白名单。
 - 下单时按 `order.locale` 写入 `productNameSnapshot`，使订单、邮件与历史快照和买家看到的语言一致。
-- Slug、价格、SKU 名称、封面、客服联系方式和自定义代码不参与翻译。
+- Slug、价格、封面、客服联系方式和自定义代码不参与翻译。
 - Telefunc 入参类型不要使用带连字符的字面量联合键（例如 `Record<"zh-TW" | "en-US", ...>`）：Telefunc 的 shield 会生成 `en-US: ...` 这类未加引号的非法代码。统一使用 `ContentTranslations`（字符串索引 + 运行时校验）。
 
 ## 2. 后台信息架构、目录与导航元数据

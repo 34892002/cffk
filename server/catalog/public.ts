@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, category, productV2, productSku } from "@/database/drizzle/schema";
-import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
+import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
 import { defaultStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 import { formatCentsAsYuan } from "@/lib/payment-utils";
 
@@ -76,8 +76,17 @@ export async function getPublicProductDetail(database: D1Database, slug: string,
     .limit(1);
   if (!item) return null;
 
-  const skuRows = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy }).from(productSku).where(and(eq(productSku.productId, item.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id));
-  const skus = await Promise.all(skuRows.map(async (sku) => ({ ...sku, price: formatCentsAsYuan(sku.price), availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock })));
+  const skuRows = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy, translationsJson: productSku.translationsJson }).from(productSku).where(and(eq(productSku.productId, item.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id));
+  const skus = await Promise.all(skuRows.map(async (sku) => ({
+    id: sku.id,
+    name: localizeContentText(sku.name, readContentTranslations(sku.translationsJson, SKU_TRANSLATION_FIELDS), locale, "name") ?? sku.name,
+    price: formatCentsAsYuan(sku.price),
+    deliveryType: sku.deliveryType,
+    physicalStock: sku.physicalStock,
+    minBuy: sku.minBuy,
+    maxBuy: sku.maxBuy,
+    availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock,
+  })));
   const primary = skus[0];
   if (!primary) return null;
   const translations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
