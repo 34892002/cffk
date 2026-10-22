@@ -206,6 +206,7 @@ test("BEpusdt and Stripe adapters create provider requests and surface failures"
     assert.equal(requests.length, 2);
     assert.equal(JSON.parse(await requests[0]!.text()).signature.length, 32);
     const stripePayload = new URLSearchParams(await requests[1]!.text());
+    assert.equal(stripePayload.has("payment_method_types[]"), false);
     assert.equal(stripePayload.get("line_items[0][price_data][unit_amount]"), "1234");
     assert.equal(stripePayload.get("metadata[orderNo]"), "ORD-3");
     assert.equal(stripePayload.get("payment_intent_data[metadata][orderNo]"), "ORD-3");
