@@ -2,6 +2,8 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "cffk",
   "compatibility_date": "2026-03-12",
+  // 变量在 Cloudflare 控制台（一键部署流程/页面）配置，keep_vars 让 wrangler deploy 不删除它们。
+  "keep_vars": true,
   "main": "vike:server-entry",
   "send_email": [
     {

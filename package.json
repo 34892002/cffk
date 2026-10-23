@@ -4,11 +4,12 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vike dev",
-    "build": "bun run db:generate && vike build",
+    "build": "bun run db:generate && bun run db:migrate:ci && vike build",
     "test": "bun test tests/core",
     "preview": "vike build && vike preview",
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
+    "db:migrate:ci": "node scripts/ci-migrate.mjs",
     "db:check": "drizzle-kit check",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
