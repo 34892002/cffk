@@ -2,7 +2,9 @@ import { asc, eq } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { paymentProvider } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
-import { getProviderDefinition, parseProviderConfig, type PaymentChannel, type PaymentProviderKind } from "./registry";
+import type { CurrencyCode } from "@/lib/money";
+import { getSiteSettings, storeCurrency } from "@/server/site/public-settings";
+import { getProviderDefinition, parseProviderConfig, type PaymentChannel, type PaymentProviderKind, type ProviderDefinition } from "./registry";
 
 export type { PaymentProviderKind } from "./registry";
 
@@ -22,6 +24,15 @@ export function validatePaymentProviderConfig(provider: PaymentProviderKind, con
   return parseProviderConfig(provider, configJson);
 }
 
+/** Whether a configured provider can charge an order in `currency`. */
+export function providerSupportsCurrency(definition: ProviderDefinition, config: Record<string, unknown>, currency: CurrencyCode) {
+  if (definition.supportedCurrencies === "config") {
+    const configured = typeof config.currency === "string" ? config.currency.toUpperCase() : "";
+    return configured === currency;
+  }
+  return definition.supportedCurrencies.includes(currency);
+}
+
 export async function getEnabledPaymentProviders(database: D1Database): Promise<PublicPaymentProvider[]> {
   const db = createDrizzleDb(database);
   const records = await db
@@ -30,11 +41,13 @@ export async function getEnabledPaymentProviders(database: D1Database): Promise<
     .where(eq(paymentProvider.isEnabled, true))
     .orderBy(asc(paymentProvider.sort), asc(paymentProvider.id));
 
+  const currency = storeCurrency(await getSiteSettings(database));
   return records.flatMap((record) => {
     try {
       const definition = getProviderDefinition(record.provider);
       if (!definition) return [];
       const config = parseProviderConfig(record.provider, record.configJson);
+      if (!providerSupportsCurrency(definition, config as unknown as Record<string, unknown>, currency)) return [];
       return [{ provider: record.provider as PaymentProviderKind, name: record.name, channels: definition.getChannels(config), configStatus: "valid" as const }];
     } catch {
       return [];
@@ -60,9 +73,17 @@ export async function getPaymentProvider(database: D1Database, provider: Payment
   }
 }
 
-export async function getEnabledPaymentProvider(database: D1Database, provider: PaymentProviderKind) {
+export async function getEnabledPaymentProvider(database: D1Database, provider: PaymentProviderKind, currency?: CurrencyCode) {
   const record = await getPaymentProvider(database, provider);
   if (!record?.isEnabled || record.configStatus !== "valid") return null;
+  try {
+    const definition = getProviderDefinition(provider);
+    const config = JSON.parse(record.configJson) as Record<string, unknown>;
+    const targetCurrency = currency ?? storeCurrency(await getSiteSettings(database));
+    if (!definition || !providerSupportsCurrency(definition, config, targetCurrency)) return null;
+  } catch {
+    return null;
+  }
   return record;
 }
 

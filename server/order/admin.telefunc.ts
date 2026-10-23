@@ -2,7 +2,7 @@ import { telefuncAction } from "@/server/telefunc-action";
 import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
 import { order, orderDelivery, paymentLog } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
-import { formatCentsAsYuan } from "@/lib/payment-utils";
+import { formatCnyMinor, formatMinor, isCurrencyCode } from "@/lib/money";
 import { dateBoundaryInTimezone } from "@/lib/site-timezone";
 import { notifyOrderEmailEvents } from "@/server/email/order-events";
 import { getSiteSettings } from "@/server/site/public-settings";
@@ -45,10 +45,10 @@ async function internalOnGetAdminOrders(input?: { query?: string; status?: Order
   }
   const where = conditions.length ? and(...conditions) : undefined;
   const [orders, totalRows] = await Promise.all([
-    db.select({ id: order.id, orderNo: order.orderNo, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, contactType: order.contactType, contactValue: order.contactValue, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, status: order.status, paymentStatus: order.paymentStatus, deliveryType: order.deliveryTypeSnapshot, deliveryStatus: order.deliveryStatus, createdAt: order.createdAt, paidAt: order.paidAt, deliveredAt: order.deliveredAt }).from(order).where(where).orderBy(desc(order.createdAt), desc(order.id)).limit(pageSize).offset((page - 1) * pageSize),
+    db.select({ id: order.id, orderNo: order.orderNo, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, currency: order.currency, contactType: order.contactType, contactValue: order.contactValue, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, status: order.status, paymentStatus: order.paymentStatus, deliveryType: order.deliveryTypeSnapshot, deliveryStatus: order.deliveryStatus, createdAt: order.createdAt, paidAt: order.paidAt, deliveredAt: order.deliveredAt }).from(order).where(where).orderBy(desc(order.createdAt), desc(order.id)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ value: count() }).from(order).where(where),
   ]);
-  return { orders: orders.map((record) => ({ ...record, amount: formatCentsAsYuan(record.amount) })), total: totalRows[0]?.value ?? 0, page, pageSize };
+  return { orders: orders.map((record) => ({ ...record, amount: formatMinor(record.amount, isCurrencyCode(record.currency) ? record.currency : "CNY") })), total: totalRows[0]?.value ?? 0, page, pageSize };
 }
 
 async function internalOnGetAdminOrderDetail(input: { orderId: number }) {
@@ -60,7 +60,8 @@ async function internalOnGetAdminOrderDetail(input: { orderId: number }) {
     db.select({ id: paymentLog.id, eventType: paymentLog.eventType, verifyStatus: paymentLog.verifyStatus, message: paymentLog.message, createdAt: paymentLog.createdAt }).from(paymentLog).where(eq(paymentLog.orderId, record.id)).orderBy(desc(paymentLog.createdAt)),
   ]);
   const { addressSnapshotJson, ...orderRecord } = record;
-  return { order: { ...orderRecord, amount: formatCentsAsYuan(record.amount), addressSnapshot: parseAddressSnapshot(addressSnapshotJson) }, deliveries, payments };
+  const currency = isCurrencyCode(record.currency) ? record.currency : "CNY";
+  return { order: { ...orderRecord, amount: formatMinor(record.amount, currency), baseAmount: formatCnyMinor(record.baseAmount), addressSnapshot: parseAddressSnapshot(addressSnapshotJson) }, deliveries, payments };
 }
 
 async function internalOnCloseAdminOrder(input: { orderId: number }) {

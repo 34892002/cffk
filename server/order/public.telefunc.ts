@@ -3,7 +3,7 @@ import { getContext } from "telefunc";
 import { createDrizzleDb } from "@/database/drizzle";
 import { order } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
-import { formatCentsAsYuan } from "@/lib/payment-utils";
+import { formatMinor, isCurrencyCode } from "@/lib/money";
 import { PaymentFlowService } from "@/server/payment/flow-service";
 import { enforceOrderRequestRateLimit } from "@/server/order/rate-limit";
 import { telefuncAction } from "@/server/telefunc-action";
@@ -16,6 +16,7 @@ export type AccountOrderSummary = {
   orderNo: string;
   productName: string;
   amount: string;
+  currency: string;
   status: PublicOrder["status"];
   paymentStatus: PublicOrder["paymentStatus"];
   deliveryStatus: PublicOrder["deliveryStatus"];
@@ -33,6 +34,7 @@ async function internalOnListAccountOrders(): Promise<AccountOrderList> {
     orderNo: order.orderNo,
     productName: order.productNameSnapshot,
     amount: order.amount,
+    currency: order.currency,
     status: order.status,
     paymentStatus: order.paymentStatus,
     deliveryStatus: order.deliveryStatus,
@@ -45,7 +47,7 @@ async function internalOnListAccountOrders(): Promise<AccountOrderList> {
   return {
     orders: records.slice(0, 50).map(record => ({
       ...record,
-      amount: formatCentsAsYuan(record.amount),
+      amount: formatMinor(record.amount, isCurrencyCode(record.currency) ? record.currency : "CNY"),
     })),
     truncated: records.length > 50,
   };

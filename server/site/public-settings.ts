@@ -3,6 +3,7 @@ import { siteSetting } from "@/database/drizzle/schema";
 import { createDrizzleDb } from "@/database/drizzle";
 import { SITE_TRANSLATION_FIELDS, readContentTranslations } from "@/lib/content-translations";
 import { buildLocalizedOptionalText, buildLocalizedText, type LocalizedNullableText, type LocalizedText } from "@/lib/i18n/localized-text";
+import { BASE_CURRENCY, isCurrencyCode, isValidExchangeRate, type CurrencyCode } from "@/lib/money";
 
 export { SITE_TRANSLATION_FIELDS };
 
@@ -16,6 +17,7 @@ export type PublicSiteSettings = {
   supportContact: LocalizedText;
   footerText: LocalizedText;
   orderNotice: LocalizedNullableText;
+  currency: CurrencyCode;
 };
 
 type SiteSettingRecord = typeof siteSetting.$inferSelect;
@@ -47,6 +49,9 @@ const defaultSettings: SiteSettingRecord = {
   translationsJson: null,
   registrationEnabled: false,
   timezone: "Asia/Shanghai",
+  currency: BASE_CURRENCY,
+  exchangeRate: 1,
+  currencyUpdatedAt: null,
   createdAt: new Date(0),
   updatedAt: new Date(0),
 };
@@ -81,5 +86,15 @@ export function toPublicSiteSettings(record: SiteSettingRecord): PublicSiteSetti
     supportContact: buildLocalizedText(record.supportContact?.trim() || DEFAULT_SUPPORT_CONTACT, translations, "supportContact"),
     footerText: buildLocalizedText(record.footerText?.trim() || DEFAULT_FOOTER_TEXT, translations, "footerText"),
     orderNotice: buildLocalizedOptionalText(record.orderNotice, translations, "orderNotice"),
+    currency: isCurrencyCode(record.currency) ? record.currency : BASE_CURRENCY,
   };
+}
+
+/** The settings row is validated on write; these guards keep old rows usable. */
+export function storeCurrency(record: SiteSettingRecord): CurrencyCode {
+  return isCurrencyCode(record.currency) ? record.currency : BASE_CURRENCY;
+}
+
+export function storeExchangeRate(record: SiteSettingRecord): number {
+  return isValidExchangeRate(record.exchangeRate) ? record.exchangeRate : 1;
 }

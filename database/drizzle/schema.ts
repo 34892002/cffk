@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { PUSH_MAX_ATTEMPTS } from "@/lib/push-utils";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const createdAt = integer("createdAt", { mode: "timestamp_ms" }).notNull();
 const updatedAt = integer("updatedAt", { mode: "timestamp_ms" }).notNull();
@@ -104,6 +104,9 @@ export const siteSetting = sqliteTable("siteSetting", {
   translationsJson: text("translationsJson"),
   registrationEnabled: integer("registrationEnabled", { mode: "boolean" }).notNull().default(false),
   timezone: text("timezone").notNull().default("Asia/Shanghai"),
+  currency: text("currency").notNull().default("CNY"),
+  exchangeRate: real("exchangeRate").notNull().default(1),
+  currencyUpdatedAt: integer("currencyUpdatedAt", { mode: "timestamp_ms" }),
   createdAt,
   updatedAt,
 });
@@ -232,6 +235,9 @@ export const order = sqliteTable(
     unitPrice: integer("unitPrice").notNull(),
     quantity: integer("quantity").notNull(),
     amount: integer("amount").notNull(),
+    currency: text("currency").notNull().default("CNY"),
+    exchangeRate: real("exchangeRate").notNull().default(1),
+    baseAmount: integer("baseAmount").notNull().default(0),
     contactType: text("contactType", { enum: ["EMAIL", "QQ", "TELEGRAM", "OTHER"] }).notNull().default("EMAIL"),
     contactValue: text("contactValue"),
     contactEmailNormalized: text("contactEmailNormalized"),

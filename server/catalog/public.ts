@@ -4,12 +4,15 @@ import { card, category, productV2, productSku } from "@/database/drizzle/schema
 import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, readContentTranslations } from "@/lib/content-translations";
 import { displayCategoryName } from "@/lib/i18n/category-names";
 import { buildLocalizedOptionalText, buildLocalizedText, type LocalizedNullableText, type LocalizedText } from "@/lib/i18n/localized-text";
-import { formatCentsAsYuan } from "@/lib/payment-utils";
+import { convertFromBaseMinor, formatMinor, type CurrencyCode } from "@/lib/money";
+import { getSiteSettings, storeCurrency, storeExchangeRate } from "@/server/site/public-settings";
 
 export type PublicSku = {
   id: number;
   name: LocalizedText;
   price: string;
+  priceMinor: number;
+  currency: CurrencyCode;
   deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS" | "SUPPLIER";
   physicalStock: number | null;
   availableStock: number | null;
@@ -33,6 +36,8 @@ export type PublicCatalog = {
     subtitle: LocalizedNullableText;
     coverImage: string | null;
     price: string;
+    priceMinor: number;
+    currency: CurrencyCode;
     deliveryType: "CARD_AUTO" | "FIXED_CARD" | "MANUAL" | "EXPRESS" | "SUPPLIER";
 
     physicalStock: number | null;
@@ -87,16 +92,24 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
   if (!item) return null;
 
   const skuRows = await db.select({ id: productSku.id, name: productSku.name, price: productSku.price, deliveryType: productSku.deliveryType, physicalStock: productSku.physicalStock, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy, translationsJson: productSku.translationsJson }).from(productSku).where(and(eq(productSku.productId, item.id), eq(productSku.status, "ACTIVE"))).orderBy(asc(productSku.sort), asc(productSku.id));
-  const skus = await Promise.all(skuRows.map(async (sku) => ({
-    id: sku.id,
-    name: buildLocalizedText(sku.name, readContentTranslations(sku.translationsJson, SKU_TRANSLATION_FIELDS), "name"),
-    price: formatCentsAsYuan(sku.price),
-    deliveryType: sku.deliveryType,
-    physicalStock: sku.physicalStock,
-    minBuy: sku.minBuy,
-    maxBuy: sku.maxBuy,
-    availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock,
-  })));
+  const site = await getSiteSettings(database);
+  const currency = storeCurrency(site);
+  const exchangeRate = storeExchangeRate(site);
+  const skus = await Promise.all(skuRows.map(async (sku) => {
+    const priceMinor = convertFromBaseMinor(sku.price, currency, exchangeRate);
+    return {
+      id: sku.id,
+      name: buildLocalizedText(sku.name, readContentTranslations(sku.translationsJson, SKU_TRANSLATION_FIELDS), "name"),
+      price: formatMinor(priceMinor, currency),
+      priceMinor,
+      currency,
+      deliveryType: sku.deliveryType,
+      physicalStock: sku.physicalStock,
+      minBuy: sku.minBuy,
+      maxBuy: sku.maxBuy,
+      availableStock: sku.deliveryType === "CARD_AUTO" ? await countAvailableCardStockBySku(db, sku.id) : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock,
+    };
+  }));
   const primary = skus[0];
   if (!primary) return null;
   const translations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
@@ -112,6 +125,8 @@ export async function getPublicProductDetail(database: D1Database, slug: string)
     manualDeliveryHint: item.manualDeliveryHint,
     categoryName: item.categoryName === null ? null : categoryNameMap({ slug: item.categorySlug, name: item.categoryName, translationsJson: item.categoryTranslationsJson }),
     price: primary.price,
+    priceMinor: primary.priceMinor,
+    currency: primary.currency,
     deliveryType: primary.deliveryType,
     physicalStock: primary.physicalStock,
     availableStock: primary.availableStock,
@@ -173,6 +188,9 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
     : [];
   const primaryByProduct = new Map<number, typeof skuRows[number]>();
   for (const sku of skuRows) if (!primaryByProduct.has(sku.productId)) primaryByProduct.set(sku.productId, sku);
+  const site = await getSiteSettings(database);
+  const currency = storeCurrency(site);
+  const exchangeRate = storeExchangeRate(site);
   const cardSkuIds = skuRows.filter((sku) => sku.deliveryType === "CARD_AUTO").map((sku) => sku.id);
   const cardStockRows = cardSkuIds.length ? await db.select({ productSkuId: card.productSkuId, availableStock: sql<number>`count(*)` }).from(card).where(and(inArray(card.productSkuId, cardSkuIds), eq(card.status, "UNUSED"))).groupBy(card.productSkuId) : [];
   const cardStockBySkuId = new Map(cardStockRows.map((item) => [item.productSkuId, item.availableStock]));
@@ -190,6 +208,7 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
       const sku = primaryByProduct.get(item.id);
       if (!sku) return [];
       const translations = readContentTranslations(item.translationsJson, PRODUCT_TRANSLATION_FIELDS);
+      const priceMinor = convertFromBaseMinor(sku.price, currency, exchangeRate);
       return [{
         id: item.id,
         categoryId: item.categoryId,
@@ -198,7 +217,9 @@ export async function getPublicCatalog(database: D1Database): Promise<PublicCata
         slug: item.slug,
         subtitle: buildLocalizedOptionalText(item.subtitle, translations, "subtitle"),
         coverImage: item.coverImage,
-        price: formatCentsAsYuan(sku.price),
+        price: formatMinor(priceMinor, currency),
+        priceMinor,
+        currency,
         deliveryType: sku.deliveryType,
         physicalStock: sku.physicalStock,
         availableStock: sku.deliveryType === "CARD_AUTO" ? cardStockBySkuId.get(sku.id) ?? 0 : sku.deliveryType === "SUPPLIER" ? null : sku.physicalStock,

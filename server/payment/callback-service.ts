@@ -48,6 +48,7 @@ export class PaymentCallbackService {
       && result.amount !== undefined
       && result.amount === record.amount
       && (!expectedCurrency || (result.currency !== undefined && result.currency.toUpperCase() === expectedCurrency))
+      && (!result.currency || !record.currency || result.currency.toUpperCase() === record.currency.toUpperCase())
       && record.paymentStatus !== "FAILED"
       && result.status === "PAID";
     if (!callbackMatches) {

@@ -22,6 +22,7 @@ export async function onBeforeRender(pageContext: PageContextServer) {
           supportContact: buildLocalizedText(DEFAULT_SUPPORT_CONTACT, {}, "supportContact"),
           footerText: buildLocalizedText(DEFAULT_FOOTER_TEXT, {}, "footerText"),
           orderNotice: buildLocalizedOptionalText(null, {}, "orderNotice"),
+          currency: "CNY",
         },
         locale,
       },

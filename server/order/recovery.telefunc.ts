@@ -3,7 +3,7 @@ import { createDrizzleDb } from "@/database/drizzle";
 import { guestOrderRecoveryChallenge, order } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 
-import { formatCentsAsYuan } from "@/lib/payment-utils";
+import { formatMinor, isCurrencyCode } from "@/lib/money";
 import type { StorefrontLocale } from "@/lib/i18n/locale";
 import { dispatchPush } from "@/server/push/service";
 import type { PushDispatchInput } from "@/server/push/types";
@@ -171,19 +171,19 @@ async function internalOnVerifyGuestOrderRecoveryCode(input: { challengeId: stri
         AND consumedAt IS NULL AND expiresAt > ? AND attemptCount < ?`).bind(
       now, challengeId, emailNormalized, challenge.codeHash, now, MAX_VERIFY_ATTEMPTS,
     ),
-    database.prepare(`SELECT orderNo, productNameSnapshot AS productName, amount, createdAt
+    database.prepare(`SELECT orderNo, productNameSnapshot AS productName, amount, currency, createdAt
       FROM \`order\`
       WHERE ownerUserId IS NULL AND contactType = 'EMAIL' AND contactEmailNormalized = ?
       ORDER BY createdAt DESC LIMIT 51`).bind(emailNormalized),
   ]);
   if (consumeResult.meta.changes !== 1) appError("OTP_INVALID_OR_EXPIRED");
 
-  const records = rows.results as unknown as Array<{ orderNo: string; productName: string; amount: number; createdAt: number }>;
+  const records = rows.results as unknown as Array<{ orderNo: string; productName: string; amount: number; currency: string; createdAt: number }>;
   return {
     orders: records.slice(0, 50).map(record => ({
       orderNo: record.orderNo,
       productName: record.productName,
-      amount: formatCentsAsYuan(record.amount),
+      amount: formatMinor(record.amount, isCurrencyCode(record.currency) ? record.currency : "CNY"),
       createdAt: new Date(record.createdAt),
     })),
     truncated: records.length > 50,

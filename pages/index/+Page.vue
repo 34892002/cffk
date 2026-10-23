@@ -67,7 +67,7 @@
               <p v-if="productSubtitle(product)" class="mt-1 line-clamp-1 text-xs text-muted-foreground">{{ productSubtitle(product) }}</p>
               <div class="mt-auto flex items-end justify-between gap-2 pt-3">
                 <span :class="stockClass(product)" class="text-xs">{{ stockLabel(product) }}</span>
-                <span class="shrink-0 text-lg font-semibold tabular-nums">¥{{ product.price }}<CurrencyHint /></span>
+                <span class="shrink-0 text-lg font-semibold tabular-nums">{{ product.price }}<CurrencyHint /></span>
               </div>
             </div>
           </a>

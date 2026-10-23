@@ -3,6 +3,7 @@ import { getContext } from "telefunc";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, order, productSku } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { isCurrencyCode } from "@/lib/money";
 import { normalizeOrderEmail } from "@/lib/local-orders";
 import { isStorefrontLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 import { reportUnexpectedServerError } from "@/server/error-handling";
@@ -94,7 +95,7 @@ export class PaymentFlowService {
       const adapter = definition.createAdapter(config);
       const result = await adapter.create({ orderNo: created.orderNo, amount: created.amount, subject: paymentSubject(locale, created.orderNo), channel, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, created.orderNo) });
       await repository.completeAttempt(attemptId, result.paymentOrderNo);
-      await logs.writeBestEffort({ orderId: created.id, provider: provider.provider, orderNo: created.orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "CREATE", verifyStatus: "PENDING", payload: result });
+      await logs.writeBestEffort({ orderId: created.id, provider: provider.provider, orderNo: created.orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "CREATE", verifyStatus: "PENDING", payload: { ...result, currency: created.currency, exchangeRate: created.exchangeRate } });
       return { ...created, payment: result };
     } catch (cause) {
       reportUnexpectedServerError("payment-create", cause, { orderId: created.id, orderNo: created.orderNo, provider: provider.provider });
@@ -110,7 +111,7 @@ export class PaymentFlowService {
     if (!orderNo.trim() || !access) appError("ORDER_NOT_FOUND");
     const db = createDrizzleDb(this.database);
     const [record] = await db
-      .select({ id: order.id, orderNo: order.orderNo, amount: order.amount, quantity: order.quantity, productId: order.productId, productSkuId: order.productSkuId, deliveryType: order.deliveryTypeSnapshot, physicalStockReserved: order.physicalStockReserved, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, locale: order.locale })
+      .select({ id: order.id, orderNo: order.orderNo, amount: order.amount, currency: order.currency, exchangeRate: order.exchangeRate, quantity: order.quantity, productId: order.productId, productSkuId: order.productSkuId, deliveryType: order.deliveryTypeSnapshot, physicalStockReserved: order.physicalStockReserved, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, locale: order.locale })
       .from(order)
       .where(and(eq(order.orderNo, orderNo.trim()), access, eq(order.status, "PENDING"), eq(order.paymentStatus, "UNPAID")))
       .limit(1);
@@ -126,7 +127,7 @@ export class PaymentFlowService {
       if (sku?.physicalStock !== null && (sku?.physicalStock ?? 0) < record.quantity) appError("PRODUCT_STOCK_NOT_ENOUGH");
     }
 
-    const provider = await getEnabledPaymentProvider(this.database, record.paymentProvider as PaymentProviderKind);
+    const provider = await getEnabledPaymentProvider(this.database, record.paymentProvider as PaymentProviderKind, isCurrencyCode(record.currency) ? record.currency : "CNY");
     const definition = provider && getProviderDefinition(provider.provider);
     if (!provider || !definition) appError("PAYMENT_PROVIDER_NOT_AVAILABLE");
 
@@ -139,8 +140,8 @@ export class PaymentFlowService {
       const urls = resolvePaymentUrls(provider.provider, site.siteUrl, config);
       const payment = await definition.createAdapter(config).create({ orderNo: record.orderNo, amount: record.amount, subject: paymentSubject(locale ?? (isStorefrontLocale(record.locale) ? record.locale : undefined), record.orderNo), channel: record.paymentChannel as PaymentChannel | undefined, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, record.orderNo) });
       await repository.completeAttempt(attemptId, payment.paymentOrderNo);
-      await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: provider.provider, orderNo: record.orderNo, paymentOrderNo: payment.paymentOrderNo, eventType: "RESUME", verifyStatus: "PENDING", payload: payment });
-      return { orderNo: record.orderNo, amount: record.amount, paymentStatus: "UNPAID", payment };
+      await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: provider.provider, orderNo: record.orderNo, paymentOrderNo: payment.paymentOrderNo, eventType: "RESUME", verifyStatus: "PENDING", payload: { ...payment, currency: record.currency, exchangeRate: record.exchangeRate } });
+      return { orderNo: record.orderNo, amount: record.amount, currency: record.currency, paymentStatus: "UNPAID", payment };
     } catch (cause) {
       reportUnexpectedServerError("payment-resume", cause, { orderId: record.id, orderNo: record.orderNo, provider: provider.provider });
       await repository.failAttempt(attemptId).catch(() => undefined);
