@@ -33,6 +33,11 @@ export class PaymentCallbackService {
       await logs.writeBestEffort({ provider, eventType: "NOTIFY", verifyStatus: "FAILED", message: "PAYMENT_CALLBACK_INVALID", payload: input.payload });
       return this.response(provider, false, input);
     }
+    // Acknowledge verified events that need no payment confirmation to avoid retries.
+    if (provider === "STRIPE" && result.verified && (result.message === "STRIPE_EVENT_IGNORED" || result.message === "STRIPE_PAYMENT_PENDING")) {
+      await logs.writeBestEffort({ provider, orderNo: result.orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "NOTIFY", verifyStatus: "VERIFIED", message: result.message, payload: input.payload });
+      return this.response(provider, true, input);
+    }
     const config = JSON.parse(configured.configJson) as Record<string, unknown>;
     const expectedCurrency = typeof config.currency === "string" ? config.currency.toUpperCase() : undefined;
     const record = result.orderNo ? await paymentRepository(this.database).findOrder(result.orderNo, provider) : null;

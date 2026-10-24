@@ -83,7 +83,29 @@ export function createProviderAdapter(provider: PaymentProviderKind, config: Rec
     const parsed = parseStripeConfig(json);
     return {
       create: async (input) => { const response = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { Authorization: `Bearer ${parsed.secretKey}`, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "line_items[0][price_data][currency]": parsed.currency, "line_items[0][price_data][product_data][name]": input.subject, "line_items[0][price_data][unit_amount]": String(ZERO_DECIMAL_CURRENCIES.has(parsed.currency) ? Math.round(input.amount / 100) : input.amount), "line_items[0][quantity]": "1", mode: "payment", success_url: input.returnUrl, cancel_url: input.returnUrl, "metadata[orderNo]": input.orderNo, "payment_intent_data[metadata][orderNo]": input.orderNo }).toString() }); const body = await response.json() as { id?: string; url?: string }; if (!response.ok || !body.url || !body.id) throw new Error("STRIPE_CREATE_FAILED"); return { mode: "redirect", url: body.url, paymentOrderNo: body.id }; },
-      verify: async ({ rawBody = "", headers }) => { let event: { type?: string; data?: { object?: { id?: string; metadata?: { orderNo?: string }; amount_total?: number; currency?: string; payment_status?: string } } }; try { event = JSON.parse(rawBody); } catch { return result(provider, { verified: false, status: "FAILED", message: "STRIPE_INVALID_JSON" }); } const object = event.data?.object; const verified = await verifyStripeSignature(rawBody, headers?.get("Stripe-Signature") ?? "", parsed.webhookSecret); return result(provider, { verified, orderNo: object?.metadata?.orderNo, paymentOrderNo: object?.id, amount: object?.amount_total === undefined ? undefined : stripeMinorUnit(object.amount_total, parsed.currency), currency: object?.currency, status: event.type === "checkout.session.completed" && object?.payment_status === "paid" ? "PAID" : "PENDING", message: "STRIPE_CALLBACK" }); },
+      verify: async ({ rawBody = "", headers }) => {
+        let event: { type?: string; data?: { object?: { id?: string; metadata?: { orderNo?: string }; amount_total?: number; currency?: string; payment_status?: string } } };
+        try { event = JSON.parse(rawBody); } catch { return result(provider, { verified: false, status: "FAILED", message: "STRIPE_INVALID_JSON" }); }
+        const object = event?.data?.object;
+        if (typeof event?.type !== "string" || !event.type.trim() || !object || typeof object !== "object" || Array.isArray(object)) {
+          return result(provider, { verified: false, status: "FAILED", message: "STRIPE_INVALID_EVENT" });
+        }
+        const verified = await verifyStripeSignature(rawBody, headers?.get("Stripe-Signature") ?? "", parsed.webhookSecret);
+        if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded") {
+          return result(provider, { verified, status: "PENDING", message: "STRIPE_EVENT_IGNORED" });
+        }
+        // Delayed payment methods complete Checkout before the payment succeeds.
+        const pending = event.type === "checkout.session.completed" && object.payment_status === "unpaid";
+        return result(provider, {
+          verified,
+          orderNo: object.metadata?.orderNo,
+          paymentOrderNo: object.id,
+          amount: object.amount_total === undefined ? undefined : stripeMinorUnit(object.amount_total, parsed.currency),
+          currency: object.currency,
+          status: object.payment_status === "paid" ? "PAID" : "PENDING",
+          message: pending ? "STRIPE_PAYMENT_PENDING" : "STRIPE_CALLBACK",
+        });
+      },
       query: async ({ orderNo, paymentOrderNo }) => {
         if (!paymentOrderNo) return result(provider, { verified: false, orderNo, status: "PENDING", message: "STRIPE_ORDER_ID_MISSING" });
         const response = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(paymentOrderNo)}`, { headers: { Authorization: `Bearer ${parsed.secretKey}` } });
