@@ -24,6 +24,30 @@ function optionalUrl(value: unknown, field: string) {
   }
 }
 
+export function normalizeSiteImageUrl(value: string) {
+  const normalized = value.trim();
+  if (normalized.startsWith("/")) {
+    // Keep media paths origin-independent without allowing protocol-relative URLs.
+    if (normalized.startsWith("//") || normalized.includes("\\") || /\s/.test(normalized)) return null;
+    return normalized;
+  }
+
+  try {
+    const url = new URL(normalized);
+    return URL_PROTOCOLS.has(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function optionalImageUrl(value: unknown, field: string) {
+  const normalized = optionalText(value, field, 2_048);
+  if (!normalized) return null;
+  const url = normalizeSiteImageUrl(normalized);
+  if (!url) throw new Error(`${field}_INVALID`);
+  return url;
+}
+
 export type SiteSettingsInput = {
   siteName: string;
   siteUrl?: string | null;
@@ -57,8 +81,8 @@ export function validateSiteSettingsInput(input: SiteSettingsInput) {
     siteName,
     siteUrl: optionalUrl(input.siteUrl, "SITE_URL"),
     siteSubtitle: optionalText(input.siteSubtitle, "SITE_SUBTITLE", 300),
-    logo: optionalUrl(input.logo, "SITE_LOGO_URL"),
-    logoIcon: optionalUrl(input.logoIcon, "SITE_FAVICON_URL"),
+    logo: optionalImageUrl(input.logo, "SITE_LOGO_URL"),
+    logoIcon: optionalImageUrl(input.logoIcon, "SITE_FAVICON_URL"),
     notice: optionalText(input.notice, "SITE_NOTICE", 2_000),
     supportContact: optionalText(input.supportContact, "SITE_SUPPORT_CONTACT", 2_000),
     footerText: optionalText(input.footerText, "SITE_FOOTER_TEXT", 1_000),
