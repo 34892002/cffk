@@ -3041,6 +3041,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "noticePopupEnabled": {
+          "name": "noticePopupEnabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "supportContact": {
           "name": "supportContact",
           "type": "text",

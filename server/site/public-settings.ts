@@ -14,6 +14,7 @@ export type PublicSiteSettings = {
   logo: string | null;
   logoIcon: string | null;
   notice: LocalizedNullableText;
+  noticePopupEnabled: boolean;
   supportContact: LocalizedText;
   footerText: LocalizedText;
   orderNotice: LocalizedNullableText;
@@ -41,6 +42,7 @@ const defaultSettings: SiteSettingRecord = {
   logo: null,
   logoIcon: null,
   notice: null,
+  noticePopupEnabled: false,
   supportContact: null,
   footerText: null,
   orderNotice: null,
@@ -83,6 +85,7 @@ export function toPublicSiteSettings(record: SiteSettingRecord): PublicSiteSetti
     logo: record.logo,
     logoIcon: record.logoIcon || record.logo,
     notice: buildLocalizedOptionalText(record.notice, translations, "notice"),
+    noticePopupEnabled: record.noticePopupEnabled === true,
     supportContact: buildLocalizedText(record.supportContact?.trim() || DEFAULT_SUPPORT_CONTACT, translations, "supportContact"),
     footerText: buildLocalizedText(record.footerText?.trim() || DEFAULT_FOOTER_TEXT, translations, "footerText"),
     orderNotice: buildLocalizedOptionalText(record.orderNotice, translations, "orderNotice"),

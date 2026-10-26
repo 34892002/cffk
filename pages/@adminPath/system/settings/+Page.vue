@@ -143,6 +143,16 @@
                 <Textarea id="site-notice" v-model="activeTranslation.notice" rows="3" maxlength="2000" placeholder="展示在商城首页的公告内容。" />
               </Field>
 
+              <VeeField v-slot="{ componentField }" name="noticePopupEnabled">
+                <Field orientation="horizontal">
+                  <div class="flex-1">
+                    <FieldLabel for="notice-popup-enabled">首页公告弹窗</FieldLabel>
+                    <FieldDescription>开启后，访客进入商城首页会以弹窗展示当前语言的公告；关闭后记录在本机 Cookie，公告内容修改后会再次弹出。</FieldDescription>
+                  </div>
+                  <Switch id="notice-popup-enabled" :model-value="componentField.modelValue" @update:model-value="componentField['onUpdate:modelValue']" />
+                </Field>
+              </VeeField>
+
               <div class="grid gap-4 md:grid-cols-2">
                 <VeeField v-slot="{ componentField, errors }" name="supportContact" :validate-on-input="true">
                   <Field v-show="editorLocale === 'zh-CN'" :data-invalid="errors.length > 0">
@@ -331,6 +341,7 @@ const formSchema = toTypedSchema(z.object({
   logoIcon: optionalUrl,
   logo: optionalUrl,
   notice: z.string().trim().max(2_000, "首页公告不能超过 2,000 个字符。"),
+  noticePopupEnabled: z.boolean(),
   supportContact: z.string().trim().max(2_000, "客服联系方式不能超过 2,000 个字符。"),
   footerText: z.string().trim().max(1_000, "页脚文案不能超过 1,000 个字符。"),
   orderNotice: z.string().trim().max(2_000, "下单提示不能超过 2,000 个字符。"),
@@ -346,6 +357,7 @@ type FormValues = {
   logo: string;
   logoIcon: string;
   notice: string;
+  noticePopupEnabled: boolean;
   supportContact: string;
   footerText: string;
   orderNotice: string;
@@ -385,6 +397,7 @@ const initialValues: FormValues = {
   logo: "",
   logoIcon: "",
   notice: "",
+  noticePopupEnabled: false,
   supportContact: "",
   footerText: "",
   orderNotice: "",
@@ -497,6 +510,7 @@ function toFormValues(settings: Awaited<ReturnType<typeof onGetSiteSettings>>): 
     logo: settings.logo ?? "",
     logoIcon: settings.logoIcon ?? "",
     notice: settings.notice ?? "",
+    noticePopupEnabled: settings.noticePopupEnabled === true,
     supportContact: settings.supportContact ?? "",
     footerText: settings.footerText ?? "",
     orderNotice: settings.orderNotice ?? "",

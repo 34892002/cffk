@@ -12,12 +12,12 @@
  */
 
 export const SUPPORTED_CURRENCIES = [
-  { code: "CNY", name: "人民币", decimals: 2 },
-  { code: "USD", name: "美元", decimals: 2 },
-  { code: "TWD", name: "新台币", decimals: 2 },
-  { code: "JPY", name: "日元", decimals: 0 },
-  { code: "EUR", name: "欧元", decimals: 2 },
-  { code: "GBP", name: "英镑", decimals: 2 },
+  { code: "CNY", name: "人民币", decimals: 2, symbol: "¥" },
+  { code: "USD", name: "美元", decimals: 2, symbol: "$" },
+  { code: "TWD", name: "新台币", decimals: 2, symbol: "$" },
+  { code: "JPY", name: "日元", decimals: 0, symbol: "¥" },
+  { code: "EUR", name: "欧元", decimals: 2, symbol: "€" },
+  { code: "GBP", name: "英镑", decimals: 2, symbol: "£" },
 ] as const;
 
 export type CurrencyCode = (typeof SUPPORTED_CURRENCIES)[number]["code"];
@@ -88,14 +88,15 @@ export function amountToMinor(amount: number, currency: CurrencyCode): number {
   return Math.round(amount * 10 ** currencyDecimals(currency));
 }
 
-/** Format a minor-unit amount with the currency symbol, e.g. `US$1.49`. */
+/** Format a minor-unit amount with the currency symbol, e.g. `$1.49`. */
 export function formatMinor(amountMinor: number, currency: CurrencyCode, locale = "zh-CN"): string {
+  const meta = currencyMeta(currency);
   const safeAmount = Number.isSafeInteger(amountMinor) && amountMinor >= 0 ? amountMinor : 0;
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    currencyDisplay: "symbol",
+  const number = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: meta.decimals,
+    maximumFractionDigits: meta.decimals,
   }).format(minorToAmount(safeAmount, currency));
+  return `${meta.symbol}${number}`;
 }
 
 export function formatCnyMinor(amountMinor: number, locale = "zh-CN"): string {

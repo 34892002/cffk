@@ -82,11 +82,23 @@
     </section>
 
     <StorefrontFooter />
+
+    <Dialog :open="noticePopupOpen" @update:open="closeNoticePopup">
+      <DialogContent class="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{{ messages.storefront.noticeTitle }}</DialogTitle>
+        </DialogHeader>
+        <p class="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{{ localizedNotice }}</p>
+        <DialogFooter>
+          <DialogClose as-child><Button type="button" class="w-full">{{ messages.common.close }}</Button></DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </main>
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { InfoIcon, PackageOpenIcon, SearchIcon } from "@lucide/vue";
 import logoUrl from "@/assets/logo.svg?url";
 import defaultProductImage from "@/assets/product_img.jpg?url";
@@ -96,11 +108,14 @@ import PublicNav from "@/components/storefront/PublicNav.vue";
 import StorefrontFooter from "@/components/storefront/StorefrontFooter.vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { Data } from "./+data.server";
 import CurrencyHint from "@/components/storefront/CurrencyHint.vue";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { pickLocalizedOptionalText, pickLocalizedText, type LocalizedNullableText } from "@/lib/i18n/localized-text";
+import { readCookieValue } from "@/lib/i18n/locale";
+import { noticeVersion } from "@/lib/notice-version";
 
 type Product = Data["products"][number];
 type Category = Data["categories"][number];
@@ -109,6 +124,7 @@ type Site = {
   subtitle: LocalizedNullableText;
   logo: string | null;
   notice: LocalizedNullableText;
+  noticePopupEnabled: boolean;
 
   footerText: LocalizedNullableText;
 };
@@ -122,6 +138,24 @@ const query = ref("");
 const localizedNotice = computed(() => (site.notice ? pickLocalizedText(site.notice, locale.value) : ""));
 const localizedSubtitle = computed(() => (site.subtitle ? pickLocalizedText(site.subtitle, locale.value) : ""));
 const shouldMarqueeNotice = computed(() => localizedNotice.value.length > 30);
+const noticeCookieName = "storefront-notice-seen";
+const noticePopupOpen = ref(false);
+
+function writeNoticeSeen() {
+  const text = localizedNotice.value.trim();
+  if (!text || typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; secure" : "";
+  document.cookie = `${noticeCookieName}=${noticeVersion(text)}; path=/; max-age=31536000; samesite=lax${secure}`;
+}
+function closeNoticePopup(open: boolean) {
+  noticePopupOpen.value = open;
+  if (!open) writeNoticeSeen();
+}
+onMounted(() => {
+  const text = localizedNotice.value.trim();
+  if (!site.noticePopupEnabled || !text) return;
+  if (readCookieValue(document.cookie, noticeCookieName) !== noticeVersion(text)) noticePopupOpen.value = true;
+});
 const brandLogoUrl = computed(() => site.logo || logoUrl);
 function productName(product: Product) { return pickLocalizedText(product.name, locale.value); }
 function productSubtitle(product: Product) { return product.subtitle ? pickLocalizedOptionalText(product.subtitle, locale.value) : null; }

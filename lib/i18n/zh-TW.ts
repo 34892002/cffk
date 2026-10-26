@@ -34,6 +34,7 @@ export default {
     outOfStock: "暫時缺貨",
     noProducts: "暫無可購買商品",
     noProductsDescription: "商品上架後會顯示在這裡。",
+    noticeTitle: "站點公告",
     contactSupport: "聯絡客服",
   },
   auth: {

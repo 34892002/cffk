@@ -96,6 +96,7 @@ export const siteSetting = sqliteTable("siteSetting", {
   logo: text("logo"),
   logoIcon: text("logoIcon"),
   notice: text("notice"),
+  noticePopupEnabled: integer("noticePopupEnabled", { mode: "boolean" }).notNull().default(false),
   supportContact: text("supportContact"),
   footerText: text("footerText"),
   orderNotice: text("orderNotice"),
