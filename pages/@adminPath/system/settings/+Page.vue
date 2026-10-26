@@ -144,10 +144,10 @@
               </Field>
 
               <VeeField v-slot="{ componentField }" name="noticePopupEnabled">
-                <Field orientation="horizontal">
-                  <div class="flex-1">
+                <Field orientation="horizontal" class="rounded-md border px-4 py-3">
+                  <div class="grid flex-1 gap-1">
                     <FieldLabel for="notice-popup-enabled">首页公告弹窗</FieldLabel>
-                    <FieldDescription>开启后，访客进入商城首页会以弹窗展示当前语言的公告；关闭后记录在本机 Cookie，公告内容修改后会再次弹出。</FieldDescription>
+                    <FieldDescription class="max-w-prose">开启后，访客进入商城首页会以弹窗展示当前语言的公告；关闭后不再弹出，修改公告内容后会再次弹出。</FieldDescription>
                   </div>
                   <Switch id="notice-popup-enabled" :model-value="componentField.modelValue" @update:model-value="componentField['onUpdate:modelValue']" />
                 </Field>
