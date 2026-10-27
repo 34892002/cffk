@@ -79,6 +79,11 @@ function getSafeForm(provider: string, name: string, isEnabled: boolean, sort: n
   let valid = true;
   try { parseProviderConfig(provider, configJson); } catch { valid = false; }
 
+  const fixedCurrencies = definition.supportedCurrencies;
+  const currency = fixedCurrencies === "config"
+    ? (typeof parsed.currency === "string" && parsed.currency.trim() ? parsed.currency.trim().toUpperCase() : "未配置")
+    : fixedCurrencies.join("/");
+
   const urlDefaults = getPaymentUrlDefaults(provider as PaymentProviderKind, siteUrl);
   const displayValues = {
     ...definition.defaults,
@@ -87,7 +92,7 @@ function getSafeForm(provider: string, name: string, isEnabled: boolean, sort: n
     returnUrl: rebasePaymentUrl(parsed.returnUrl, urlDefaults.returnUrl, siteUrl),
   };
   const { values, configuredSecrets } = redactJsonFormValues(definition.fields, displayValues);
-  return { provider, title: definition.title, name, isEnabled, sort, updatedAt: updatedAt?.toISOString() ?? null, valid, schemaVersion: definition.schemaVersion, fields: definition.fields, values: values as JsonFormValues, configuredSecrets, siteUrl };
+  return { provider, title: definition.title, name, isEnabled, sort, currency, updatedAt: updatedAt?.toISOString() ?? null, valid, schemaVersion: definition.schemaVersion, fields: definition.fields, values: values as JsonFormValues, configuredSecrets, siteUrl };
 }
 
 async function internalOnGetPaymentProviders() {

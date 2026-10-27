@@ -23,6 +23,20 @@
             <FieldSeparator />
 
             <FieldSet class="gap-4">
+              <FieldLegend>结算货币</FieldLegend>
+              <div class="flex flex-wrap items-center justify-between gap-4 rounded-md border p-4">
+                <div class="grid gap-1">
+                  <p class="text-sm font-medium">当前货币 {{ currencyLabel(currency) }}</p>
+                  <p class="text-xs text-muted-foreground">当前汇率：{{ currentRateText }}</p>
+                </div>
+                <Button type="button" variant="destructive" @click="openCurrencyDialog">切换货币</Button>
+              </div>
+              <FieldDescription>商品价格仍以人民币录入，全站展示价格和结算金额按上方汇率换算。切换只影响新订单，历史订单保留下单时的汇率。</FieldDescription>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet class="gap-4">
               <FieldLegend>基础信息</FieldLegend>
               <div class="grid gap-4 md:grid-cols-2">
                 <VeeField v-slot="{ componentField, errors }" name="siteName" :validate-on-input="true">
@@ -129,6 +143,16 @@
                 <Textarea id="site-notice" v-model="activeTranslation.notice" rows="3" maxlength="2000" placeholder="展示在商城首页的公告内容。" />
               </Field>
 
+              <VeeField v-slot="{ componentField }" name="noticePopupEnabled">
+                <Field orientation="horizontal" class="rounded-md border px-4 py-3">
+                  <div class="grid flex-1 gap-1">
+                    <FieldLabel for="notice-popup-enabled">首页公告弹窗</FieldLabel>
+                    <FieldDescription class="max-w-prose">开启后，访客进入商城首页会以弹窗展示当前语言的公告；关闭后不再弹出，修改公告内容后会再次弹出。</FieldDescription>
+                  </div>
+                  <Switch id="notice-popup-enabled" :model-value="componentField.modelValue" @update:model-value="componentField['onUpdate:modelValue']" />
+                </Field>
+              </VeeField>
+
               <div class="grid gap-4 md:grid-cols-2">
                 <VeeField v-slot="{ componentField, errors }" name="supportContact" :validate-on-input="true">
                   <Field v-show="editorLocale === 'zh-CN'" :data-invalid="errors.length > 0">
@@ -220,6 +244,54 @@
       </form>
     </div>
     <MediaPickerDialog :open="mediaPickerTarget !== null" @update:open="(open) => { if (!open) mediaPickerTarget = null; }" @select="setSelectedImage" />
+
+    <Dialog :open="currencyDialogOpen" @update:open="(open) => { if (!open) currencyDialogOpen = false; }">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>切换结算货币</DialogTitle>
+          <DialogDescription>商品价格仍以人民币录入。切换后，全站展示价格和结算金额都会按新汇率换算。</DialogDescription>
+        </DialogHeader>
+        <div class="grid gap-4">
+          <label class="grid gap-2 text-sm font-medium">货币
+            <Select :model-value="currencyForm.currency" @update:model-value="onCurrencyChange">
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem v-for="item in currencyOptions" :key="item.code" :value="item.code">{{ item.label }}</SelectItem></SelectContent>
+            </Select>
+          </label>
+          <label class="grid gap-2 text-sm font-medium">汇率（1 CNY = ? {{ currencyForm.currency }}）
+            <Input v-model="currencyForm.rate" :disabled="currencyForm.currency === 'CNY'" inputmode="decimal" placeholder="例如 0.149" />
+          </label>
+          <p class="text-xs text-muted-foreground">{{ previewRateText }}</p>
+        </div>
+        <DialogFooter>
+          <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
+          <Button type="button" :disabled="currencyPreviewLoading" @click="openCurrencyConfirm">{{ currencyPreviewLoading ? "计算中..." : "下一步" }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog :open="currencyConfirmOpen" @update:open="(open) => { if (!open) currencyConfirmOpen = false; }">
+      <DialogContent class="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>确认切换到 {{ currencyLabel(currencyForm.currency) }}</DialogTitle>
+          <DialogDescription>警告：全站所有商品的展示价格和结算价格都会按新汇率重新计算。新汇率为 1人民币 = {{ currencyForm.rate }} {{ currencyMeta(currencyForm.currency).name }}。</DialogDescription>
+        </DialogHeader>
+        <div class="grid gap-2">
+          <p class="text-sm font-medium">价格对比（按人民币价格从高到低）</p>
+          <div class="max-h-64 overflow-y-auto rounded-md border">
+            <div v-for="(item, index) in currencyPreview" :key="`${item.name}-${index}`" class="flex items-center justify-between gap-4 border-b px-3 py-2 text-sm last:border-b-0">
+              <span class="min-w-0 truncate">{{ item.name }}</span>
+              <span class="shrink-0 tabular-nums">{{ item.cnyAmount }} → {{ item.convertedAmount }}</span>
+            </div>
+          </div>
+          <p v-if="!currencyPreviewHasProducts" class="text-xs text-muted-foreground">当前没有已上架商品，以上为示例价格。</p>
+        </div>
+        <DialogFooter>
+          <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
+          <Button type="button" variant="destructive" :disabled="currencySwitching" @click="confirmCurrencySwitch">{{ currencySwitching ? "切换中..." : `切换到${currencyLabel(currencyForm.currency)}` }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>
 
@@ -234,6 +306,7 @@ import { z } from "zod";
 import AdminPageHeader from "@/components/admin/AdminPageHeader.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet } from "@/components/ui/field";
@@ -245,8 +318,9 @@ import { Combobox, ComboboxAnchor, ComboboxEmpty, ComboboxGroup, ComboboxInput, 
 import { ChevronsUpDownIcon } from "@lucide/vue";
 import { Textarea } from "@/components/ui/textarea";
 import { SITE_TIMEZONES } from "@/lib/site-timezone";
+import { SUPPORTED_CURRENCIES, currencyLabel, currencyMeta, formatRate, isCurrencyCode, parseExchangeRate, type CurrencyCode } from "@/lib/money";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
-import { onGetSiteSettings, onSaveSiteSettings } from "@/server/site/admin.telefunc";
+import { onGetCurrencySwitchPreview, onGetSiteSettings, onSaveSiteSettings, onSwitchCurrency } from "@/server/site/admin.telefunc";
 
 const urlMessage = "请输入有效的 HTTP 或 HTTPS 地址。";
 const optionalUrl = z.string().trim().refine((value) => {
@@ -267,6 +341,7 @@ const formSchema = toTypedSchema(z.object({
   logoIcon: optionalUrl,
   logo: optionalUrl,
   notice: z.string().trim().max(2_000, "首页公告不能超过 2,000 个字符。"),
+  noticePopupEnabled: z.boolean(),
   supportContact: z.string().trim().max(2_000, "客服联系方式不能超过 2,000 个字符。"),
   footerText: z.string().trim().max(1_000, "页脚文案不能超过 1,000 个字符。"),
   orderNotice: z.string().trim().max(2_000, "下单提示不能超过 2,000 个字符。"),
@@ -282,6 +357,7 @@ type FormValues = {
   logo: string;
   logoIcon: string;
   notice: string;
+  noticePopupEnabled: boolean;
   supportContact: string;
   footerText: string;
   orderNotice: string;
@@ -321,6 +397,7 @@ const initialValues: FormValues = {
   logo: "",
   logoIcon: "",
   notice: "",
+  noticePopupEnabled: false,
   supportContact: "",
   footerText: "",
   orderNotice: "",
@@ -334,6 +411,82 @@ const { handleSubmit, resetForm, setFieldValue } = useForm<FormValues>({ validat
 const loading = ref(false);
 const error = ref<string | null>(null);
 const mediaPickerTarget = ref<"logo" | "logoIcon" | null>(null);
+
+const currency = ref<CurrencyCode>("CNY");
+const exchangeRate = ref(1);
+const currencyOptions = SUPPORTED_CURRENCIES.map((item) => ({ code: item.code, label: currencyLabel(item.code) }));
+const currencyDialogOpen = ref(false);
+const currencyConfirmOpen = ref(false);
+const currencyPreviewLoading = ref(false);
+const currencySwitching = ref(false);
+const currencyForm = reactive<{ currency: CurrencyCode; rate: string }>({ currency: "CNY", rate: "1" });
+const currencyPreview = ref<Array<{ name: string; cnyAmount: string; convertedAmount: string }>>([]);
+const currencyPreviewHasProducts = ref(false);
+
+const currentRateText = computed(() => currency.value === "CNY" ? "1CNY = 1CNY" : formatRate(currency.value, exchangeRate.value));
+const previewRateText = computed(() => {
+  if (currencyForm.currency === "CNY") return "1人民币 = 1人民币";
+  const rate = parseExchangeRate(currencyForm.rate);
+  return rate === null ? "请输入大于 0 的汇率。" : formatRate(currencyForm.currency, rate);
+});
+
+function syncCurrency(settings: Awaited<ReturnType<typeof onGetSiteSettings>>) {
+  currency.value = isCurrencyCode(settings.currency) ? settings.currency : "CNY";
+  exchangeRate.value = settings.exchangeRate;
+}
+
+function openCurrencyDialog() {
+  currencyForm.currency = currency.value;
+  currencyForm.rate = currency.value === "CNY" ? "1" : String(exchangeRate.value);
+  currencyDialogOpen.value = true;
+}
+
+function onCurrencyChange(value: unknown) {
+  if (typeof value !== "string") return;
+  const next = SUPPORTED_CURRENCIES.find((item) => item.code === value);
+  if (!next) return;
+  currencyForm.currency = next.code;
+  if (next.code === "CNY") currencyForm.rate = "1";
+  else if (!currencyForm.rate || currencyForm.rate === "1") currencyForm.rate = "";
+}
+
+async function openCurrencyConfirm() {
+  const rate = currencyForm.currency === "CNY" ? 1 : parseExchangeRate(currencyForm.rate);
+  if (rate === null) {
+    error.value = "请输入大于 0 的汇率。";
+    return;
+  }
+  currencyPreviewLoading.value = true;
+  error.value = null;
+  try {
+    const preview = await runTelefunc(() => onGetCurrencySwitchPreview({ currency: currencyForm.currency, exchangeRate: rate }), { notifyError: false });
+    currencyPreview.value = preview.items;
+    currencyPreviewHasProducts.value = preview.hasProducts;
+    currencyConfirmOpen.value = true;
+  } catch (cause) {
+    error.value = userErrorMessage(cause);
+  } finally {
+    currencyPreviewLoading.value = false;
+  }
+}
+
+async function confirmCurrencySwitch() {
+  const rate = currencyForm.currency === "CNY" ? 1 : parseExchangeRate(currencyForm.rate);
+  if (rate === null) return;
+  currencySwitching.value = true;
+  error.value = null;
+  try {
+    const settings = await runTelefunc(() => onSwitchCurrency({ currency: currencyForm.currency, exchangeRate: rate }), { successMessage: `已切换到${currencyLabel(currencyForm.currency)}。` });
+    currency.value = isCurrencyCode(settings.currency) ? settings.currency : "CNY";
+    exchangeRate.value = settings.exchangeRate;
+    currencyConfirmOpen.value = false;
+    currencyDialogOpen.value = false;
+  } catch (cause) {
+    error.value = userErrorMessage(cause);
+  } finally {
+    currencySwitching.value = false;
+  }
+}
 
 function timezoneDisplayValue(value: unknown) {
   const timezone = String(value ?? "");
@@ -357,6 +510,7 @@ function toFormValues(settings: Awaited<ReturnType<typeof onGetSiteSettings>>): 
     logo: settings.logo ?? "",
     logoIcon: settings.logoIcon ?? "",
     notice: settings.notice ?? "",
+    noticePopupEnabled: settings.noticePopupEnabled === true,
     supportContact: settings.supportContact ?? "",
     footerText: settings.footerText ?? "",
     orderNotice: settings.orderNotice ?? "",
@@ -388,6 +542,7 @@ async function loadSettings() {
     const settings = await runTelefunc(() => onGetSiteSettings(), { notifyError: false });
     resetForm({ values: toFormValues(settings) });
     syncTranslations(settings);
+    syncCurrency(settings);
   } catch (cause) {
     error.value = userErrorMessage(cause);
   } finally {
@@ -402,6 +557,7 @@ const saveSettings = handleSubmit(async (values) => {
     const settings = await runTelefunc(() => onSaveSiteSettings({ ...values, translations: { ...translations } }), { successMessage: "站点设置已保存。" });
     resetForm({ values: toFormValues(settings) });
     syncTranslations(settings);
+    syncCurrency(settings);
   } catch {
     // runTelefunc 已显示脱敏后的错误提示。
   } finally {

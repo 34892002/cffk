@@ -1,7 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { appError } from "@/lib/app-error";
-import { formatCentsAsYuan } from "@/lib/payment-utils";
+import { convertFromBaseMinor, formatMinor } from "@/lib/money";
+import { getSiteSettings, storeCurrency, storeExchangeRate } from "@/server/site/public-settings";
 import { discountCode, productSku, productV2 } from "@/database/drizzle/schema";
 
 type DiscountCandidate = {
@@ -78,10 +79,15 @@ export async function previewDiscount(database: D1Database, input: { productId: 
 
   const quantity = Math.max(item.minBuy, Math.min(item.maxBuy, requestedQuantity));
   const result = await validateDiscountForItem(db, item, quantity, input.discountCode);
+  const site = await getSiteSettings(database);
+  const currency = storeCurrency(site);
+  const rate = storeExchangeRate(site);
+  const format = (baseMinor: number) => formatMinor(convertFromBaseMinor(baseMinor, currency, rate), currency);
   return {
     code: result.code,
-    originalAmount: formatCentsAsYuan(result.originalAmount),
-    discountAmount: formatCentsAsYuan(result.discountAmount),
-    finalAmount: formatCentsAsYuan(result.finalAmount),
+    currency,
+    originalAmount: format(result.originalAmount),
+    discountAmount: format(result.discountAmount),
+    finalAmount: format(result.finalAmount),
   };
 }

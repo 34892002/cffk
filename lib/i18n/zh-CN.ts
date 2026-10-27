@@ -32,6 +32,7 @@ const messages = {
     outOfStock: "暂时缺货",
     noProducts: "暂无可购买商品",
     noProductsDescription: "商品上架后会显示在这里。",
+    noticeTitle: "站点公告",
     contactSupport: "联系客服",
   },
   auth: {

@@ -2,7 +2,7 @@ import { eq, gte, sql } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
 import { card, order, productV2 } from "@/database/drizzle/schema";
 import { getSiteSettings } from "@/server/site/public-settings";
-import { formatCentsAsYuan } from "@/lib/payment-utils";
+import { formatCnyMinor } from "@/lib/money";
 import { buildDashboardOrderTrend, dashboardTrendStart, type DashboardOrderTrendPoint } from "@/lib/dashboard-trend";
 
 export type DashboardData = {
@@ -26,7 +26,7 @@ export async function getDashboardData(database: D1Database): Promise<DashboardD
     db.select({
       totalOrders: sql<number>`count(*)`,
       paidOrders: sql<number>`sum(case when ${order.paymentStatus} = 'PAID' then 1 else 0 end)`,
-      paidAmount: sql<number>`sum(case when ${order.paymentStatus} = 'PAID' then ${order.amount} else 0 end)`,
+      paidAmount: sql<number>`sum(case when ${order.paymentStatus} = 'PAID' then ${order.baseAmount} else 0 end)`,
     }).from(order),
     db.select({ activeProducts: sql<number>`count(*)` }).from(productV2).where(eq(productV2.status, "ACTIVE")),
     db.select({ count: sql<number>`count(*)` }).from(card).where(eq(card.status, "UNUSED")),
@@ -43,7 +43,7 @@ export async function getDashboardData(database: D1Database): Promise<DashboardD
     metrics: {
       totalOrders: orders[0]?.totalOrders ?? 0,
       paidOrders: orders[0]?.paidOrders ?? 0,
-      paidAmount: formatCentsAsYuan(orders[0]?.paidAmount ?? 0),
+      paidAmount: formatCnyMinor(orders[0]?.paidAmount ?? 0),
       activeProducts: products[0]?.activeProducts ?? 0,
       availableCards: cards[0]?.count ?? 0,
     },

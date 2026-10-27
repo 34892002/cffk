@@ -1,6 +1,9 @@
 <template>
   <section class="flex w-full flex-col gap-6">
     <AdminPageHeader />
+    <div class="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+      供应商采购与成本目前仅支持 CNY。站点切换到其他货币时，前台展示和收款会按汇率换算，但这里的成本价、加价和本地售价仍按人民币录入与理解。
+    </div>
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex gap-2">
         <Select v-model="sourceKey" @update:model-value="handleSourceChange"><SelectTrigger class="w-72"><SelectValue placeholder="选择供应商来源" /></SelectTrigger><SelectContent><SelectItem v-for="source in sources" :key="sourceKeyOf(source)" :value="sourceKeyOf(source)">{{ source.name }}</SelectItem></SelectContent></Select>

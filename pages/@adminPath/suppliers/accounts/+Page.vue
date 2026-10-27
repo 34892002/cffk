@@ -1,6 +1,9 @@
 <template>
   <section class="flex w-full flex-col gap-6">
     <AdminPageHeader />
+    <div class="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+      供应商采购与成本目前仅支持 CNY。站点切换到其他货币时，前台展示和收款会按汇率换算，但供应商账号币种、成本与余额仍按人民币理解。
+    </div>
     <div class="flex items-center justify-between gap-2"><Input v-model="search" class="h-9 w-72" placeholder="搜索账号或 API 来源" @keyup.enter="searchAccounts" /><div class="flex gap-2"><Button variant="outline" :disabled="loading" @click="load">刷新</Button><Button @click="openCreate">添加账号</Button></div></div>
     <AdminDataTable :columns="columns" :rows="data.items" row-key="id" empty-text="暂无供应商账号。">
       <template #cell-enabled="{ row }"><Switch :model-value="row.enabled" :disabled="loading" @update:model-value="setEnabled(row, $event)" /></template>
