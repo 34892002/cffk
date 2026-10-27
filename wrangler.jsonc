@@ -2,6 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "cffk",
   "compatibility_date": "2026-03-12",
+  "keep_vars": true,
   "main": "vike:server-entry",
   "send_email": [
     {
