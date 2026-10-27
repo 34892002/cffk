@@ -169,6 +169,34 @@ describe("supplier import", () => {
     }
   });
 
+  test("re-import keeps a published SKU live while the upstream SKU stays sellable", async () => {
+    const { database, close } = createTestDatabase();
+    try {
+      const db = createDrizzleDb(database);
+      const now = new Date();
+      await createDefaultCategory(db, now);
+      await db.insert(supplierAccount).values({ id: "account-1", ...source, baseUrl: source.normalizedApiOrigin, name: "Primary account", credentialsJson: "{}", enabled: true, balanceMinor: "1000", healthStatus: "healthy", createdAt: now, updatedAt: now });
+      const input = { ...source, productId: "product-1", skuIds: ["sku-1"], fixedMarkupMinor: "10", markupBps: 0, publish: false };
+      await importSupplierProduct(db, input, catalogProduct);
+      const [item] = await db.select().from(productV2);
+      const [sku] = await db.select().from(productSku);
+      await db.update(productV2).set({ status: "ACTIVE", updatedAt: now }).where(eq(productV2.id, item!.id));
+      await db.update(productSku).set({ status: "ACTIVE", updatedAt: now }).where(eq(productSku.id, sku!.id));
+
+      await importSupplierProduct(db, input, { ...catalogProduct, skus: [{ ...catalogProduct.skus[0]!, costMinor: "150" }] });
+      const [stillActiveSku] = await db.select().from(productSku);
+      const [stillActiveProduct] = await db.select().from(productV2);
+      expect(stillActiveSku).toMatchObject({ id: sku!.id, status: "ACTIVE", price: 160 });
+      expect(stillActiveProduct).toMatchObject({ id: item!.id, status: "ACTIVE" });
+
+      await importSupplierProduct(db, input, { ...catalogProduct, skus: [{ ...catalogProduct.skus[0]!, active: false }] });
+      const [unavailableSku] = await db.select().from(productSku);
+      expect(unavailableSku).toMatchObject({ id: sku!.id, status: "INACTIVE" });
+    } finally {
+      close();
+    }
+  });
+
   test("imports multiple upstream SKUs into one local product", async () => {
     const { database, close } = createTestDatabase();
     try {
