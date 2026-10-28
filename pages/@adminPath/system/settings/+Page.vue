@@ -105,10 +105,10 @@
                   <Field :data-invalid="errors.length > 0">
                     <FieldLabel for="site-favicon">网站 Favicon 地址</FieldLabel>
                     <div class="flex gap-2">
-                      <Input id="site-favicon" v-bind="componentField" type="url" inputmode="url" placeholder="https://example.com/favicon.png" :aria-invalid="errors.length > 0" />
+                      <Input id="site-favicon" v-bind="componentField" inputmode="url" placeholder="/media/proxy/... 或 https://example.com/favicon.png" :aria-invalid="errors.length > 0" />
                       <Button type="button" variant="outline" @click="mediaPickerTarget = 'logoIcon'">选择图片</Button>
                     </div>
-                    <FieldDescription>支持媒体库中的 PNG、JPEG、GIF 或 WebP，也可手工填写公开图片地址。</FieldDescription>
+                    <FieldDescription>用于浏览器标签页图标。支持媒体库中的 PNG、JPEG、GIF 或 WebP、以 / 开头的站内路径，以及 HTTP/HTTPS 图片地址。</FieldDescription>
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
                 </VeeField>
@@ -117,10 +117,10 @@
                   <Field :data-invalid="errors.length > 0">
                     <FieldLabel for="site-logo">网站 Logo 地址</FieldLabel>
                     <div class="flex gap-2">
-                      <Input id="site-logo" v-bind="componentField" type="url" inputmode="url" placeholder="https://example.com/logo.png" :aria-invalid="errors.length > 0" />
+                      <Input id="site-logo" v-bind="componentField" inputmode="url" placeholder="/media/proxy/... 或 https://example.com/logo.png" :aria-invalid="errors.length > 0" />
                       <Button type="button" variant="outline" @click="mediaPickerTarget = 'logo'">选择图片</Button>
                     </div>
-                    <FieldDescription>用于公开商城导航和社交分享图片 fallback。</FieldDescription>
+                    <FieldDescription>用于公开商城导航和社交分享图片 fallback。支持媒体库图片、以 / 开头的站内路径，以及 HTTP/HTTPS 图片地址。</FieldDescription>
                     <FieldError v-if="errors.length" :errors="errors" />
                   </Field>
                 </VeeField>
@@ -318,6 +318,7 @@ import { Combobox, ComboboxAnchor, ComboboxEmpty, ComboboxGroup, ComboboxInput, 
 import { ChevronsUpDownIcon } from "@lucide/vue";
 import { Textarea } from "@/components/ui/textarea";
 import { SITE_TIMEZONES } from "@/lib/site-timezone";
+import { normalizeSiteImageUrl } from "@/lib/validators/site";
 import { SUPPORTED_CURRENCIES, currencyLabel, currencyMeta, formatRate, isCurrencyCode, parseExchangeRate, type CurrencyCode } from "@/lib/money";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onGetCurrencySwitchPreview, onGetSiteSettings, onSaveSiteSettings, onSwitchCurrency } from "@/server/site/admin.telefunc";
@@ -333,13 +334,18 @@ const optionalUrl = z.string().trim().refine((value) => {
   }
 }, urlMessage);
 
+const optionalImageUrl = z.string().trim().max(2_048, "图片地址不能超过 2,048 个字符。").refine(
+  (value) => !value || normalizeSiteImageUrl(value) !== null,
+  "请选择媒体库图片，或输入有效的站内路径（以 / 开头）或 HTTP/HTTPS 图片地址。",
+);
+
 const formSchema = toTypedSchema(z.object({
   siteName: z.string().trim().min(1, "请输入站点名称。").max(120, "站点名称不能超过 120 个字符。"),
   siteSubtitle: z.string().trim().max(300, "副标题不能超过 300 个字符。"),
   siteUrl: optionalUrl,
   timezone: z.string().trim().min(1, "请选择站点时区。").max(64, "站点时区不能超过 64 个字符。"),
-  logoIcon: optionalUrl,
-  logo: optionalUrl,
+  logoIcon: optionalImageUrl,
+  logo: optionalImageUrl,
   notice: z.string().trim().max(2_000, "首页公告不能超过 2,000 个字符。"),
   noticePopupEnabled: z.boolean(),
   supportContact: z.string().trim().max(2_000, "客服联系方式不能超过 2,000 个字符。"),
