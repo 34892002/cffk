@@ -222,7 +222,7 @@ async function deleteRow() {
 #### 3. 无需修改
 
 - `pages/+onBeforeRoute.ts`、`pages/+onBeforeRender.ts`、`pages/+lang.ts`、`resolveHeadersLocale()`：语言解析本身与具体语言无关。
-- `lib/currency.ts`：非 `zh-CN` 自动显示 `CNY`。
+- `components/storefront/CurrencyHint.vue` 与 `lib/money.ts`：币种提示和金额格式化由站点货币设置驱动。
 - 数据库：`translationsJson` 是 JSON，新增语言不需要迁移，也不增加 D1 查询次数。
 
 #### 4. 验收

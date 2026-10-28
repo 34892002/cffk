@@ -1,8 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { telefuncAction } from "@/server/telefunc-action";
 
-import { pushChannelConfig, siteSetting } from "@/database/drizzle/schema";
+import { productSku, productV2, pushChannelConfig, siteSetting } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
+import { BASE_CURRENCY, convertFromBaseMinor, currencyLabel, formatMinor, isCurrencyCode, parseExchangeRate } from "@/lib/money";
 import { validateSiteSettingsInput, type SiteSettingsInput } from "@/lib/validators/site";
 import { SITE_TRANSLATION_FIELDS, normalizeContentTranslations, readContentTranslations, serializeContentTranslations, type ContentTranslationLocale, type ContentTranslations } from "@/lib/content-translations";
 import { requireAdmin } from "@/server/telefunc-context";
@@ -57,4 +58,70 @@ async function internalOnSaveSiteSettings(input: SiteSettingsInput) {
 
 export const onGetSiteSettings = telefuncAction(internalOnGetSiteSettings);
 export const onSaveSiteSettings = telefuncAction(internalOnSaveSiteSettings);
+
+const CURRENCY_PREVIEW_LIMIT = 5;
+const EXAMPLE_CNY_MINOR = [90, 990, 5000, 10000, 20000];
+
+async function internalOnGetCurrencySwitchPreview(input: { currency: string; exchangeRate: number | string }) {
+  const { db } = requireAdmin();
+  if (!isCurrencyCode(input?.currency)) appError("SITE_CURRENCY_INVALID");
+  const currency = input.currency;
+  const rate = currency === BASE_CURRENCY ? 1 : parseExchangeRate(input.exchangeRate);
+  if (rate === null) appError("SITE_EXCHANGE_RATE_INVALID");
+
+  // One read, only when the admin opens the confirmation dialog.
+  const rows = await db
+    .select({ name: productV2.name, price: sql<number>`max(${productSku.price})` })
+    .from(productSku)
+    .innerJoin(productV2, and(eq(productSku.productId, productV2.id), eq(productV2.status, "ACTIVE")))
+    .where(eq(productSku.status, "ACTIVE"))
+    .groupBy(productV2.id, productV2.name)
+    .orderBy(desc(sql`max(${productSku.price})`))
+    .limit(CURRENCY_PREVIEW_LIMIT);
+
+  const items = rows.length
+    ? rows.map((row) => ({
+        name: row.name,
+        cnyMinor: Number(row.price),
+        convertedMinor: convertFromBaseMinor(Number(row.price), currency, rate),
+      }))
+    : EXAMPLE_CNY_MINOR.map((price, index) => ({
+        name: `示例商品${index + 1}`,
+        cnyMinor: price,
+        convertedMinor: convertFromBaseMinor(price, currency, rate),
+      }));
+
+  return {
+    currency,
+    currencyLabel: currencyLabel(currency),
+    exchangeRate: rate,
+    items: items.map((item) => ({
+      ...item,
+      cnyAmount: formatMinor(item.cnyMinor, BASE_CURRENCY),
+      convertedAmount: formatMinor(item.convertedMinor, currency),
+    })),
+    hasProducts: rows.length > 0,
+  };
+}
+
+async function internalOnSwitchCurrency(input: { currency: string; exchangeRate: number | string }) {
+  const { database, db } = requireAdmin();
+  if (!isCurrencyCode(input?.currency)) appError("SITE_CURRENCY_INVALID");
+  const currency = input.currency;
+  const rate = currency === BASE_CURRENCY ? 1 : parseExchangeRate(input.exchangeRate);
+  if (rate === null) appError("SITE_EXCHANGE_RATE_INVALID");
+
+  const now = new Date();
+  const [record] = await db
+    .update(siteSetting)
+    .set({ currency, exchangeRate: rate, currencyUpdatedAt: now, updatedAt: now })
+    .where(eq(siteSetting.id, 1))
+    .returning();
+  if (!record) appError("SITE_SETTINGS_NOT_FOUND");
+  invalidateSiteSettings(database);
+  return { currency: record.currency, exchangeRate: record.exchangeRate, currencyUpdatedAt: record.currencyUpdatedAt };
+}
+
+export const onGetCurrencySwitchPreview = telefuncAction(internalOnGetCurrencySwitchPreview);
+export const onSwitchCurrency = telefuncAction(internalOnSwitchCurrency);
 

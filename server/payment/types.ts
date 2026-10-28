@@ -41,6 +41,7 @@ export type PaymentResult = {
 export type PaymentCreateResult = {
   orderNo: string;
   amount: number;
+  currency: string;
   paymentStatus: "UNPAID" | "PAID";
   payment: PaymentResult | null;
 };

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseBepusdtConfig, parseEpayConfig, parseHashpayConfig, parseStripeConfig, parsePerpayConfig } from "@/lib/config-schemas";
+import { amountToMinor, isCurrencyCode, minorToAmount } from "@/lib/money";
 import { createPerpayAdapter } from "./perpay";
 import { createAlipayPayment, queryAlipayPayment, verifyAlipayCallback } from "./alipay";
 import type { PaymentAdapter, PaymentNotifyResult } from "./types";
@@ -7,9 +8,8 @@ import type { PaymentChannel, PaymentProviderKind } from "./registry";
 
 function md5(value: string) { return createHash("md5").update(value).digest("hex"); }
 function sign(values: Record<string, string>, key: string) { return md5(Object.entries(values).filter(([, value]) => value !== "").sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `${name}=${value}`).join("&") + key); }
-const ZERO_DECIMAL_CURRENCIES = new Set(["bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf"]);
 function amount(value: string | undefined) { const parsed = Number(value); return Number.isFinite(parsed) ? Math.round(parsed * 100) : undefined; }
-function stripeMinorUnit(value: number, currency: string) { return ZERO_DECIMAL_CURRENCIES.has(currency.toLowerCase()) ? Math.round(value * 100) : value; }
+function stripeMinorUnit(value: number) { return value; }
 function base64Bytes(value: string) { return Uint8Array.from(atob(value), (character) => character.charCodeAt(0)); }
 function base64(value: ArrayBuffer) { return btoa(String.fromCharCode(...new Uint8Array(value))); }
 function timingSafeStringEqual(left: string, right: string) {
@@ -82,7 +82,7 @@ export function createProviderAdapter(provider: PaymentProviderKind, config: Rec
   if (provider === "STRIPE") {
     const parsed = parseStripeConfig(json);
     return {
-      create: async (input) => { const response = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { Authorization: `Bearer ${parsed.secretKey}`, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "line_items[0][price_data][currency]": parsed.currency, "line_items[0][price_data][product_data][name]": input.subject, "line_items[0][price_data][unit_amount]": String(ZERO_DECIMAL_CURRENCIES.has(parsed.currency) ? Math.round(input.amount / 100) : input.amount), "line_items[0][quantity]": "1", mode: "payment", success_url: input.returnUrl, cancel_url: input.returnUrl, "metadata[orderNo]": input.orderNo, "payment_intent_data[metadata][orderNo]": input.orderNo }).toString() }); const body = await response.json() as { id?: string; url?: string }; if (!response.ok || !body.url || !body.id) throw new Error("STRIPE_CREATE_FAILED"); return { mode: "redirect", url: body.url, paymentOrderNo: body.id }; },
+      create: async (input) => { const response = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { Authorization: `Bearer ${parsed.secretKey}`, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "line_items[0][price_data][currency]": parsed.currency, "line_items[0][price_data][product_data][name]": input.subject, "line_items[0][price_data][unit_amount]": String(input.amount), "line_items[0][quantity]": "1", mode: "payment", success_url: input.returnUrl, cancel_url: input.returnUrl, "metadata[orderNo]": input.orderNo, "payment_intent_data[metadata][orderNo]": input.orderNo }).toString() }); const body = await response.json() as { id?: string; url?: string }; if (!response.ok || !body.url || !body.id) throw new Error("STRIPE_CREATE_FAILED"); return { mode: "redirect", url: body.url, paymentOrderNo: body.id }; },
       verify: async ({ rawBody = "", headers }) => {
         let event: { type?: string; data?: { object?: { id?: string; metadata?: { orderNo?: string }; amount_total?: number; currency?: string; payment_status?: string } } };
         try { event = JSON.parse(rawBody); } catch { return result(provider, { verified: false, status: "FAILED", message: "STRIPE_INVALID_JSON" }); }
@@ -100,7 +100,7 @@ export function createProviderAdapter(provider: PaymentProviderKind, config: Rec
           verified,
           orderNo: object.metadata?.orderNo,
           paymentOrderNo: object.id,
-          amount: object.amount_total === undefined ? undefined : stripeMinorUnit(object.amount_total, parsed.currency),
+          amount: object.amount_total === undefined ? undefined : stripeMinorUnit(object.amount_total),
           currency: object.currency,
           status: object.payment_status === "paid" ? "PAID" : "PENDING",
           message: pending ? "STRIPE_PAYMENT_PENDING" : "STRIPE_CALLBACK",
@@ -111,15 +111,16 @@ export function createProviderAdapter(provider: PaymentProviderKind, config: Rec
         const response = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(paymentOrderNo)}`, { headers: { Authorization: `Bearer ${parsed.secretKey}` } });
         const body = await response.json() as { id?: string; metadata?: { orderNo?: string }; amount_total?: number; currency?: string; payment_status?: string };
         if (!response.ok || body.metadata?.orderNo !== orderNo) return result(provider, { verified: false, orderNo, paymentOrderNo, status: "PENDING", message: "STRIPE_QUERY_FAILED" });
-        return result(provider, { verified: true, orderNo, paymentOrderNo: body.id, amount: body.amount_total === undefined ? undefined : stripeMinorUnit(body.amount_total, parsed.currency), currency: body.currency, status: body.payment_status === "paid" ? "PAID" : "PENDING", message: "STRIPE_QUERY" });
+        return result(provider, { verified: true, orderNo, paymentOrderNo: body.id, amount: body.amount_total === undefined ? undefined : stripeMinorUnit(body.amount_total), currency: body.currency, status: body.payment_status === "paid" ? "PAID" : "PENDING", message: "STRIPE_QUERY" });
       },
     };
   }
   if (provider === "PERPAY") return createPerpayAdapter(parsePerpayConfig(json));
   const parsed = parseHashpayConfig(json);
+  const hashpayCurrency = isCurrencyCode(parsed.currency) ? parsed.currency : "CNY";
   return {
-    create: async (input) => { const privateKey = await importPem(parsed.privateKey, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, "sign"); const path = "/api/merchant/new"; const timestamp = Math.floor(Date.now() / 1000).toString(); const body = JSON.stringify({ merchantNo: input.orderNo, amount: input.amount / 100, currency: parsed.currency, description: input.subject, return_url: input.returnUrl }); const signature = base64(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", privateKey, new TextEncoder().encode(`POST\n${path}\n${timestamp}\n${body}`))); const response = await fetch(`${parsed.baseUrl.replace(/\/+$/, "")}${path}`, { method: "POST", headers: { "content-type": "application/json", "X-Merchant-Id": parsed.merchantId, "X-Timestamp": timestamp, "X-Signature": signature }, body }); const text = await response.text(); let data: { checkoutUrl?: string; order?: { id?: string } }; try { data = JSON.parse(text); } catch { throw new Error("HASHPAY_INVALID_RESPONSE"); } if (!response.ok || !data.checkoutUrl || !data.order?.id) throw new Error("HASHPAY_CREATE_FAILED"); return { mode: "redirect", url: data.checkoutUrl, paymentOrderNo: data.order.id }; },
-    verify: async ({ rawBody = "" }) => { try { const decrypted = await decryptHashpay(rawBody, parsed.privateKey); if (Math.abs(Date.now() / 1000 - decrypted.timestamp) > 300) return result(provider, { verified: false, status: "FAILED", message: "HASHPAY_TIMESTAMP_EXPIRED" }); const payload = decrypted.payload; const merchantNo = typeof payload.merchantNo === "string" ? payload.merchantNo.trim() : ""; const paymentAmount = Number(payload.amount); if (!merchantNo || !Number.isFinite(paymentAmount) || paymentAmount <= 0) throw new Error("HASHPAY_CALLBACK_INVALID"); return result(provider, { verified: true, orderNo: merchantNo, paymentOrderNo: payload.orderId ? String(payload.orderId) : undefined, amount: Math.round(paymentAmount * 100), currency: typeof payload.currency === "string" ? payload.currency.toUpperCase() : undefined, status: payload.status === "paid" ? "PAID" : payload.status === "expired" ? "FAILED" : "PENDING", message: "HASHPAY_CALLBACK" }); } catch { return result(provider, { verified: false, status: "FAILED", message: "HASHPAY_CALLBACK_INVALID" }); } },
+    create: async (input) => { const privateKey = await importPem(parsed.privateKey, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, "sign"); const path = "/api/merchant/new"; const timestamp = Math.floor(Date.now() / 1000).toString(); const body = JSON.stringify({ merchantNo: input.orderNo, amount: minorToAmount(input.amount, hashpayCurrency), currency: parsed.currency, description: input.subject, return_url: input.returnUrl }); const signature = base64(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", privateKey, new TextEncoder().encode(`POST\n${path}\n${timestamp}\n${body}`))); const response = await fetch(`${parsed.baseUrl.replace(/\/+$/, "")}${path}`, { method: "POST", headers: { "content-type": "application/json", "X-Merchant-Id": parsed.merchantId, "X-Timestamp": timestamp, "X-Signature": signature }, body }); const text = await response.text(); let data: { checkoutUrl?: string; order?: { id?: string } }; try { data = JSON.parse(text); } catch { throw new Error("HASHPAY_INVALID_RESPONSE"); } if (!response.ok || !data.checkoutUrl || !data.order?.id) throw new Error("HASHPAY_CREATE_FAILED"); return { mode: "redirect", url: data.checkoutUrl, paymentOrderNo: data.order.id }; },
+    verify: async ({ rawBody = "" }) => { try { const decrypted = await decryptHashpay(rawBody, parsed.privateKey); if (Math.abs(Date.now() / 1000 - decrypted.timestamp) > 300) return result(provider, { verified: false, status: "FAILED", message: "HASHPAY_TIMESTAMP_EXPIRED" }); const payload = decrypted.payload; const merchantNo = typeof payload.merchantNo === "string" ? payload.merchantNo.trim() : ""; const paymentAmount = Number(payload.amount); if (!merchantNo || !Number.isFinite(paymentAmount) || paymentAmount <= 0) throw new Error("HASHPAY_CALLBACK_INVALID"); return result(provider, { verified: true, orderNo: merchantNo, paymentOrderNo: payload.orderId ? String(payload.orderId) : undefined, amount: amountToMinor(paymentAmount, hashpayCurrency), currency: typeof payload.currency === "string" ? payload.currency.toUpperCase() : undefined, status: payload.status === "paid" ? "PAID" : payload.status === "expired" ? "FAILED" : "PENDING", message: "HASHPAY_CALLBACK" }); } catch { return result(provider, { verified: false, status: "FAILED", message: "HASHPAY_CALLBACK_INVALID" }); } },
   };
 }
 

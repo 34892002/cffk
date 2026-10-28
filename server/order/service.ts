@@ -3,10 +3,11 @@ import { createDrizzleDb } from "@/database/drizzle";
 import { automaticDeliveryJob, customerAddress, discountCode, order, orderDelivery, productV2, productSku, supplierOrder } from "@/database/drizzle/schema";
 import { getProductSku } from "@/server/catalog/sku";
 import { appError } from "@/lib/app-error";
+import { convertFromBaseMinor, convertToBaseMinor, formatMinor, isCurrencyCode, BASE_CURRENCY, type CurrencyCode } from "@/lib/money";
+import { getSiteSettings, storeCurrency, storeExchangeRate } from "@/server/site/public-settings";
 import { isJsonFormEmail } from "@/lib/json-form-values";
 import { normalizeOrderEmail } from "@/lib/local-orders";
 import { canConfirmPayment } from "@/lib/order-state";
-import { formatCentsAsYuan } from "@/lib/payment-utils";
 import { PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, localizeContentText, readContentTranslations } from "@/lib/content-translations";
 import type { StorefrontLocale } from "@/lib/i18n/locale";
 import { validateDiscountForItem, positiveInteger } from "@/server/discount/service";
@@ -46,6 +47,9 @@ export type CreatedOrder = {
   id: number;
   orderNo: string;
   amount: number;
+  currency: CurrencyCode;
+  exchangeRate: number;
+  baseAmount: number;
   originalAmount: number | null;
   discountAmount: number | null;
   discountCode: string | null;
@@ -143,7 +147,18 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
 
   const reservePhysical = !isSupplier && (sku.deliveryType === "MANUAL" || sku.deliveryType === "EXPRESS") && sku.physicalStock !== null;
   const now = Date.now();
-  const amount = Math.max(0, originalAmount - discountAmount);
+
+  // Prices are stored in CNY; customers are charged in the store's current
+  // currency. The rate is snapshotted on the order so refunds and reports do
+  // not depend on later settings changes.
+  const site = await getSiteSettings(database);
+  const currency = storeCurrency(site);
+  const exchangeRate = storeExchangeRate(site);
+  const unitPrice = convertFromBaseMinor(sku.price, currency, exchangeRate);
+  const chargeOriginalAmount = convertFromBaseMinor(originalAmount, currency, exchangeRate);
+  const chargeDiscountAmount = convertFromBaseMinor(discountAmount, currency, exchangeRate);
+  const amount = Math.max(0, chargeOriginalAmount - chargeDiscountAmount);
+  const baseAmount = convertToBaseMinor(amount, currency, exchangeRate);
   if (amount > 0 && input.allowPendingPayment === false) fail("PAYMENT_ADAPTER_NOT_AVAILABLE");
   const orderNo = generateOrderNo();
   const paymentChannel = normalizePaymentChannel(input.paymentProvider, input.paymentChannel);
@@ -151,13 +166,13 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
   const productNameSnapshot = localizeContentText(item.name, productTranslations, input.locale, "name") ?? item.name;
   const productSkuNameSnapshot = localizeContentText(sku.name, readContentTranslations(sku.translationsJson, SKU_TRANSLATION_FIELDS), input.locale, "name") ?? sku.name;
   const statements: D1PreparedStatement[] = [
-    database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productSkuId, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, contactType, contactValue, contactEmailNormalized, buyerNote, locale, addressSnapshotJson, paymentProvider, paymentChannel, fulfillmentSourceSnapshot, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
-      orderNo, ownerUserId, item.id, sku.id, productNameSnapshot, productSkuNameSnapshot, sku.price, quantity, amount, input.contactType, contactValue,
+    database.prepare("INSERT INTO `order` (orderNo, ownerUserId, productId, productSkuId, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, currency, exchangeRate, baseAmount, contactType, contactValue, contactEmailNormalized, buyerNote, locale, addressSnapshotJson, paymentProvider, paymentChannel, fulfillmentSourceSnapshot, deliveryTypeSnapshot, fixedDeliveryContentSnapshot, physicalStockReserved, discountCodeId, discountCodeStr, originalAmount, discountAmount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(
+      orderNo, ownerUserId, item.id, sku.id, productNameSnapshot, productSkuNameSnapshot, unitPrice, quantity, amount, currency, exchangeRate, baseAmount, input.contactType, contactValue,
       input.contactType === "EMAIL" ? normalizeOrderEmail(contactValue) : null, input.buyerNote?.trim() || null,
       input.locale ?? null,
       addressSnapshotJson, input.paymentProvider, paymentChannel, sku.fulfillmentSource, sku.deliveryType,
       sku.deliveryType === "FIXED_CARD" ? sku.fixedDeliveryContent!.trim() : null, reservePhysical ? 1 : 0,
-      discountId, discountCodeValue, discountId === null ? null : originalAmount, discountId === null ? null : discountAmount,
+      discountId, discountCodeValue, discountId === null ? null : chargeOriginalAmount, discountId === null ? null : chargeDiscountAmount,
       now, now,
     ),
   ];
@@ -190,7 +205,7 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
   }
   const [created] = await db.select({ id: order.id }).from(order).where(eq(order.orderNo, orderNo)).limit(1);
   if (!created) fail("ORDER_CREATE_FAILED");
-  return { id: created.id, orderNo, amount, originalAmount: discountId === null ? null : originalAmount, discountAmount: discountId === null ? null : discountAmount, discountCode: discountCodeValue, paymentStatus: "UNPAID" };
+  return { id: created.id, orderNo, amount, currency, exchangeRate, baseAmount, originalAmount: discountId === null ? null : chargeOriginalAmount, discountAmount: discountId === null ? null : chargeDiscountAmount, discountCode: discountCodeValue, paymentStatus: "UNPAID" };
 }
 
 export type PaymentConfirmationResult = {
@@ -360,6 +375,9 @@ export type QueriedOrder = {
   productName: string;
   quantity: number;
   amount: string;
+  currency: CurrencyCode;
+  baseAmount: string;
+  exchangeRate: number;
   createdAt: Date;
   deliveries: string[];
 };
@@ -379,8 +397,9 @@ export async function getOrderForQuery(database: D1Database, orderNo: string, ow
       : null;
   if (!access) return null;
   const db = createDrizzleDb(database);
-  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, status: order.status, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, createdAt: order.createdAt }).from(order).where(and(eq(order.orderNo, normalizedOrderNo), access)).limit(1);
+  const [record] = await db.select({ id: order.id, orderNo: order.orderNo, status: order.status, paymentStatus: order.paymentStatus, deliveryStatus: order.deliveryStatus, paymentProvider: order.paymentProvider, paymentChannel: order.paymentChannel, productName: order.productNameSnapshot, quantity: order.quantity, amount: order.amount, currency: order.currency, baseAmount: order.baseAmount, exchangeRate: order.exchangeRate, createdAt: order.createdAt }).from(order).where(and(eq(order.orderNo, normalizedOrderNo), access)).limit(1);
   if (!record) return null;
+  const currency = isCurrencyCode(record.currency) ? record.currency : BASE_CURRENCY;
   const deliveries = await db.select({ contentSnapshot: orderDelivery.contentSnapshot }).from(orderDelivery).where(and(eq(orderDelivery.orderId, record.id), eq(orderDelivery.status, "SUCCESS"))).orderBy(asc(orderDelivery.id));
   return {
     orderNo: record.orderNo,
@@ -391,7 +410,10 @@ export async function getOrderForQuery(database: D1Database, orderNo: string, ow
     paymentChannel: record.paymentChannel,
     productName: record.productName,
     quantity: record.quantity,
-    amount: formatCentsAsYuan(record.amount),
+    amount: formatMinor(record.amount, currency),
+    currency,
+    baseAmount: formatMinor(record.baseAmount, BASE_CURRENCY),
+    exchangeRate: record.exchangeRate,
     createdAt: record.createdAt,
     deliveries: deliveries.flatMap((item) => {
       if (!item.contentSnapshot) return [];

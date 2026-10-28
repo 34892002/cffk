@@ -3,7 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { discountAmountsToCents, discountAmountsToYuan } from "@/lib/discount-amounts";
 import { appError } from "@/lib/app-error";
 import { dateTimeInTimezone } from "@/lib/site-timezone";
-import { getSiteSettings } from "@/server/site/public-settings";
+import { getSiteSettings, storeCurrency, storeExchangeRate } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
 import { discountCode, productV2 } from "@/database/drizzle/schema";
 
@@ -31,6 +31,12 @@ async function internalOnGetDiscountProductOptions() {
     .select({ id: productV2.id, name: productV2.name, slug: productV2.slug, status: productV2.status })
     .from(productV2)
     .orderBy(asc(productV2.sort), asc(productV2.id));
+}
+
+async function internalOnGetDiscountCurrency() {
+  const { database } = requireAdmin();
+  const settings = await getSiteSettings(database);
+  return { currency: storeCurrency(settings), exchangeRate: storeExchangeRate(settings) };
 }
 
 async function internalOnSaveDiscountCode(input: { id?: number; code: string; type: DiscountType; value: string; minAmount?: string | null; maxUses?: number | null; productIds?: string; expiresAt?: string | null; isActive: boolean }) {
@@ -76,5 +82,6 @@ async function internalOnSetDiscountCodeStatus(input: { id: number; isActive: bo
 
 export const onGetDiscountCodes = telefuncAction(internalOnGetDiscountCodes);
 export const onGetDiscountProductOptions = telefuncAction(internalOnGetDiscountProductOptions);
+export const onGetDiscountCurrency = telefuncAction(internalOnGetDiscountCurrency);
 export const onSaveDiscountCode = telefuncAction(internalOnSaveDiscountCode);
 export const onSetDiscountCodeStatus = telefuncAction(internalOnSetDiscountCodeStatus);

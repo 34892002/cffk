@@ -20,7 +20,7 @@
       <template #cell-quantity="{ value }"><span>{{ value }}</span></template>
       <template #cell-deliveryType="{ value }"><span class="text-sm">{{ deliveryTypeLabel(value) }}</span></template>
       <template #cell-contactValue="{ value }"><span class="text-sm text-muted-foreground">{{ value || "-" }}</span></template>
-      <template #cell-amount="{ row }">¥{{ row.amount }}</template>
+      <template #cell-amount="{ row }">{{ row.amount }}</template>
       <template #cell-payment="{ row }"><Badge :variant="row.paymentStatus === 'PAID' ? 'default' : 'secondary'">{{ paymentLabel(row.paymentStatus) }}</Badge></template>
       <template #cell-delivery="{ row }"><Badge :variant="row.deliveryStatus === 'FAILED' ? 'destructive' : row.deliveryStatus === 'DELIVERED' ? 'default' : 'secondary'">{{ deliveryLabel(row.deliveryStatus) }}</Badge></template>
       <template #cell-createdAt="{ row }"><span class="whitespace-nowrap text-xs">{{ formatDate(row.createdAt) }}</span></template>
@@ -66,7 +66,15 @@
                     </div>
                     <div>
                       <dt class="text-xs text-muted-foreground">订单金额</dt>
-                      <dd class="mt-1 text-base font-semibold">¥{{ detail.order.amount }}</dd>
+                      <dd class="mt-1 text-base font-semibold">{{ detail.order.amount }}</dd>
+                    </div>
+                    <div v-if="detail.order.currency !== 'CNY'">
+                      <dt class="text-xs text-muted-foreground">折合人民币</dt>
+                      <dd class="mt-1 font-medium">{{ detail.order.baseAmount }}</dd>
+                    </div>
+                    <div v-if="detail.order.currency !== 'CNY'">
+                      <dt class="text-xs text-muted-foreground">下单汇率</dt>
+                      <dd class="mt-1 font-medium">1 CNY = {{ detail.order.exchangeRate }} {{ detail.order.currency }}</dd>
                     </div>
                     <div class="min-w-0 sm:col-span-2">
                       <dt class="text-xs text-muted-foreground">联系方式</dt>

@@ -1,11 +1,12 @@
 import { telefuncAction } from "@/server/telefunc-action";
-import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
-import { emailTemplate, order, pushChannelConfig, pushLog, pushPolicy, pushRetry } from "@/database/drizzle/schema";
+import { and, asc, count, desc, eq, gte, like, lt, or } from "drizzle-orm";
+import { emailTemplate, order, orderEvent, pushChannelConfig, pushLog, pushPolicy, pushRetry } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { formatDateInTimezone } from "@/lib/site-timezone";
 import { PUSH_MAX_ATTEMPTS } from "@/lib/push-utils";
 import { parseEmailProviderConfig, parseEmailTemplateConfig } from "@/lib/config-schemas";
 import { getSiteSettings } from "@/server/site/public-settings";
+import { processOrderEventById } from "@/server/email/order-events";
 import { requireAdmin } from "@/server/telefunc-context";
 import { emailTemplateDefinitions } from "@/server/email/template-definitions";
 import { parseThirdPartyProviderConfig } from "@/server/push/third-party-provider";
@@ -150,14 +151,30 @@ async function internalOnGetPushLogs(input?: { page?: number; pageSize?: number;
   if (from && to && from >= to) appError("PUSH_LOG_DATE_INVALID");
   const conditions = [...(input?.status ? [eq(pushLog.status, input.status)] : []), ...(input?.channel ? [eq(pushLog.channel, input.channel)] : []), ...(input?.messageType ? [eq(pushLog.messageType, input.messageType)] : []), ...(input?.scene ? [eq(pushLog.scene, input.scene)] : []), ...(typeof input?.orderId === "number" ? [eq(pushLog.orderId, input.orderId)] : []), ...(orderNo ? [like(order.orderNo, `%${orderNo}%`)] : []), ...(from ? [gte(pushLog.createdAt, from)] : []), ...(to ? [lt(pushLog.createdAt, to)] : [])];
   const where = conditions.length ? and(...conditions) : undefined;
-  const [logs, total] = await Promise.all([
+  const [logs, total, queued] = await Promise.all([
     db.select({ id: pushLog.id, orderId: pushLog.orderId, channelConfigId: pushLog.channelConfigId, idempotencyKey: pushLog.idempotencyKey, messageType: pushLog.messageType, channel: pushLog.channel, provider: pushLog.provider, scene: pushLog.scene, recipient: pushLog.recipient, subject: pushLog.subject, status: pushLog.status, attemptCount: pushLog.attemptCount, messageId: pushLog.messageId, error: pushLog.error, triggeredBy: pushLog.triggeredBy, createdAt: pushLog.createdAt, updatedAt: pushLog.updatedAt, orderNo: order.orderNo }).from(pushLog).leftJoin(order, eq(pushLog.orderId, order.id)).where(where).orderBy(desc(pushLog.createdAt), desc(pushLog.id)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ value: count() }).from(pushLog).leftJoin(order, eq(pushLog.orderId, order.id)).where(where),
+    // Pending order notifications live in orderEvent until the scheduled worker
+    // turns them into pushLog rows. Showing them here makes a stalled queue visible.
+    db.select({ id: orderEvent.id, orderId: orderEvent.orderId, orderNo: order.orderNo, scene: orderEvent.scene, status: orderEvent.status, attemptCount: orderEvent.attemptCount, errorMessage: orderEvent.errorMessage, availableAt: orderEvent.availableAt, createdAt: orderEvent.createdAt, contactType: order.contactType, contactValue: order.contactValue }).from(orderEvent).innerJoin(order, eq(order.id, orderEvent.orderId)).where(and(or(eq(orderEvent.status, "PENDING"), eq(orderEvent.status, "PROCESSING")), ...(orderNo ? [like(order.orderNo, `%${orderNo}%`)] : []))).orderBy(asc(orderEvent.availableAt), asc(orderEvent.id)).limit(20),
   ]);
-  return { logs, total: total[0]?.value ?? 0, page, pageSize };
+  return { logs, total: total[0]?.value ?? 0, page, pageSize, queued };
 }
 
 export const onGetPushConfig = telefuncAction(internalOnGetPushConfig);
 export const onSavePushConfig = telefuncAction(internalOnSavePushConfig);
 export const onRetryPushLog = telefuncAction(internalOnRetryPushLog);
 export const onGetPushLogs = telefuncAction(internalOnGetPushLogs);
+
+export const onSendQueuedPush = telefuncAction(async (input: { id: number }) => {
+  const { database, runtime } = requireAdmin();
+  return processOrderEventById(database, runtime, Number(input?.id));
+});
+
+export const onDeleteQueuedPush = telefuncAction(async (input: { id: number }) => {
+  const { db } = requireAdmin();
+  const id = Number(input?.id);
+  if (!Number.isInteger(id) || id < 1) return { deleted: false };
+  const [deleted] = await db.delete(orderEvent).where(and(eq(orderEvent.id, id), eq(orderEvent.status, "PENDING"))).returning({ id: orderEvent.id });
+  return { deleted: Boolean(deleted) };
+});

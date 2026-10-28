@@ -2,7 +2,7 @@ import { and, count, desc, eq, like } from "drizzle-orm";
 import { telefuncAction } from "@/server/telefunc-action";
 import { requireAdmin } from "@/server/telefunc-context";
 import { appError } from "@/lib/app-error";
-import { supplierBinding, supplierOrder, order } from "@/database/drizzle/schema";
+import { supplierAccount, supplierBinding, supplierOrder, order } from "@/database/drizzle/schema";
 import { processSupplierOrder } from "./process";
 import { supplierOrderActionSchema, supplierOrderListQuerySchema } from "./schema";
 
@@ -17,7 +17,7 @@ export const onListSupplierOrders = telefuncAction(async (input: unknown = {}) =
   if (parsed.data.state) conditions.push(eq(supplierOrder.state, parsed.data.state));
   const where = conditions.length ? and(...conditions) : undefined;
   const [items, totalRows] = await Promise.all([
-    db.select({ id: supplierOrder.id, orderId: supplierOrder.orderId, orderNo: order.orderNo, provider: supplierBinding.provider, upstreamSkuName: supplierBinding.upstreamSkuName, quantity: supplierOrder.quantity, unitCostMinor: supplierOrder.quotedUnitCostMinor, totalCostMinor: supplierOrder.totalCostMinor, state: supplierOrder.state, selectedAccountId: supplierOrder.selectedAccountId, attemptCount: supplierOrder.attemptCount, selectionCount: supplierOrder.selectionCount, upstreamOrderId: supplierOrder.upstreamOrderId, lastErrorCode: supplierOrder.lastErrorCode, nextRetryAt: supplierOrder.nextRetryAt, createdAt: supplierOrder.createdAt, updatedAt: supplierOrder.updatedAt }).from(supplierOrder).innerJoin(order, eq(order.id, supplierOrder.orderId)).innerJoin(supplierBinding, eq(supplierBinding.id, supplierOrder.supplierBindingId)).where(where).orderBy(desc(supplierOrder.createdAt), desc(supplierOrder.id)).limit(pageSize).offset((page - 1) * pageSize),
+    db.select({ id: supplierOrder.id, orderId: supplierOrder.orderId, orderNo: order.orderNo, provider: supplierBinding.provider, supplierAccountName: supplierAccount.name, upstreamSkuName: supplierBinding.upstreamSkuName, quantity: supplierOrder.quantity, unitCostMinor: supplierOrder.quotedUnitCostMinor, totalCostMinor: supplierOrder.totalCostMinor, state: supplierOrder.state, selectedAccountId: supplierOrder.selectedAccountId, attemptCount: supplierOrder.attemptCount, selectionCount: supplierOrder.selectionCount, upstreamOrderId: supplierOrder.upstreamOrderId, lastErrorCode: supplierOrder.lastErrorCode, nextRetryAt: supplierOrder.nextRetryAt, createdAt: supplierOrder.createdAt, updatedAt: supplierOrder.updatedAt }).from(supplierOrder).innerJoin(order, eq(order.id, supplierOrder.orderId)).innerJoin(supplierBinding, eq(supplierBinding.id, supplierOrder.supplierBindingId)).leftJoin(supplierAccount, eq(supplierAccount.id, supplierOrder.selectedAccountId)).where(where).orderBy(desc(supplierOrder.createdAt), desc(supplierOrder.id)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ value: count() }).from(supplierOrder).innerJoin(order, eq(order.id, supplierOrder.orderId)).where(where),
   ]);
   return { items, total: totalRows[0]?.value ?? 0, page, pageSize };

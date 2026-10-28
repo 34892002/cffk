@@ -38,6 +38,36 @@ async function dispatchEvent(database: D1Database, runtime: EmailRuntime, event:
   ])).flat();
 }
 
+export type ProcessOrderEventResult = { status: "processed" | "failed" | "busy" | "not_found" | "already_processed"; error?: string };
+
+async function processEvent(database: D1Database, runtime: EmailRuntime, event: typeof orderEvent.$inferSelect, now: Date): Promise<ProcessOrderEventResult> {
+  const db = createDrizzleDb(database);
+  const leaseUntil = new Date(now.getTime() + EVENT_LEASE_MS);
+  const [claimed] = await db.update(orderEvent).set({ status: "PROCESSING", leaseUntil, attemptCount: event.attemptCount + 1, updatedAt: now })
+    .where(and(eq(orderEvent.id, event.id), eq(orderEvent.attemptCount, event.attemptCount), or(eq(orderEvent.status, "PENDING"), and(eq(orderEvent.status, "PROCESSING"), lte(orderEvent.leaseUntil, now)))))
+    .returning({ id: orderEvent.id });
+  if (!claimed) return { status: "busy" };
+  try {
+    const results = await dispatchEvent(database, runtime, event);
+    if (results.some((result) => !pushDispatchHandled(result))) throw new Error("ORDER_EVENT_DISPATCH_NOT_HANDLED");
+    await db.update(orderEvent).set({ status: "PROCESSED", leaseUntil: null, updatedAt: new Date() }).where(and(eq(orderEvent.id, event.id), eq(orderEvent.status, "PROCESSING")));
+    return { status: "processed" };
+  } catch (cause) {
+    await db.update(orderEvent).set({ status: "PENDING", leaseUntil: null, availableAt: new Date(now.getTime() + 60_000), updatedAt: new Date() }).where(and(eq(orderEvent.id, event.id), eq(orderEvent.status, "PROCESSING")));
+    return { status: "failed", error: cause instanceof Error ? cause.message : "ORDER_EVENT_DISPATCH_FAILED" };
+  }
+}
+
+/** Process one queued event immediately, used by the admin queue actions. */
+export async function processOrderEventById(database: D1Database, runtime: EmailRuntime, id: number, now = new Date()): Promise<ProcessOrderEventResult> {
+  if (!Number.isInteger(id) || id < 1) return { status: "not_found" };
+  const db = createDrizzleDb(database);
+  const [event] = await db.select().from(orderEvent).where(eq(orderEvent.id, id)).limit(1);
+  if (!event) return { status: "not_found" };
+  if (event.status === "PROCESSED") return { status: "already_processed" };
+  return processEvent(database, runtime, event, now);
+}
+
 export async function processOrderEvents(database: D1Database, runtime: EmailRuntime, now = new Date(), limit = 50) {
   const db = createDrizzleDb(database);
   const candidates = await db.select().from(orderEvent)
@@ -46,20 +76,9 @@ export async function processOrderEvents(database: D1Database, runtime: EmailRun
   let processed = 0;
   let failed = 0;
   for (const event of candidates) {
-    const leaseUntil = new Date(now.getTime() + EVENT_LEASE_MS);
-    const [claimed] = await db.update(orderEvent).set({ status: "PROCESSING", leaseUntil, attemptCount: event.attemptCount + 1, updatedAt: now })
-      .where(and(eq(orderEvent.id, event.id), eq(orderEvent.attemptCount, event.attemptCount), or(eq(orderEvent.status, "PENDING"), and(eq(orderEvent.status, "PROCESSING"), lte(orderEvent.leaseUntil, now)))))
-      .returning({ id: orderEvent.id });
-    if (!claimed) continue;
-    try {
-      const results = await dispatchEvent(database, runtime, event);
-      if (results.some((result) => !pushDispatchHandled(result))) throw new Error("ORDER_EVENT_DISPATCH_NOT_HANDLED");
-      await db.update(orderEvent).set({ status: "PROCESSED", leaseUntil: null, updatedAt: new Date() }).where(and(eq(orderEvent.id, event.id), eq(orderEvent.status, "PROCESSING")));
-      processed += 1;
-    } catch {
-      failed += 1;
-      await db.update(orderEvent).set({ status: "PENDING", leaseUntil: null, availableAt: new Date(now.getTime() + 60_000), updatedAt: new Date() }).where(and(eq(orderEvent.id, event.id), eq(orderEvent.status, "PROCESSING")));
-    }
+    const result = await processEvent(database, runtime, event, now);
+    if (result.status === "processed") processed += 1;
+    else if (result.status === "failed") failed += 1;
   }
   return { attempted: candidates.length, processed, failed };
 }

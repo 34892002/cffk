@@ -74,8 +74,14 @@ export async function importSupplierProduct(db: SupplierDb, input: SupplierImpor
     if (existingBinding) {
       // Re-import is the safe replacement for deleting a supplier product that
       // already has orders. Keep local IDs and history, but refresh the
-      // presentation and the complete upstream snapshot.
-      await db.update(productSku).set({ name: sku.name, price, status: "INACTIVE", updatedAt: now }).where(eq(productSku.id, existingBinding.productSkuId));
+      // presentation and the complete upstream snapshot. When the caller did
+      // not ask to publish, a SKU that is already live (and still sellable
+      // upstream) must stay live: flipping it to INACTIVE here would leave the
+      // local product ACTIVE with no purchasable SKU, so the storefront would
+      // silently drop it.
+      const [existingSku] = await db.select({ status: productSku.status }).from(productSku).where(eq(productSku.id, existingBinding.productSkuId)).limit(1);
+      const keepActive = !input.publish && existingSku?.status === "ACTIVE" && catalogProduct.active && sku.active;
+      await db.update(productSku).set({ name: sku.name, price, status: keepActive ? "ACTIVE" : "INACTIVE", updatedAt: now }).where(eq(productSku.id, existingBinding.productSkuId));
       await db.update(supplierBinding).set({ upstreamProductName: catalogProduct.name, upstreamSkuName: sku.name, purchaseContextJson: purchaseContext ? JSON.stringify(purchaseContext) : null, referenceCostMinor: sku.costMinor, maxCostMinor: priceMinor.toString(), stockQuantity: sku.stockQuantity, remoteStatus: catalogProduct.active && sku.active ? "active" : "inactive", lastSyncedAt: now, lastErrorCode: null, updatedAt: now }).where(eq(supplierBinding.id, existingBinding.id));
       imported += 1;
       continue;

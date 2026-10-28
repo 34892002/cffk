@@ -55,6 +55,7 @@ export type SiteSettingsInput = {
   logo?: string | null;
   logoIcon?: string | null;
   notice?: string | null;
+  noticePopupEnabled?: boolean;
   supportContact?: string | null;
   footerText?: string | null;
   orderNotice?: string | null;
@@ -84,6 +85,7 @@ export function validateSiteSettingsInput(input: SiteSettingsInput) {
     logo: optionalImageUrl(input.logo, "SITE_LOGO_URL"),
     logoIcon: optionalImageUrl(input.logoIcon, "SITE_FAVICON_URL"),
     notice: optionalText(input.notice, "SITE_NOTICE", 2_000),
+    noticePopupEnabled: input.noticePopupEnabled === true,
     supportContact: optionalText(input.supportContact, "SITE_SUPPORT_CONTACT", 2_000),
     footerText: optionalText(input.footerText, "SITE_FOOTER_TEXT", 1_000),
     orderNotice: optionalText(input.orderNotice, "SITE_ORDER_NOTICE", 2_000),

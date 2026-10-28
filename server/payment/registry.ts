@@ -1,6 +1,7 @@
 import { createProviderAdapter } from "./providers";
 import type { PaymentAdapter } from "./types";
 import { validateJsonFormValues, type JsonFormFieldDefinition, type JsonFormValues } from "@/lib/json-form-values";
+import type { CurrencyCode } from "@/lib/money";
 import {
   parseAlipayConfig,
   parseBepusdtConfig,
@@ -24,6 +25,9 @@ export type ProviderDefinition = {
   parseConfig: (json: string) => PaymentProviderConfig;
   getChannels: (config: PaymentProviderConfig) => PaymentChannel[];
   createAdapter: (config: Record<string, unknown>) => PaymentAdapter;
+
+  /** `config` means the provider settles in the currency configured in its own settings. */
+  supportedCurrencies: readonly CurrencyCode[] | "config";
 
   callbackResponse: "text" | "json";
 };
@@ -55,6 +59,7 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
       return config.modes.map((mode) => mode === "web" ? "web" : "face_to_face");
     },
     createAdapter: (config) => createProviderAdapter("ALIPAY", config),
+    supportedCurrencies: ["CNY"],
 
     callbackResponse: "text",
   },
@@ -74,6 +79,7 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     parseConfig: parseEpayConfig,
     getChannels: (config) => "epayChannels" in config ? config.epayChannels : [],
     createAdapter: (config) => createProviderAdapter("EPAY", config),
+    supportedCurrencies: ["CNY"],
     callbackResponse: "text",
   },
   BEPUSDT: {
@@ -85,17 +91,19 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     parseConfig: parseBepusdtConfig,
     getChannels: () => [],
     createAdapter: (config) => createProviderAdapter("BEPUSDT", config),
+    supportedCurrencies: ["CNY"],
     callbackResponse: "text",
   },
   STRIPE: {
     provider: "STRIPE",
     title: "Stripe",
     schemaVersion: 1,
-    fields: [{ key: "secretKey", label: "Secret Key", type: "password", required: true, secret: true }, { key: "webhookSecret", label: "Webhook Secret", type: "password", required: true, secret: true }, { key: "currency", label: "币种", type: "select", required: true, options: [{ label: "CNY", value: "cny" }, { label: "USD", value: "usd" }] }, common.notifyUrl, common.returnUrl],
+    fields: [{ key: "secretKey", label: "Secret Key", type: "password", required: true, secret: true }, { key: "webhookSecret", label: "Webhook Secret", type: "password", required: true, secret: true }, { key: "currency", label: "币种", type: "select", required: true, options: [{ label: "CNY", value: "cny" }, { label: "USD", value: "usd" }, { label: "TWD", value: "twd" }, { label: "JPY", value: "jpy" }, { label: "EUR", value: "eur" }, { label: "GBP", value: "gbp" }] }, common.notifyUrl, common.returnUrl],
     defaults: { schemaVersion: 1, secretKey: "", webhookSecret: "", currency: "cny", notifyUrl: "", returnUrl: "" },
     parseConfig: parseStripeConfig,
     getChannels: () => [],
     createAdapter: (config) => createProviderAdapter("STRIPE", config),
+    supportedCurrencies: "config",
     callbackResponse: "text",
   },
   HASHPAY: {
@@ -107,6 +115,7 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     parseConfig: parseHashpayConfig,
     getChannels: () => [],
     createAdapter: (config) => createProviderAdapter("HASHPAY", config),
+    supportedCurrencies: "config",
     callbackResponse: "text",
   },
   PERPAY: {
@@ -114,6 +123,7 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     fields: [{ key: "baseUrl", label: "PerPay 地址", type: "url", required: true }, { key: "apiSecret", label: "API Secret", type: "password", required: true, secret: true }, { key: "webhookSecret", label: "Webhook Secret", type: "password", required: true, secret: true }, common.notifyUrl, common.returnUrl],
     defaults: { schemaVersion: 1, baseUrl: "", apiSecret: "", webhookSecret: "", notifyUrl: "", returnUrl: "" },
     parseConfig: parsePerpayConfig, getChannels: () => [], createAdapter: (config) => createProviderAdapter("PERPAY", config), callbackResponse: "json",
+    supportedCurrencies: ["CNY"],
   },
 };
 

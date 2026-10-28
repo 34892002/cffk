@@ -4,6 +4,7 @@ import { createHmac } from "node:crypto";
 import { afterEach, test } from "bun:test";
 import { PaymentCallbackService } from "../../server/payment/callback-service";
 import { normalizePaymentCallbackPayload } from "../../server/payment/callback-payload";
+import { createProviderAdapter } from "../../server/payment/providers";
 import { createTestDatabase } from "../helpers/sqlite-d1";
 
 const config = {
@@ -144,3 +145,44 @@ test("Stripe does not acknowledge a signed payload without an event type", async
   assert.equal((await context.service.handle("STRIPE", signedInput("", session))).status, 400);
   assert.deepEqual(context.order(), { paymentStatus: "UNPAID", deliveryStatus: "NOT_DELIVERED" });
 });
+
+test("Stripe preserves zero-decimal amounts when creating and querying sessions", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody = new URLSearchParams();
+  globalThis.fetch = async (_input, init) => {
+    if (init?.method === "POST") requestBody = new URLSearchParams(String(init.body));
+    return new Response(JSON.stringify({ ...session, currency: "jpy", url: "https://checkout.stripe.example/session" }), { status: 200 });
+  };
+  try {
+    const adapter = createProviderAdapter("STRIPE", { ...config, currency: "jpy" });
+    await adapter.create({ orderNo: session.metadata.orderNo, amount: 800, subject: "Fixture", notifyUrl: config.notifyUrl, returnUrl: config.returnUrl });
+    assert.equal(requestBody.get("line_items[0][price_data][currency]"), "jpy");
+    assert.equal(requestBody.get("line_items[0][price_data][unit_amount]"), "800");
+    assert.equal(requestBody.has("payment_method_types[]"), false);
+    const queried = await adapter.query!({ orderNo: session.metadata.orderNo, paymentOrderNo: session.id, amount: 800 });
+    assert.equal(queried.verified, true);
+    assert.equal(queried.amount, 800);
+    assert.equal(queried.status, "PAID");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+for (const type of ["checkout.session.completed", "checkout.session.async_payment_succeeded"]) {
+  test(`Stripe ${type} delivers a matching zero-decimal currency order`, async () => {
+    const context = fixture();
+    context.sqlite.query("UPDATE paymentProvider SET configJson=? WHERE provider='STRIPE'").run(JSON.stringify({ ...config, currency: "jpy" }));
+    context.sqlite.query("UPDATE [order] SET currency='JPY' WHERE orderNo=?").run(session.metadata.orderNo);
+    const response = await context.service.handle("STRIPE", signedInput(type, { ...session, currency: "jpy" }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(context.order(), { paymentStatus: "PAID", deliveryStatus: "DELIVERED" });
+  });
+
+  test(`Stripe ${type} rejects a callback matching configuration but not the order currency`, async () => {
+    const context = fixture();
+    context.sqlite.query("UPDATE [order] SET currency='USD' WHERE orderNo=?").run(session.metadata.orderNo);
+    const response = await context.service.handle("STRIPE", signedInput(type, session));
+    assert.equal(response.status, 400);
+    assert.deepEqual(context.order(), { paymentStatus: "UNPAID", deliveryStatus: "NOT_DELIVERED" });
+  });
+}
