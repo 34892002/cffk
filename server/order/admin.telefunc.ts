@@ -66,7 +66,7 @@ async function internalOnGetAdminOrderDetail(input: { orderId: number }) {
 
 async function internalOnCloseAdminOrder(input: { orderId: number }) {
   const { database, db } = requireAdmin();
-  await closePendingOrder(database, input.orderId);
+  await closePendingOrder(database, input.orderId, { eventType: "MANUAL_CLOSE", message: "管理员手动关闭订单，库存与优惠券已释放" });
   const [record] = await db.select({ id: order.id, status: order.status }).from(order).where(eq(order.id, input.orderId)).limit(1);
   if (!record) appError("ORDER_NOT_FOUND");
   if (record.status !== "CLOSED") appError("ORDER_CANNOT_CLOSE");

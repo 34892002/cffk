@@ -74,18 +74,19 @@ export class PaymentFlowService {
       try {
         const outcome = await this.confirm(created.orderNo, "ZERO_AMOUNT");
         if (outcome !== "CONFIRMED" && outcome !== "ALREADY_PAID" && outcome !== "DELIVERY_PENDING") {
-          appError(outcome === "DELIVERY_FAILED" ? "SUPPLIER_PURCHASE_UNAVAILABLE" : "PAYMENT_CONFIRM_FAILED");
+          if (outcome === "DELIVERY_FAILED") appError(created.fulfillmentSource === "SUPPLIER" ? "SUPPLIER_PURCHASE_UNAVAILABLE" : "ORDER_DELIVERY_FAILED");
+          appError("PAYMENT_CONFIRM_FAILED");
         }
         return { ...created, payment: null, paymentStatus: "PAID" };
       } catch (cause) {
-        await closePendingOrder(this.database, created.id).catch((closeCause) => reportUnexpectedServerError("payment-close-zero-order-failed", closeCause, { orderId: created.id, orderNo: created.orderNo }));
+        await closePendingOrder(this.database, created.id, { eventType: "CLOSE_ON_FAILURE", message: "0 元订单确认失败，已关闭并释放库存与优惠券" }).catch((closeCause) => reportUnexpectedServerError("payment-close-zero-order-failed", closeCause, { orderId: created.id, orderNo: created.orderNo }));
         throw cause;
       }
     }
     const repository = paymentRepository(this.database);
     const attemptId = await repository.createAttempt({ orderId: created.id, provider: provider.provider, channel });
     if (attemptId === null) {
-      await closePendingOrder(this.database, created.id).catch((cause) => reportUnexpectedServerError("payment-attempt-create-close-failed", cause, { orderId: created.id, orderNo: created.orderNo }));
+      await closePendingOrder(this.database, created.id, { eventType: "CLOSE_ON_FAILURE", message: "支付尝试创建失败，订单已关闭并释放库存" }).catch((cause) => reportUnexpectedServerError("payment-attempt-create-close-failed", cause, { orderId: created.id, orderNo: created.orderNo }));
       appError("PAYMENT_CREATE_FAILED");
     }
     try {
@@ -101,7 +102,7 @@ export class PaymentFlowService {
       reportUnexpectedServerError("payment-create", cause, { orderId: created.id, orderNo: created.orderNo, provider: provider.provider });
       await repository.failAttempt(attemptId).catch(() => undefined);
       await logs.writeBestEffort({ orderId: created.id, provider: provider.provider, orderNo: created.orderNo, eventType: "CREATE_FAILED", verifyStatus: "FAILED", message: safePaymentCreateError(cause), payload: { error: safePaymentCreateError(cause) } });
-      await closePendingOrder(this.database, created.id).catch((closeCause) => reportUnexpectedServerError("payment-close-failed-order", closeCause, { orderId: created.id, orderNo: created.orderNo }));
+      await closePendingOrder(this.database, created.id, { eventType: "CLOSE_ON_FAILURE", message: "支付请求创建失败，订单已关闭并释放库存" }).catch((closeCause) => reportUnexpectedServerError("payment-close-failed-order", closeCause, { orderId: created.id, orderNo: created.orderNo }));
       appError("PAYMENT_CREATE_FAILED");
     }
   }

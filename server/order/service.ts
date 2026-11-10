@@ -54,6 +54,7 @@ export type CreatedOrder = {
   discountAmount: number | null;
   discountCode: string | null;
   paymentStatus: "UNPAID" | "PAID";
+  fulfillmentSource: "LOCAL" | "SUPPLIER";
 };
 
 function fail(code: string): never {
@@ -205,7 +206,7 @@ export async function createOrder(database: D1Database, input: CreateOrderInput,
   }
   const [created] = await db.select({ id: order.id }).from(order).where(eq(order.orderNo, orderNo)).limit(1);
   if (!created) fail("ORDER_CREATE_FAILED");
-  return { id: created.id, orderNo, amount, currency, exchangeRate, baseAmount, originalAmount: discountId === null ? null : chargeOriginalAmount, discountAmount: discountId === null ? null : chargeDiscountAmount, discountCode: discountCodeValue, paymentStatus: "UNPAID" };
+  return { id: created.id, orderNo, amount, currency, exchangeRate, baseAmount, originalAmount: discountId === null ? null : chargeOriginalAmount, discountAmount: discountId === null ? null : chargeDiscountAmount, discountCode: discountCodeValue, paymentStatus: "UNPAID", fulfillmentSource: sku.fulfillmentSource };
 }
 
 export type PaymentConfirmationResult = {
@@ -442,7 +443,9 @@ export async function closeExpiredPendingOrders(database: D1Database, cutoff: Da
   return { scanned: records.length, closed };
 }
 
-export async function closePendingOrder(database: D1Database, orderId: number): Promise<{ closed: boolean }> {
+export type OrderCloseReason = { eventType?: string; message?: string };
+
+export async function closePendingOrder(database: D1Database, orderId: number, reason: OrderCloseReason = {}): Promise<{ closed: boolean }> {
   const db = createDrizzleDb(database);
   const [record] = await db.select({ orderNo: order.orderNo, productId: order.productId, productSkuId: order.productSkuId, quantity: order.quantity, paymentProvider: order.paymentProvider, discountCodeId: order.discountCodeId, physicalStockReserved: order.physicalStockReserved }).from(order).where(eq(order.id, orderId)).limit(1);
   if (!record) fail("ORDER_NOT_FOUND");
@@ -461,6 +464,6 @@ export async function closePendingOrder(database: D1Database, orderId: number): 
   } catch {
     return { closed: false };
   }
-  await new PaymentLogService(database).writeBestEffort({ orderId, provider: record.paymentProvider as PaymentProviderKind, orderNo: record.orderNo, eventType: "AUTO_CLOSE", verifyStatus: "PENDING", message: "订单超时未支付，已自动关闭（30分钟）", payload: {} });
+  await new PaymentLogService(database).writeBestEffort({ orderId, provider: record.paymentProvider as PaymentProviderKind, orderNo: record.orderNo, eventType: reason.eventType ?? "AUTO_CLOSE", verifyStatus: "PENDING", message: reason.message ?? "订单超时未支付，已自动关闭（30分钟）", payload: {} });
   return { closed: true };
 }
