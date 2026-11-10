@@ -4,7 +4,7 @@
       <template #actions>
         <div class="ml-auto flex items-center gap-2">
           <Button variant="outline" :disabled="loading" @click="loadAll"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
-          <Button @click="configOpen = true">存储配置</Button>
+          <Button @click="openConfig">存储配置</Button>
         </div>
       </template>
     </AdminPageHeader>
@@ -153,10 +153,14 @@ const data = reactive<Awaited<ReturnType<typeof onGetMedia>>>({ items: [], total
 const config = reactive<Awaited<ReturnType<typeof onGetMediaConfig>>>({ configured: false, values: null, credentialStatus: { accessKeyConfigured: false, secretKeyConfigured: false }, updatedAt: null });
 const loading = ref(false), configOpen = ref(false), uploading = ref(false), saving = ref(false), deleting = ref(false), progress = ref(0), completedCount = ref(0), batchTotal = ref(0), currentUploadId = ref(""), queue = ref<UploadItem[]>([]), fileInput = ref<HTMLInputElement | null>(null), draftKeyword = ref(""), draftMimeType = ref("all"), keyword = ref(""), mimeType = ref("all"), preview = ref<Row | null>(null), toDelete = ref<Row | null>(null), dragging = ref(false), webpSupported = ref(false), webpEnabled = ref(false);
 const canUpload = computed(() => config.configured && config.credentialStatus.accessKeyConfigured && config.credentialStatus.secretKeyConfigured);
+const configLoaded = ref(false);
 const pendingCount = computed(() => queue.value.filter((item) => item.status !== "success").length);
 const timezone = useSiteTimezone();
-const { handleSubmit, resetForm, values } = useForm({ validationSchema: toTypedSchema(z.object({ endpoint: z.string().url(), bucket: z.string().min(1), accessKeyId: z.string().optional(), secretAccessKey: z.string().optional(), region: z.string().min(1), pathPrefix: z.string().min(1), cacheControl: z.string().min(1), forcePathStyle: z.boolean() })), initialValues: { endpoint: "", bucket: "", accessKeyId: "", secretAccessKey: "", region: "auto", pathPrefix: "media", cacheControl: "public, max-age=31536000, s-maxage=31536000, immutable", forcePathStyle: false } });
-async function loadAll() { loading.value = true; try { const [c, list] = await Promise.all([runTelefunc(() => onGetMediaConfig(), { notifyError: false }), runTelefunc(() => onGetMedia({ keyword: keyword.value || undefined, mimeType: mimeType.value === "all" ? undefined : mimeType.value as "image/" | "application/pdf", page: data.page, pageSize: data.pageSize }), { notifyError: false })]); Object.assign(config, c); Object.assign(data, list); if (c.values) resetForm({ values: { ...c.values, accessKeyId: "", secretAccessKey: "" } }); } catch { /* runTelefunc 已显示脱敏错误。 */ } finally { loading.value = false; } }
+const configDefaults = { endpoint: "", bucket: "", accessKeyId: "", secretAccessKey: "", region: "auto", pathPrefix: "media", cacheControl: "public, max-age=31536000, s-maxage=31536000, immutable", forcePathStyle: false };
+const { handleSubmit, resetForm, values } = useForm({ validationSchema: toTypedSchema(z.object({ endpoint: z.string().url(), bucket: z.string().min(1), accessKeyId: z.string().optional(), secretAccessKey: z.string().optional(), region: z.string().min(1), pathPrefix: z.string().min(1), cacheControl: z.string().min(1), forcePathStyle: z.boolean() })), initialValues: { ...configDefaults }, keepValuesOnUnmount: true });
+async function loadAll() { loading.value = true; try { const [c, list] = await Promise.all([runTelefunc(() => onGetMediaConfig(), { notifyError: false }), runTelefunc(() => onGetMedia({ keyword: keyword.value || undefined, mimeType: mimeType.value === "all" ? undefined : mimeType.value as "image/" | "application/pdf", page: data.page, pageSize: data.pageSize }), { notifyError: false })]); Object.assign(config, c); Object.assign(data, list); configLoaded.value = true; } catch { /* runTelefunc 已显示脱敏错误。 */ } finally { loading.value = false; } }
+function syncConfigForm() { resetForm({ values: config.values ? { ...config.values, accessKeyId: "", secretAccessKey: "" } : { ...configDefaults } }); }
+async function openConfig() { if (!configLoaded.value) await loadAll(); if (!configLoaded.value) toast.error("存储配置读取失败，请刷新页面后重试。"); syncConfigForm(); configOpen.value = true; }
 function search() { keyword.value = draftKeyword.value; mimeType.value = draftMimeType.value; data.page = 1; void loadAll(); }
 function resetFilters() { draftKeyword.value = ""; draftMimeType.value = "all"; search(); }
 function goPage(page: number) { data.page = page; void loadAll(); }
