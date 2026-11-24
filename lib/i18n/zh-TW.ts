@@ -70,7 +70,7 @@ export default {
       title: "找回密碼",
       description: "輸入註冊電子郵件，我們會傳送密碼重設連結。",
       email: "電子郵件",
-      privacyNotice: "無論電子郵件是否已註冊，頁面都會顯示相同結果。",
+      emailHint: "請填寫註冊時使用的電子郵件；重設連結 1 小時內有效，若未收到請檢查垃圾郵件資料夾。",
       sending: "傳送中...",
       sendResetLink: "傳送重設連結",
       backToLogin: "返回登入",

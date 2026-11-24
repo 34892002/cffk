@@ -68,7 +68,7 @@ const messages = {
       title: "找回密码",
       description: "输入注册邮箱，我们会发送密码重置链接。",
       email: "邮箱",
-      privacyNotice: "无论邮箱是否已注册，页面都会显示相同结果。",
+      emailHint: "请填写注册时使用的邮箱；重置链接 1 小时内有效，若未收到请检查垃圾邮件文件夹。",
       sending: "发送中...",
       sendResetLink: "发送重置链接",
       backToLogin: "返回登录",

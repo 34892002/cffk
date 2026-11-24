@@ -12,7 +12,7 @@
             <Field :data-invalid="errors.length > 0">
               <FieldLabel for="forgot-password-email">{{ messages.auth.forgotPassword.email }}</FieldLabel>
               <Input id="forgot-password-email" v-bind="componentField" type="email" autocomplete="email" :aria-invalid="errors.length > 0" />
-              <FieldDescription>{{ messages.auth.forgotPassword.privacyNotice }}</FieldDescription>
+              <FieldDescription>{{ messages.auth.forgotPassword.emailHint }}</FieldDescription>
               <FieldError v-if="errors.length" :errors="errors" />
             </Field>
           </VeeField>
