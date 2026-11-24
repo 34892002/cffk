@@ -36,9 +36,9 @@ export function normalizeMediaListQuery(input: MediaListQuery = {}) {
 function detectedMime(bytes: Uint8Array) {
   const text = (n: number) => new TextDecoder().decode(bytes.slice(0, n));
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (text(8) === "\x89PNG\r\n\x1a\n") return "image/png";
+  if ([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, index) => bytes[index] === byte)) return "image/png";
   if (text(6) === "GIF87a" || text(6) === "GIF89a") return "image/gif";
-  if (text(4) === "RIFF" && text(12).slice(8) === "WEBP") return "image/webp";
+  if (text(4) === "RIFF" && [0x57, 0x45, 0x42, 0x50].every((byte, index) => bytes[index + 8] === byte)) return "image/webp";
   if (text(5) === "%PDF-") return "application/pdf";
   return null;
 }
@@ -155,7 +155,7 @@ export async function validateMediaFile(file: File) {
   if (!file.size) appError("MEDIA_FILE_SIZE_INVALID");
   const bytes = new Uint8Array(await file.arrayBuffer());
   const mime = detectedMime(bytes);
-  if (!mime || !MIME_EXTENSIONS[mime] || file.type !== mime || bytes.byteLength > maxFor(mime)) appError("MEDIA_TYPE_NOT_ALLOWED");
+  if (!mime || !MIME_EXTENSIONS[mime] || bytes.byteLength > maxFor(mime)) appError("MEDIA_TYPE_NOT_ALLOWED");
   return { name, bytes, mime };
 }
 
