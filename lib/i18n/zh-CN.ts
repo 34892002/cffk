@@ -57,6 +57,11 @@ const messages = {
       invalidCredentials: "邮箱或密码不正确。",
       requestFailed: "接口异常，请稍后重试。",
       captchaLoadFailed: "人机验证加载失败，请刷新页面后重试。",
+      captchaFailed: "人机验证未通过，请刷新页面后重试。",
+      tooManyRequests: "尝试过于频繁，请稍后再试。",
+      invalidOrigin: "登录来源校验失败，请通过本站正式域名访问后重试。",
+      emailNotVerified: "邮箱尚未验证，请先完成邮箱验证。",
+      accountDisabled: "该账号已被停用。",
       homeAriaLabel: "返回首页",
     },
     forgotPassword: {

@@ -59,6 +59,11 @@ export default {
       invalidCredentials: "電子郵件或密碼不正確。",
       requestFailed: "系統異常，請稍後再試。",
       captchaLoadFailed: "人機驗證載入失敗，請重新整理頁面後再試。",
+      captchaFailed: "人機驗證未通過，請重新整理頁面後再試。",
+      tooManyRequests: "嘗試過於頻繁，請稍後再試。",
+      invalidOrigin: "登入來源驗證失敗，請透過本站正式網域存取後再試。",
+      emailNotVerified: "電子郵件尚未驗證，請先完成驗證。",
+      accountDisabled: "此帳號已停用。",
       homeAriaLabel: "返回首頁",
     },
     forgotPassword: {

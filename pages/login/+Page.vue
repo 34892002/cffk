@@ -58,6 +58,7 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import StorefrontPreferences from "@/components/storefront/StorefrontPreferences.vue";
 import { authClient } from "@/lib/auth-client";
+import { classifyAuthError, type AuthErrorKind } from "@/lib/auth-error-messages";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import logoUrl from "@/assets/logo.svg?url";
 
@@ -72,6 +73,15 @@ const turnstileSiteKey = ref<string | null>(null);
 const turnstileToken = ref("");
 const turnstileWidgetId = ref<string | null>(null);
 const formError = ref<string | null>(null);
+const loginErrorMessages = computed<Record<AuthErrorKind, string>>(() => ({
+  captcha: messages.value.auth.login.captchaFailed,
+  rateLimited: messages.value.auth.login.tooManyRequests,
+  origin: messages.value.auth.login.invalidOrigin,
+  emailNotVerified: messages.value.auth.login.emailNotVerified,
+  accountDisabled: messages.value.auth.login.accountDisabled,
+  credentials: messages.value.auth.login.invalidCredentials,
+  unknown: messages.value.auth.login.requestFailed,
+}));
 
 declare global { interface Window { turnstile?: { render: (element: HTMLElement, options: { sitekey: string; callback: (token: string) => void; "expired-callback": () => void }) => string; reset: (widgetId?: string) => void; }; } }
 
@@ -110,7 +120,7 @@ const submit = handleSubmit(async (input) => {
     const result = await authClient.signIn.email({ ...input, ...(turnstileToken.value ? { fetchOptions: { headers: { "x-captcha-response": turnstileToken.value } } } : {}) });
     if (result.error) {
       resetTurnstile();
-      formError.value = messages.value.auth.login.invalidCredentials;
+      formError.value = loginErrorMessages.value[classifyAuthError(result.error)];
       return;
     }
     if ((result.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect) return;

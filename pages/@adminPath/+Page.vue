@@ -36,6 +36,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { classifyAuthError, type AuthErrorKind } from "@/lib/auth-error-messages";
 import { navigate } from "vike/client/router";
 import { nextTick, onMounted, ref } from "vue";
 import { usePageContext } from "vike-vue/usePageContext";
@@ -47,6 +48,15 @@ const error = ref(pageContext.urlParsed.search.error === "ADMIN_ACCESS_REQUIRED"
   ? "该账号已登录，但没有后台管理员权限。"
   : null);
 const submitting = ref(false);
+const loginErrorMessages: Record<AuthErrorKind, string> = {
+  captcha: "人机验证未通过，请刷新页面后重试；若持续失败，请检查 Turnstile 的 Site Key 与 Secret Key 是否配对。",
+  rateLimited: "尝试过于频繁，请稍后再试。",
+  origin: "登录来源校验失败，请通过本站正式域名访问后重试。",
+  emailNotVerified: "管理员邮箱尚未验证，无法登录。",
+  accountDisabled: "该账号已被停用。",
+  credentials: "管理员邮箱或密码不正确。",
+  unknown: "登录失败，请稍后重试。",
+};
 const turnstileElement = ref<HTMLElement | null>(null);
 const turnstileSiteKey = ref<string | null>(null);
 const turnstileToken = ref("");
@@ -88,7 +98,7 @@ async function onSubmit() {
     });
     if (res.error) {
       resetTurnstile();
-      error.value = "管理员邮箱或密码不正确。";
+      error.value = loginErrorMessages[classifyAuthError(res.error)];
       return;
     }
     if ((res.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect) return;
