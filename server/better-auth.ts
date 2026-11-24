@@ -10,6 +10,7 @@ import { captcha, twoFactor } from "better-auth/plugins";
 import { getDrizzleDb } from "../database/drizzle";
 import { schema } from "../database/drizzle/schema";
 import { dispatchPush } from "./push/service";
+import { allowPasswordResetRequest } from "./auth/reset-rate-limit";
 import { getSiteSettings } from "./site/public-settings";
 
 const APP_NAME = "CFFK 发卡";
@@ -99,6 +100,16 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, o
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         const database = runtimeEnv?.DB;
+        if (ctx.request?.method === "POST" && ctx.path === "/request-password-reset") {
+          const email = typeof ctx.body?.email === "string" ? ctx.body.email.trim().toLowerCase() : "";
+          if (email && database && !(await allowPasswordResetRequest(database, email))) {
+            // 429 is safe against account enumeration here: the counter is keyed
+            // on the submitted address and increments whether or not it exists.
+            return Response.json({ code: "PASSWORD_RESET_RATE_LIMITED", message: "Too many password reset requests" }, { status: 429 });
+          }
+          return;
+        }
+
         if (ctx.path === "/change-email") {
           if (!database) throw new APIError("INTERNAL_SERVER_ERROR", { message: "Email change settings are unavailable." });
 
@@ -135,7 +146,7 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, o
     appName: APP_NAME,
     plugins: [
       twoFactor({ issuer: "CFFK 发卡" }),
-      ...(turnstile.enabled ? [captcha({ provider: "cloudflare-turnstile", secretKey: turnstile.secretKey!, endpoints: ["/sign-in/email"] })] : []),
+      ...(turnstile.enabled ? [captcha({ provider: "cloudflare-turnstile", secretKey: turnstile.secretKey!, endpoints: ["/sign-in/email", "/request-password-reset"] })] : []),
     ],
   };
 }

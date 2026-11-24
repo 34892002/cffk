@@ -74,6 +74,10 @@ const messages = {
       backToLogin: "返回登录",
       emailInvalid: "请输入有效邮箱。",
       emailTooLong: "邮箱地址过长。",
+      rateLimited: "请求过于频繁，请稍后再试。",
+      captchaRequired: "请先完成人机验证。",
+      captchaFailed: "人机验证未通过，请刷新页面后重试。",
+      captchaLoadFailed: "人机验证加载失败，请刷新页面后重试。",
       success: "如果该邮箱已注册，重置链接将发送到该邮箱。",
     },
     resetPassword: {

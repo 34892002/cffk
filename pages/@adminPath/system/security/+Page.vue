@@ -69,13 +69,16 @@
         </section>
 
         <section v-else aria-labelledby="turnstile-title" class="grid gap-6">
-          <div><h2 id="turnstile-title" class="text-xl font-semibold tracking-normal">Cloudflare Turnstile</h2><p class="mt-1 text-sm text-muted-foreground">为后台邮箱密码登录增加人机验证，降低自动化撞库与爆破风险。</p></div>
-          <Alert :class="status.turnstile.enabled ? undefined : 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400'"><ShieldCheckIcon v-if="status.turnstile.enabled" class="size-4" /><ShieldAlertIcon v-else class="size-4" /><AlertTitle>{{ status.turnstile.enabled ? "Turnstile 已启用" : "Turnstile 未完整配置" }}</AlertTitle><AlertDescription :class="status.turnstile.enabled ? undefined : 'text-orange-600 dark:text-orange-400'">{{ status.turnstile.enabled ? "后台登录会强制校验 Turnstile 令牌。" : "须同时配置站点 Key 和 Secret Key 才会启用。" }}</AlertDescription></Alert>
+          <div><h2 id="turnstile-title" class="text-xl font-semibold tracking-normal">Cloudflare Turnstile</h2><p class="mt-1 text-sm text-muted-foreground">为登录与找回密码增加人机验证，降低自动化撞库、爆破与邮件轰炸风险。</p></div>
+          <Alert :class="status.turnstile.enabled ? undefined : 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400'"><ShieldCheckIcon v-if="status.turnstile.enabled" class="size-4" /><ShieldAlertIcon v-else class="size-4" /><AlertTitle>{{ status.turnstile.enabled ? "Turnstile 已启用" : "Turnstile 未完整配置" }}</AlertTitle><AlertDescription :class="status.turnstile.enabled ? undefined : 'text-orange-600 dark:text-orange-400'">{{ status.turnstile.enabled ? "登录与找回密码会强制校验 Turnstile 令牌。" : "须同时配置「站点密钥」和「密钥」才会启用。" }}</AlertDescription></Alert>
           <div class="rounded-md border bg-muted/30 p-4 text-sm leading-6">
-            <p>在 Cloudflare Dashboard 创建 Turnstile 站点后，将以下变量配置到 Worker：</p>
-            <pre class="mt-3 overflow-x-auto rounded bg-background p-3 font-mono text-xs">TURNSTILE_SITE_KEY=前端站点 Key
-TURNSTILE_SECRET_KEY=服务端 Secret Key</pre>
-            <p class="mt-3 text-muted-foreground">Secret Key 只存放在 Worker Secret 中，页面不会返回其原文。</p>
+            <p>获取位置：Cloudflare Dashboard → <span class="font-medium">Turnstile</span> → 选择站点 → <span class="font-medium">Widget 密钥</span>。</p>
+            <ul class="mt-3 grid gap-2">
+              <li><span class="font-medium">站点密钥</span><span class="text-muted-foreground">（Sitekey）</span> → <span class="rounded bg-background px-1.5 py-0.5 font-mono text-xs">TURNSTILE_SITE_KEY</span></li>
+              <li><span class="font-medium">密钥</span><span class="text-muted-foreground">（Secret key，点「显示」复制）</span> → <span class="rounded bg-background px-1.5 py-0.5 font-mono text-xs">TURNSTILE_SECRET_KEY</span></li>
+            </ul>
+            <p class="mt-3 text-muted-foreground">「密钥」只存放在 Worker Secret 中，页面不会返回其原文。</p>
+            <p class="mt-2 text-muted-foreground">两项必须来自同一个 Widget。此页面只能检测变量是否已配置，无法校验两者是否配对；若出现“人机验证未通过”，请重新核对。</p>
           </div>
         </section>
       </div>

@@ -12,6 +12,7 @@ describe("classifyAuthError", () => {
   test("recognises rate limiting by code and status", () => {
     expect(classifyAuthError({ status: 429, code: "TOO_MANY_REQUESTS" })).toBe("rateLimited");
     expect(classifyAuthError({ status: 429 })).toBe("rateLimited");
+    expect(classifyAuthError({ status: 429, code: "PASSWORD_RESET_RATE_LIMITED" })).toBe("rateLimited");
   });
 
   test("recognises origin and account state failures", () => {

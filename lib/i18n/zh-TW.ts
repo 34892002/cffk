@@ -76,6 +76,10 @@ export default {
       backToLogin: "返回登入",
       emailInvalid: "請輸入有效電子郵件。",
       emailTooLong: "電子郵件地址過長。",
+      rateLimited: "請求過於頻繁，請稍後再試。",
+      captchaRequired: "請先完成人機驗證。",
+      captchaFailed: "人機驗證未通過，請重新整理頁面後再試。",
+      captchaLoadFailed: "人機驗證載入失敗，請重新整理頁面後再試。",
       success: "如果該電子郵件已註冊，重設連結將傳送至該信箱。",
     },
     resetPassword: {

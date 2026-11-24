@@ -6,8 +6,8 @@ ADMIN_PATH=
 # Better Auth 会话签名密钥；请用 openssl rand -base64 32 生成随机值。/ Better Auth session signing secret; generate one with openssl rand -base64 32.
 BETTER_AUTH_SECRET=
 
-# TURNSTILE_SECRET_KEY
-# 前端站点 Key
+# Cloudflare Turnstile（可选）：Dashboard → Turnstile → 选择站点 → Widget 密钥。
+# 站点密钥（Sitekey），公开变量，供前端渲染 Widget。
 # TURNSTILE_SITE_KEY=
-# 服务端 Secret Key
+# 密钥（Secret key），只作为 Worker Secret，供服务端校验。
 # TURNSTILE_SECRET_KEY=

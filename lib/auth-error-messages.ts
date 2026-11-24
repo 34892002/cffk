@@ -16,7 +16,7 @@ export function classifyAuthError(error: unknown): AuthErrorKind {
   const code = typeof record.code === "string" ? record.code.trim().toUpperCase() : "";
   const status = typeof record.status === "number" ? record.status : null;
   if (captchaCodes.has(code)) return "captcha";
-  if (code === "TOO_MANY_REQUESTS" || status === 429) return "rateLimited";
+  if (code === "TOO_MANY_REQUESTS" || code === "PASSWORD_RESET_RATE_LIMITED" || status === 429) return "rateLimited";
   if (originCodes.has(code)) return "origin";
   if (code === "EMAIL_NOT_VERIFIED") return "emailNotVerified";
   if (code === "ACCOUNT_DISABLED") return "accountDisabled";
