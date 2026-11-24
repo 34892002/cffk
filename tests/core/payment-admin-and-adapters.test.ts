@@ -437,6 +437,23 @@ test("provider creates reject successful responses without third-party order IDs
   }
 });
 
+test("Stripe create and query handle non-JSON edge errors without JSON syntax failures", async () => {
+  const originalFetch = globalThis.fetch;
+  const config = { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" };
+  try {
+    const adapter = createProviderAdapter("STRIPE", config);
+    globalThis.fetch = async () => new Response("error code: 525 ", { status: 525, headers: { "content-type": "text/plain" } });
+    await assert.rejects(() => adapter.create({ orderNo: "ORD-525", amount: 100, subject: "Order", notifyUrl: config.notifyUrl, returnUrl: config.returnUrl }), (cause: Error) => cause.message === "STRIPE_CREATE_HTTP_525");
+
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: "api_key_expired" } }), { status: 401, headers: { "content-type": "application/json" } });
+    await assert.rejects(() => adapter.create({ orderNo: "ORD-401", amount: 100, subject: "Order", notifyUrl: config.notifyUrl, returnUrl: config.returnUrl }), (cause: Error) => cause.message === "STRIPE_CREATE_HTTP_401_API_KEY_EXPIRED");
+
+    globalThis.fetch = async () => new Response("error code: 525 ", { status: 525, headers: { "content-type": "text/plain" } });
+    const queried = await adapter.query!({ orderNo: "ORD-525", paymentOrderNo: "cs_1", amount: 100 });
+    assert.deepEqual(queried, { provider: "STRIPE", verified: false, orderNo: "ORD-525", paymentOrderNo: "cs_1", status: "PENDING", message: "STRIPE_QUERY_FAILED" });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test("Stripe completed callbacks require a paid Checkout Session", async () => {
   const adapter = createProviderAdapter("STRIPE", { schemaVersion: 1, secretKey: "sk_test", webhookSecret: "whsec_test", currency: "usd", notifyUrl: "https://shop.example/api/payments/stripe/notify", returnUrl: "https://shop.example/result" });
   const rawBody = JSON.stringify({ type: "checkout.session.completed", data: { object: { id: "cs_1", metadata: { orderNo: "ORD-3" }, amount_total: 1234, currency: "usd", payment_status: "unpaid" } } });

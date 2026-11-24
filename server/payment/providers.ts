@@ -10,6 +10,18 @@ function md5(value: string) { return createHash("md5").update(value).digest("hex
 function sign(values: Record<string, string>, key: string) { return md5(Object.entries(values).filter(([, value]) => value !== "").sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `${name}=${value}`).join("&") + key); }
 function amount(value: string | undefined) { const parsed = Number(value); return Number.isFinite(parsed) ? Math.round(parsed * 100) : undefined; }
 function stripeMinorUnit(value: number) { return value; }
+// Stripe (and the Cloudflare edge in front of it) may answer with a plain-text error
+// page such as "error code: 525", which must not surface as a JSON SyntaxError.
+async function readStripeObject(response: Response) {
+  try {
+    const value = JSON.parse(await response.text()) as unknown;
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  } catch { return null; }
+}
+function stripeErrorDetail(body: Record<string, unknown> | null) {
+  const code = (body?.error as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(code) ? `_${code.toUpperCase()}` : "";
+}
 function base64Bytes(value: string) { return Uint8Array.from(atob(value), (character) => character.charCodeAt(0)); }
 function base64(value: ArrayBuffer) { return btoa(String.fromCharCode(...new Uint8Array(value))); }
 function timingSafeStringEqual(left: string, right: string) {
@@ -82,7 +94,7 @@ export function createProviderAdapter(provider: PaymentProviderKind, config: Rec
   if (provider === "STRIPE") {
     const parsed = parseStripeConfig(json);
     return {
-      create: async (input) => { const response = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { Authorization: `Bearer ${parsed.secretKey}`, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "line_items[0][price_data][currency]": parsed.currency, "line_items[0][price_data][product_data][name]": input.subject, "line_items[0][price_data][unit_amount]": String(input.amount), "line_items[0][quantity]": "1", mode: "payment", success_url: input.returnUrl, cancel_url: input.returnUrl, "metadata[orderNo]": input.orderNo, "payment_intent_data[metadata][orderNo]": input.orderNo }).toString() }); const body = await response.json() as { id?: string; url?: string }; if (!response.ok || !body.url || !body.id) throw new Error("STRIPE_CREATE_FAILED"); return { mode: "redirect", url: body.url, paymentOrderNo: body.id }; },
+      create: async (input) => { const response = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { Authorization: `Bearer ${parsed.secretKey}`, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "line_items[0][price_data][currency]": parsed.currency, "line_items[0][price_data][product_data][name]": input.subject, "line_items[0][price_data][unit_amount]": String(input.amount), "line_items[0][quantity]": "1", mode: "payment", success_url: input.returnUrl, cancel_url: input.returnUrl, "metadata[orderNo]": input.orderNo, "payment_intent_data[metadata][orderNo]": input.orderNo }).toString() }); const body = await readStripeObject(response); if (!response.ok) throw new Error(`STRIPE_CREATE_HTTP_${response.status}${stripeErrorDetail(body)}`); const url = body?.url; const id = body?.id; if (typeof url !== "string" || !url || typeof id !== "string" || !id) throw new Error("STRIPE_CREATE_FAILED"); return { mode: "redirect", url, paymentOrderNo: id }; },
       verify: async ({ rawBody = "", headers }) => {
         let event: { type?: string; data?: { object?: { id?: string; metadata?: { orderNo?: string }; amount_total?: number; currency?: string; payment_status?: string } } };
         try { event = JSON.parse(rawBody); } catch { return result(provider, { verified: false, status: "FAILED", message: "STRIPE_INVALID_JSON" }); }
@@ -109,9 +121,10 @@ export function createProviderAdapter(provider: PaymentProviderKind, config: Rec
       query: async ({ orderNo, paymentOrderNo }) => {
         if (!paymentOrderNo) return result(provider, { verified: false, orderNo, status: "PENDING", message: "STRIPE_ORDER_ID_MISSING" });
         const response = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(paymentOrderNo)}`, { headers: { Authorization: `Bearer ${parsed.secretKey}` } });
-        const body = await response.json() as { id?: string; metadata?: { orderNo?: string }; amount_total?: number; currency?: string; payment_status?: string };
-        if (!response.ok || body.metadata?.orderNo !== orderNo) return result(provider, { verified: false, orderNo, paymentOrderNo, status: "PENDING", message: "STRIPE_QUERY_FAILED" });
-        return result(provider, { verified: true, orderNo, paymentOrderNo: body.id, amount: body.amount_total === undefined ? undefined : stripeMinorUnit(body.amount_total), currency: body.currency, status: body.payment_status === "paid" ? "PAID" : "PENDING", message: "STRIPE_QUERY" });
+        const body = await readStripeObject(response);
+        const metadata = body?.metadata as { orderNo?: unknown } | undefined;
+        if (!response.ok || metadata?.orderNo !== orderNo) return result(provider, { verified: false, orderNo, paymentOrderNo, status: "PENDING", message: "STRIPE_QUERY_FAILED" });
+        return result(provider, { verified: true, orderNo, paymentOrderNo: typeof body?.id === "string" ? body.id : undefined, amount: typeof body?.amount_total === "number" ? stripeMinorUnit(body.amount_total) : undefined, currency: typeof body?.currency === "string" ? body.currency : undefined, status: body?.payment_status === "paid" ? "PAID" : "PENDING", message: "STRIPE_QUERY" });
       },
     };
   }
