@@ -3,17 +3,23 @@
     <AdminPageHeader />
 
 
-    <AdminDataTable :columns="columns" :rows="orders" row-key="id" empty-text="没有符合条件的订单。">
+    <AdminDataTable :columns="columns" :rows="orders" row-key="id" empty-text="没有符合条件的订单。" selectable :selected-keys="selectedIds" :row-selectable="selectableOrder" @update:selected-keys="selectedIds = $event">
       <template #toolbar>
         <div class="flex flex-wrap items-center gap-2">
           <Input v-model="filters.query" class="h-8 w-56" placeholder="按订单号搜索" @keyup.enter="resetAndLoad" />
-          <Select :model-value="filters.status || 'ALL'" @update:model-value="filters.status = $event === 'ALL' ? '' : $event as Order['status']"><SelectTrigger size="sm" class="w-36 shrink-0"><SelectValue placeholder="全部订单状态" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部订单状态</SelectItem><SelectItem value="PENDING">待支付</SelectItem><SelectItem value="PAID">已支付</SelectItem><SelectItem value="DELIVERED">已发货</SelectItem><SelectItem value="CLOSED">已关闭</SelectItem><SelectItem value="FAILED">失败</SelectItem></SelectContent></Select>
+          <Select :model-value="filters.status || 'ALL'" @update:model-value="filters.status = $event === 'ALL' ? '' : $event as Order['status']"><SelectTrigger size="sm" class="w-36 shrink-0"><SelectValue placeholder="全部订单状态" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部订单状态</SelectItem><SelectItem value="PENDING">待支付</SelectItem><SelectItem value="PAID">已支付</SelectItem><SelectItem value="DELIVERED">已完成</SelectItem><SelectItem value="CLOSED">已关闭</SelectItem><SelectItem value="FAILED">发货失败</SelectItem></SelectContent></Select>
           <Select :model-value="filters.deliveryStatus || 'ALL'" @update:model-value="filters.deliveryStatus = $event === 'ALL' ? '' : $event as Order['deliveryStatus']"><SelectTrigger size="sm" class="w-36 shrink-0"><SelectValue placeholder="全部发货状态" /></SelectTrigger><SelectContent><SelectItem value="ALL">全部发货状态</SelectItem><SelectItem value="NOT_DELIVERED">未发货</SelectItem><SelectItem value="DELIVERING">发货中</SelectItem><SelectItem value="DELIVERED">已发货</SelectItem><SelectItem value="FAILED">发货失败</SelectItem></SelectContent></Select>
           <div class="w-64 shrink-0"><DateRangePicker v-model="dateRange" /></div>
           <Button size="sm" @click="resetAndLoad">查询</Button>
           <Button variant="outline" size="sm" @click="resetFilters">重置</Button>
         </div>
-        <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadOrders"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <span v-if="selectedIds.length" class="text-sm text-muted-foreground">已选 {{ selectedIds.length }} 条</span>
+          <Button variant="outline" size="sm" class="border-destructive/30 text-destructive hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive" :disabled="loading" @click="requestBulkDelete"><Trash2Icon />批量删除</Button>
+          <Button v-if="appliedFilters.status === 'CLOSED' && total > 0" variant="outline" size="sm" class="border-destructive/30 text-destructive hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive" :disabled="loading" @click="openActionDialog('DELETE_FILTERED')"><Trash2Icon />删除全部已关闭 ({{ total }})</Button>
+          <Button v-if="appliedFilters.status === 'PENDING' && total > 0" variant="outline" size="sm" class="border-orange-500/30 text-orange-600 hover:border-orange-500/50 hover:bg-orange-500/10 hover:text-orange-600 dark:text-orange-400" :disabled="loading" @click="openActionDialog('CLOSE_PENDING')"><BanIcon />关闭全部待支付 ({{ total }})</Button>
+          <Button variant="outline" size="sm" :disabled="loading" aria-label="刷新" title="刷新" @click="loadOrders"><RefreshCwIcon :class="loading ? 'animate-spin' : ''" />刷新</Button>
+        </div>
       </template>
       <template #cell-orderNo="{ row }"><span class="font-mono text-xs">{{ row.orderNo }}</span></template>
       <template #cell-productName="{ value }"><span class="font-medium">{{ value }}</span></template>
@@ -21,8 +27,8 @@
       <template #cell-deliveryType="{ value }"><span class="text-sm">{{ deliveryTypeLabel(value) }}</span></template>
       <template #cell-contactValue="{ value }"><span class="text-sm text-muted-foreground">{{ value || "-" }}</span></template>
       <template #cell-amount="{ row }">{{ row.amount }}</template>
-      <template #cell-payment="{ row }"><Badge :variant="row.paymentStatus === 'PAID' ? 'default' : 'secondary'">{{ paymentLabel(row.paymentStatus) }}</Badge></template>
       <template #cell-delivery="{ row }"><Badge :variant="row.deliveryStatus === 'FAILED' ? 'destructive' : row.deliveryStatus === 'DELIVERED' ? 'default' : 'secondary'">{{ deliveryLabel(row.deliveryStatus) }}</Badge></template>
+      <template #cell-status="{ row }"><Badge :variant="statusVariant(row.status)">{{ statusLabel(row.status) }}</Badge></template>
       <template #cell-createdAt="{ row }"><span class="whitespace-nowrap text-xs">{{ formatDate(row.createdAt) }}</span></template>
       <template #actions="{ row }"><div class="flex min-w-[22rem] justify-end gap-1"><Button variant="ghost" size="sm" @click="showDetail(row.id)">查看</Button><Button v-if="row.status === 'PENDING'" variant="ghost" size="sm" @click="closeOrder(row.id)">关闭</Button><Button v-if="row.paymentStatus === 'UNPAID'" variant="ghost" size="sm" :disabled="replenishingOrderId === row.id" @click="openReplenish(row)">{{ replenishingOrderId === row.id ? '补单中...' : '补单' }}</Button><Button v-if="row.paymentStatus === 'PAID' && row.deliveryStatus !== 'DELIVERED'" variant="ghost" size="sm" @click="row.deliveryType === 'SUPPLIER' ? retrySupplierOrder(row.id) : openDelivery(row.id)">{{ row.deliveryType === 'SUPPLIER' ? '重试供应商发货' : '处理发货' }}</Button></div></template>
       <template #pagination><Pagination :total="total" :page="page" :page-size="pageSize" :page-size-options="[10, 20, 50, 100]" @update:page="changePage" @update:page-size="changePageSize" /></template>
@@ -37,6 +43,7 @@
               <DialogDescription v-if="detail" class="mt-1 break-all font-mono text-xs">{{ detail.order.orderNo }}</DialogDescription>
             </div>
             <div v-if="detail" class="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
+              <Badge :variant="statusVariant(detail.order.status)">{{ statusLabel(detail.order.status) }}</Badge>
               <Badge :variant="detail.order.paymentStatus === 'PAID' ? 'secondary' : 'outline'">{{ paymentLabel(detail.order.paymentStatus) }}</Badge>
               <Badge :variant="detail.order.deliveryStatus === 'FAILED' ? 'destructive' : detail.order.deliveryStatus === 'DELIVERED' ? 'secondary' : 'outline'">{{ deliveryLabel(detail.order.deliveryStatus) }}</Badge>
             </div>
@@ -174,6 +181,19 @@
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog v-model:open="actionDialogOpen">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ actionTitle }}</DialogTitle>
+          <DialogDescription>{{ actionDescription }}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" :disabled="actionBusy" @click="actionDialogOpen = false">取消</Button>
+          <Button :variant="actionMode === 'CLOSE_PENDING' ? 'default' : 'destructive'" :disabled="actionBusy || actionCount === 0" @click="confirmAction">{{ actionBusy ? "处理中..." : actionConfirmLabel }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>
 
@@ -191,10 +211,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import Pagination from "@/components/ui/pagination/Pagination.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCwIcon } from "@lucide/vue";
+import { BanIcon, RefreshCwIcon, Trash2Icon } from "@lucide/vue";
+import { toast } from "vue-sonner";
 import { runTelefunc } from "@/lib/telefunc-client";
 import { formatDateInTimezone, useSiteTimezone } from "@/lib/site-timezone";
-import { onCloseAdminOrder, onGetAdminOrderDetail, onGetAdminOrders, onRecordManualDelivery, onReplenishAdminOrder, onRetryAutomaticDelivery } from "@/server/order/admin.telefunc";
+import { onCloseAdminOrder, onCloseAllPendingAdminOrders, onDeleteAllClosedAdminOrders, onDeleteClosedAdminOrders, onGetAdminOrderDetail, onGetAdminOrders, onRecordManualDelivery, onReplenishAdminOrder, onRetryAutomaticDelivery } from "@/server/order/admin.telefunc";
 
 type Order = Awaited<ReturnType<typeof onGetAdminOrders>>["orders"][number];
 const timezone = useSiteTimezone();
@@ -209,12 +230,14 @@ const deliveryContents = computed(() => detail.value?.deliveries.flatMap((item) 
   }
 }) ?? []);
 const columns: AdminTableColumn<Order>[] = [
-  { key: "orderNo", label: "订单" }, { key: "productName", label: "商品" }, { key: "quantity", label: "数量" }, { key: "deliveryType", label: "发货方式" }, { key: "contactValue", label: "联系方式" }, { key: "amount", label: "金额" }, { key: "payment", label: "支付" }, { key: "delivery", label: "发货" }, { key: "createdAt", label: "创建时间" },
+  { key: "orderNo", label: "订单" }, { key: "productName", label: "商品" }, { key: "quantity", label: "数量" }, { key: "deliveryType", label: "发货方式" }, { key: "contactValue", label: "联系方式" }, { key: "amount", label: "金额" }, { key: "delivery", label: "发货" }, { key: "status", label: "订单状态" }, { key: "createdAt", label: "创建时间" },
 ];
 const orders = ref<Order[]>([]); const detail = ref<Detail | null>(null); const detailOpen = ref(false); const loading = ref(false); const delivering = ref(false); const replenishingOrderId = ref<number | null>(null); const replenishDialogOpen = ref(false); const replenishTarget = ref<Order | null>(null); const page = ref(1); const pageSize = ref(10); const total = ref(0); const deliveryOpen = ref(false); const deliveryOrderId = ref<number | null>(null); const deliveryContent = ref("");
+const selectedIds = ref<string[]>([]); const actionDialogOpen = ref(false); const actionBusy = ref(false); const actionMode = ref<"DELETE_SELECTED" | "DELETE_FILTERED" | "CLOSE_PENDING">("DELETE_SELECTED");
+const appliedFilters = ref({ query: "", status: "" as "" | Order["status"], deliveryStatus: "" as "" | Order["deliveryStatus"], startDate: "", endDate: "" });
 const filters = reactive<{ query: string; status: "" | Order["status"]; deliveryStatus: "" | Order["deliveryStatus"]; startDate: string; endDate: string }>({ query: "", status: "", deliveryStatus: "", startDate: "", endDate: "" });
 const dateRange = computed({ get: () => ({ start: filters.startDate, end: filters.endDate }), set: (value: { start: string; end: string }) => { filters.startDate = value.start; filters.endDate = value.end; } });
-async function loadOrders() { loading.value = true; try { const result = await runTelefunc(() => onGetAdminOrders({ page: page.value, pageSize: pageSize.value, ...(filters.query ? { query: filters.query } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.deliveryStatus ? { deliveryStatus: filters.deliveryStatus } : {}), ...(filters.startDate ? { startDate: filters.startDate } : {}), ...(filters.endDate ? { endDate: filters.endDate } : {}) }), { errorMessage: "读取订单失败，请稍后重试。" }); orders.value = result.orders; total.value = result.total; page.value = result.page; } finally { loading.value = false; } }
+async function loadOrders() { loading.value = true; try { const result = await runTelefunc(() => onGetAdminOrders({ page: page.value, pageSize: pageSize.value, ...(filters.query ? { query: filters.query } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.deliveryStatus ? { deliveryStatus: filters.deliveryStatus } : {}), ...(filters.startDate ? { startDate: filters.startDate } : {}), ...(filters.endDate ? { endDate: filters.endDate } : {}) }), { errorMessage: "读取订单失败，请稍后重试。" }); orders.value = result.orders; total.value = result.total; page.value = result.page; selectedIds.value = []; appliedFilters.value = { query: filters.query, status: filters.status, deliveryStatus: filters.deliveryStatus, startDate: filters.startDate, endDate: filters.endDate }; } finally { loading.value = false; } }
 async function showDetail(orderId: number) { detail.value = await runTelefunc(() => onGetAdminOrderDetail({ orderId }), { errorMessage: "读取订单详情失败，请稍后重试。" }); detailOpen.value = true; }
 async function closeOrder(orderId: number) { try { await runTelefunc(() => onCloseAdminOrder({ orderId }), { successMessage: "订单已关闭，已释放预占资源。" }); await loadOrders(); if (detail.value?.order.id === orderId) await showDetail(orderId); } catch { /* runTelefunc already displayed the error toast. */ } }
 function openReplenish(order: Order) { if (replenishingOrderId.value !== null) return; replenishTarget.value = order; replenishDialogOpen.value = true; }
@@ -228,12 +251,69 @@ async function retryAutomatic() { if (!deliveryOrderId.value) return; await retr
 async function retrySupplierOrder(orderId: number) { await retrySupplierOrAutomatic(orderId, "供应商订单已提交处理。", "供应商订单尚未完成发货，请查看供应商订单详情。"); }
 async function retrySupplierOrAutomatic(orderId: number, successMessage: string, errorMessage: string) { delivering.value = true; try { await runTelefunc(() => onRetryAutomaticDelivery({ orderId }), { successMessage, errorMessage }); closeDelivery(); await loadOrders(); } catch { /* runTelefunc already displayed the error toast. */ } finally { delivering.value = false; } }
 function resetAndLoad() { page.value = 1; void loadOrders(); }
+function selectableOrder(row: Order) { return row.status === "CLOSED"; }
+const actionCount = computed(() => actionMode.value === "DELETE_SELECTED" ? selectedIds.value.length : total.value);
+const actionTitle = computed(() => actionMode.value === "DELETE_SELECTED" ? `删除已选的 ${actionCount.value} 个订单？` : actionMode.value === "DELETE_FILTERED" ? `删除筛选出的 ${actionCount.value} 个已关闭订单？` : `关闭筛选出的 ${actionCount.value} 个待支付订单？`);
+const actionDescription = computed(() => actionMode.value === "CLOSE_PENDING" ? "只会关闭“待支付”订单并释放库存与优惠码占用，已支付订单不受影响；关闭后可在“已关闭”筛选中批量删除。" : "只会永久删除“已关闭且未支付”的订单，其他状态会自动跳过；删除后不可恢复。");
+const actionConfirmLabel = computed(() => actionMode.value === "CLOSE_PENDING" ? "确认关闭" : "确认删除");
+function openActionDialog(mode: "DELETE_SELECTED" | "DELETE_FILTERED" | "CLOSE_PENDING") { actionMode.value = mode; actionDialogOpen.value = true; }
+function requestBulkDelete() {
+  if (!selectedIds.value.length) {
+    toast.info("只能删除“已关闭”的订单。请先勾选已关闭订单，或筛选“已关闭”后使用“删除全部已关闭”。");
+    return;
+  }
+  openActionDialog("DELETE_SELECTED");
+}
+function appliedFilterInput() {
+  const applied = appliedFilters.value;
+  return {
+    ...(applied.query ? { query: applied.query } : {}),
+    ...(applied.deliveryStatus ? { deliveryStatus: applied.deliveryStatus } : {}),
+    ...(applied.startDate ? { startDate: applied.startDate } : {}),
+    ...(applied.endDate ? { endDate: applied.endDate } : {}),
+  };
+}
+async function deleteSelectedOrders() {
+  const orderIds = selectedIds.value.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+  if (!orderIds.length) return;
+  actionBusy.value = true;
+  try {
+    const result = await runTelefunc(() => onDeleteClosedAdminOrders({ orderIds }), { errorMessage: "删除订单失败，请稍后重试。" });
+    actionDialogOpen.value = false;
+    if (result.deleted > 0) toast.success(result.skipped > 0 ? `已删除 ${result.deleted} 个已关闭订单，跳过 ${result.skipped} 个不符合条件的订单。` : `已删除 ${result.deleted} 个已关闭订单。`);
+    else toast.error("没有可删除的已关闭订单。");
+    await loadOrders();
+  } catch { /* runTelefunc already displayed the error toast. */ } finally { actionBusy.value = false; }
+}
+async function deleteFilteredOrders() {
+  actionBusy.value = true;
+  try {
+    const result = await runTelefunc(() => onDeleteAllClosedAdminOrders(appliedFilterInput()), { errorMessage: "删除订单失败，请稍后重试。" });
+    actionDialogOpen.value = false;
+    if (result.deleted > 0) toast.success(`已删除 ${result.deleted} 个已关闭订单。`);
+    else toast.error("没有可删除的已关闭订单。");
+    await loadOrders();
+  } catch { /* runTelefunc already displayed the error toast. */ } finally { actionBusy.value = false; }
+}
+async function closePendingOrders() {
+  actionBusy.value = true;
+  try {
+    const result = await runTelefunc(() => onCloseAllPendingAdminOrders(appliedFilterInput()), { errorMessage: "关闭订单失败，请稍后重试。" });
+    actionDialogOpen.value = false;
+    if (result.closed > 0) toast.success(result.scanned >= 50 ? `已关闭 ${result.closed} 个待支付订单；仍有剩余，可再次点击继续。` : `已关闭 ${result.closed} 个待支付订单。`);
+    else toast.error("没有可关闭的待支付订单。");
+    await loadOrders();
+  } catch { /* runTelefunc already displayed the error toast. */ } finally { actionBusy.value = false; }
+}
+async function confirmAction() { if (actionMode.value === "DELETE_SELECTED") await deleteSelectedOrders(); else if (actionMode.value === "DELETE_FILTERED") await deleteFilteredOrders(); else await closePendingOrders(); }
 function resetFilters() { Object.assign(filters, { query: "", status: "", deliveryStatus: "", startDate: "", endDate: "" }); resetAndLoad(); }
 function changePage(value: number) { page.value = value; void loadOrders(); }
 function changePageSize(value: number) { pageSize.value = value; page.value = 1; void loadOrders(); }
 
 function formatDate(value: Date | string | number) { return formatDateInTimezone(value, timezone.value); }
 function paymentLabel(value: Order["paymentStatus"]) { return { UNPAID: "待支付", PAID: "已支付", FAILED: "支付失败" }[value]; }
+function statusLabel(value: Order["status"]) { return { PENDING: "待支付", PAID: "已支付", DELIVERED: "已完成", CLOSED: "已关闭", FAILED: "发货失败" }[value]; }
+function statusVariant(value: Order["status"]): "default" | "secondary" | "destructive" | "outline" { return value === "FAILED" ? "destructive" : value === "CLOSED" ? "outline" : value === "PENDING" ? "secondary" : "default"; }
 function deliveryLabel(value: Order["deliveryStatus"]) { return { NOT_DELIVERED: "未发货", DELIVERING: "发货中", DELIVERED: "已发货", FAILED: "发货失败" }[value]; }
 function deliveryTypeLabel(value: unknown) {
   return { CARD_AUTO: "自动卡密", FIXED_CARD: "固定内容", MANUAL: "人工发货", EXPRESS: "快递发货", SUPPLIER: "供应商履约" }[value as Order["deliveryType"]] ?? "-";

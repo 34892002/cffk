@@ -1,5 +1,5 @@
 import { telefuncAction } from "@/server/telefunc-action";
-import { and, count, desc, eq, gte, like, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, like, lt, ne } from "drizzle-orm";
 import { order, orderDelivery, paymentLog } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
 import { formatCnyMinor, formatMinor, isCurrencyCode } from "@/lib/money";
@@ -9,6 +9,7 @@ import { getSiteSettings } from "@/server/site/public-settings";
 import { requireAdmin } from "@/server/telefunc-context";
 import type { AddressSnapshot } from "@/server/payment/types";
 import { closePendingOrder, deliverPaidOrder } from "./service";
+import { deleteClosedOrders } from "./delete";
 import { PaymentFlowService } from "@/server/payment/flow-service";
 import { paymentRepository } from "@/server/payment/repository";
 import { createSupplierOrder } from "@/server/supplier/purchase";
@@ -71,6 +72,59 @@ async function internalOnCloseAdminOrder(input: { orderId: number }) {
   if (!record) appError("ORDER_NOT_FOUND");
   if (record.status !== "CLOSED") appError("ORDER_CANNOT_CLOSE");
   return record;
+}
+
+function normalizeOrderIds(value: unknown) {
+  if (!Array.isArray(value)) appError("ORDER_ID_INVALID");
+  const ids = [...new Set(value.filter((id): id is number => typeof id === "number" && Number.isInteger(id) && id > 0))];
+  if (!ids.length || ids.length > 200) appError("ORDER_ID_INVALID");
+  return ids;
+}
+
+async function internalOnDeleteClosedAdminOrders(input: { orderIds: number[] }) {
+  const { database } = requireAdmin();
+  const orderIds = normalizeOrderIds(input?.orderIds);
+  const deleted = await deleteClosedOrders(database, orderIds);
+  return { deleted, skipped: orderIds.length - deleted };
+}
+
+async function internalOnDeleteAllClosedAdminOrders(input?: { query?: string; deliveryStatus?: DeliveryStatus; startDate?: string; endDate?: string }) {
+  const { database, db } = requireAdmin();
+  const conditions = [eq(order.status, "CLOSED"), ne(order.paymentStatus, "PAID")];
+  if (input?.query?.trim()) conditions.push(like(order.orderNo, `%${input.query.trim()}%`));
+  if (input?.deliveryStatus) conditions.push(eq(order.deliveryStatus, input.deliveryStatus));
+  if (input?.startDate || input?.endDate) {
+    const timezone = (await getSiteSettings(database)).timezone;
+    if (input.startDate) conditions.push(gte(order.createdAt, dateBoundaryInTimezone(input.startDate, timezone)));
+    if (input.endDate) conditions.push(lt(order.createdAt, dateBoundaryInTimezone(input.endDate, timezone, true)));
+  }
+  const rows = await db.select({ id: order.id }).from(order).where(and(...conditions)).limit(2000);
+  const deleted = await deleteClosedOrders(database, rows.map((row) => row.id));
+  return { deleted, matched: rows.length };
+}
+
+const CLOSE_ORDER_BATCH_SIZE = 50;
+
+async function internalOnCloseAllPendingAdminOrders(input?: { query?: string; deliveryStatus?: DeliveryStatus; startDate?: string; endDate?: string }) {
+  const { database, db } = requireAdmin();
+  const conditions = [eq(order.status, "PENDING"), eq(order.paymentStatus, "UNPAID")];
+  if (input?.query?.trim()) conditions.push(like(order.orderNo, `%${input.query.trim()}%`));
+  if (input?.deliveryStatus) conditions.push(eq(order.deliveryStatus, input.deliveryStatus));
+  if (input?.startDate || input?.endDate) {
+    const timezone = (await getSiteSettings(database)).timezone;
+    if (input.startDate) conditions.push(gte(order.createdAt, dateBoundaryInTimezone(input.startDate, timezone)));
+    if (input.endDate) conditions.push(lt(order.createdAt, dateBoundaryInTimezone(input.endDate, timezone, true)));
+  }
+  const rows = await db.select({ id: order.id }).from(order).where(and(...conditions)).orderBy(asc(order.createdAt)).limit(CLOSE_ORDER_BATCH_SIZE);
+  let closed = 0;
+  for (const row of rows) {
+    try {
+      if ((await closePendingOrder(database, row.id, { eventType: "MANUAL_CLOSE", message: "管理员批量关闭待支付订单" })).closed) closed += 1;
+    } catch {
+      // A concurrent payment or deletion can make one order uncloseable; keep processing the rest.
+    }
+  }
+  return { closed, scanned: rows.length };
 }
 
 async function internalOnReplenishAdminOrder(input: { orderId: number }) {
@@ -147,6 +201,9 @@ async function internalOnRecordManualDelivery(input: { orderId: number; content:
 export const onGetAdminOrders = telefuncAction(internalOnGetAdminOrders);
 export const onGetAdminOrderDetail = telefuncAction(internalOnGetAdminOrderDetail);
 export const onCloseAdminOrder = telefuncAction(internalOnCloseAdminOrder);
+export const onDeleteClosedAdminOrders = telefuncAction(internalOnDeleteClosedAdminOrders);
+export const onDeleteAllClosedAdminOrders = telefuncAction(internalOnDeleteAllClosedAdminOrders);
+export const onCloseAllPendingAdminOrders = telefuncAction(internalOnCloseAllPendingAdminOrders);
 export const onReplenishAdminOrder = telefuncAction(internalOnReplenishAdminOrder);
 export const onRetryAutomaticDelivery = telefuncAction(internalOnRetryAutomaticDelivery);
 export const onRecordManualDelivery = telefuncAction(internalOnRecordManualDelivery);
