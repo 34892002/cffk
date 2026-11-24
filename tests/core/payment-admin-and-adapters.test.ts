@@ -5,10 +5,11 @@ import { test } from "bun:test";
 import { AppError } from "../../lib/app-error";
 import { canonicalizeAlipayParameters } from "../../lib/payment-utils";
 import { mergePaymentProviderConfig, mergePaymentUrls, rebasePaymentUrl } from "../../server/payment/admin.telefunc";
+import { parseEpayConfig } from "../../lib/config-schemas";
 import { createProviderAdapter } from "../../server/payment/providers";
 import { normalizePaymentCallbackPayload } from "../../server/payment/callback-payload";
 import { paymentCallbackResponse } from "../../server/payment/callback-service";
-import { getPaymentUrlDefaults, resolvePaymentUrls } from "../../server/payment/registry";
+import { getPaymentUrlDefaults, parseProviderConfig, resolvePaymentUrls } from "../../server/payment/registry";
 
 const testKeyPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const testPrivateKey = testKeyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -173,6 +174,194 @@ test("payment provider config rejects unknown fields", () => {
 
 });
 
+const epayRsaConfig = {
+  schemaVersion: 1,
+  baseUrl: "https://epay.example",
+  pid: "1000",
+  signType: "RSA",
+  merchantPrivateKey: testPrivateKey,
+  platformPublicKey: testPublicKey,
+  epayChannels: ["alipay", "wxpay"],
+  notifyUrl: "https://shop.example/api/payments/epay/notify",
+  returnUrl: "https://shop.example/payment-result",
+};
+
+function epaySignContent(values: Record<string, string | number>) {
+  return Object.keys(values)
+    .filter((key) => key !== "sign" && key !== "sign_type" && key !== "__raw_body")
+    .filter((key) => String(values[key]).trim() !== "")
+    .sort()
+    .map((key) => `${key}=${values[key]}`)
+    .join("&");
+}
+
+function epaySign(values: Record<string, string | number>, privateKey = testPrivateKey) {
+  return signData("RSA-SHA256", Buffer.from(epaySignContent(values)), privateKey).toString("base64");
+}
+
+function epayJsonResponse(values: Record<string, string | number>) {
+  return new Response(JSON.stringify({ ...values, sign_type: "RSA", sign: epaySign(values) }), { status: 200, headers: { "content-type": "application/json" } });
+}
+
+test("Epay V2 create posts an RSA-signed jump request and verifies the response", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return epayJsonResponse({ code: 0, trade_no: "TRADE-9", pay_type: "jump", pay_info: "https://cashier.example/pay/9", timestamp: "1721206072" });
+  };
+  try {
+    const adapter = createProviderAdapter("EPAY", epayRsaConfig);
+    const payment = await adapter.create({ orderNo: "ORD-EP-2", amount: 1234, subject: "Order", notifyUrl: epayRsaConfig.notifyUrl, returnUrl: epayRsaConfig.returnUrl, clientIp: "203.0.113.9" });
+    assert.deepEqual(payment, { mode: "redirect", url: "https://cashier.example/pay/9", paymentOrderNo: "TRADE-9" });
+    assert.equal(request!.url, "https://epay.example/api/pay/create");
+    assert.equal(request!.method, "POST");
+    const body = new URLSearchParams(await request!.text());
+    assert.equal(body.get("method"), "jump");
+    assert.equal(body.get("type"), "alipay");
+    assert.equal(body.get("clientip"), "203.0.113.9");
+    assert.equal(body.get("money"), "12.34");
+    assert.equal(body.get("sign_type"), "RSA");
+    assert.ok(/^\d{10}$/.test(body.get("timestamp") ?? ""));
+    const unsigned = Object.fromEntries([...body].filter(([key]) => key !== "sign"));
+    assert.equal(body.get("sign"), epaySign(unsigned));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Epay V2 create requires a client IP and validates every failure shape", async () => {
+  const originalFetch = globalThis.fetch;
+  const responses = [
+    new Response(JSON.stringify({ code: -3, msg: "RSA签名校验失败" }), { status: 200 }),
+    new Response("error code: 525 ", { status: 525, headers: { "content-type": "text/plain" } }),
+    new Response("<html>not json</html>", { status: 200 }),
+    epayJsonResponse({ code: -4, msg: "缺少参数" }),
+  ];
+  try {
+    const adapter = createProviderAdapter("EPAY", epayRsaConfig);
+    await assert.rejects(() => adapter.create({ orderNo: "ORD-EP-3", amount: 100, subject: "Order", notifyUrl: epayRsaConfig.notifyUrl, returnUrl: epayRsaConfig.returnUrl }), /EPAY_CLIENT_IP_REQUIRED/);
+    const expected = [/EPAY_CREATE_SIGNATURE_REJECTED/, /EPAY_CREATE_HTTP_525/, /EPAY_CREATE_INVALID_RESPONSE/, /EPAY_CREATE_PARAMS_REJECTED/];
+    for (let index = 0; index < responses.length; index += 1) {
+      globalThis.fetch = async () => responses[index]!;
+      await assert.rejects(() => adapter.create({ orderNo: "ORD-EP-3", amount: 100, subject: "Order", notifyUrl: epayRsaConfig.notifyUrl, returnUrl: epayRsaConfig.returnUrl, clientIp: "203.0.113.9" }), expected[index]!);
+    }
+    globalThis.fetch = async () => new Response(JSON.stringify({ code: 0, trade_no: "1", pay_type: "jump", pay_info: "https://cashier.example/pay/1", timestamp: "1721206072", sign_type: "RSA", sign: "forged" }), { status: 200 });
+    await assert.rejects(() => adapter.create({ orderNo: "ORD-EP-3", amount: 100, subject: "Order", notifyUrl: epayRsaConfig.notifyUrl, returnUrl: epayRsaConfig.returnUrl, clientIp: "203.0.113.9" }), /EPAY_RESPONSE_SIGNATURE_INVALID/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Epay V2 verifies RSA callback signatures over every received parameter", async () => {
+  const adapter = createProviderAdapter("EPAY", epayRsaConfig);
+  const payload: Record<string, string> = { pid: "1000", trade_no: "TRADE-9", out_trade_no: "ORD-EP-4", type: "alipay", name: "Order", money: "12.34", trade_status: "TRADE_SUCCESS", timestamp: "1721206072", sign_type: "RSA" };
+  const verified = await adapter.verify({ payload: { ...payload, sign: epaySign(payload) } });
+  assert.deepEqual(verified, { provider: "EPAY", verified: true, orderNo: "ORD-EP-4", paymentOrderNo: "TRADE-9", amount: 1234, status: "PAID", message: "EPAY_CALLBACK" });
+
+  const tampered = await adapter.verify({ payload: { ...payload, money: "0.01", sign: epaySign(payload) } });
+  assert.equal(tampered.verified, false);
+  assert.equal(tampered.status, "FAILED");
+  assert.equal(tampered.message, "EPAY_CALLBACK_VERIFY_FAILED");
+
+  const wrongPid = await adapter.verify({ payload: { ...payload, pid: "9999", sign: epaySign({ ...payload, pid: "9999" }) } });
+  assert.equal(wrongPid.verified, false);
+  assert.equal(wrongPid.message, "EPAY_CALLBACK_PID_MISMATCH");
+});
+
+test("Epay V2 only treats TRADE_SUCCESS as a paid callback status", async () => {
+  const adapter = createProviderAdapter("EPAY", epayRsaConfig);
+  for (const tradeStatus of ["TRADE_SUCCESS", "TRADE_FINISHED", "success", "SUCCESS"]) {
+    const payload: Record<string, string> = { pid: "1000", out_trade_no: "ORD-STATUS", trade_no: "TRADE-STATUS", money: "1.00", trade_status: tradeStatus, status: "success", sign_type: "RSA" };
+    const result = await adapter.verify({ payload: { ...payload, sign: epaySign(payload) } });
+    assert.equal(result.verified, true);
+    assert.equal(result.status, tradeStatus === "TRADE_SUCCESS" ? "PAID" : "FAILED");
+  }
+});
+
+test("Epay RSA callbacks cannot downgrade to MD5 even with a retained legacy key", async () => {
+  for (const key of ["", "retained-secret"]) {
+    const adapter = createProviderAdapter("EPAY", { ...epayRsaConfig, key });
+    for (const signType of [undefined, "", "MD5", "md5", "SHA256"]) {
+      const payload: Record<string, string> = { pid: "1000", out_trade_no: "ORD-DOWNGRADE", trade_no: "FORGED", money: "12.34", trade_status: "TRADE_SUCCESS" };
+      const content = Object.entries(payload).sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `${name}=${value}`).join("&");
+      payload.sign = createHash("md5").update(content + key).digest("hex");
+      if (signType !== undefined) payload.sign_type = signType;
+      const result = await adapter.verify({ payload });
+      assert.equal(result.verified, false);
+      assert.equal(result.status, "FAILED");
+    }
+  }
+});
+
+test("Epay V2 signatures include extension fields beginning with underscores", async () => {
+  const adapter = createProviderAdapter("EPAY", epayRsaConfig);
+  const payload = { pid: "1000", out_trade_no: "ORD-EXT", money: "1", trade_status: "TRADE_SUCCESS", sign_type: "RSA", __meta: "platform-data", zero: "0", blank: " " };
+  const sign = epaySign(payload);
+  assert.equal((await adapter.verify({ payload: { ...payload, sign } })).verified, true);
+  assert.equal((await adapter.verify({ payload: { ...payload, __meta: "tampered", sign } })).verified, false);
+});
+
+test("Epay V2 create rejects signed success responses without a valid platform trade number", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const adapter = createProviderAdapter("EPAY", epayRsaConfig);
+    for (const tradeNo of [undefined, "", "  ", 123]) {
+      const body: Record<string, string | number> = { code: 0, pay_type: "jump", pay_info: "https://cashier.example/pay", timestamp: "1721206072" };
+      if (tradeNo !== undefined) body.trade_no = tradeNo;
+      globalThis.fetch = async () => epayJsonResponse(body);
+      await assert.rejects(() => adapter.create({ orderNo: "ORD-NO-TRADE", amount: 100, subject: "Order", notifyUrl: epayRsaConfig.notifyUrl, returnUrl: epayRsaConfig.returnUrl, clientIp: "203.0.113.9" }), /EPAY_CREATE_INVALID_RESPONSE/);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Epay V2 active query confirms paid orders through the signed response", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Request[] = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push(new Request(input, init));
+    return epayJsonResponse({ code: 0, trade_no: "TRADE-9", out_trade_no: "ORD-EP-5", status: 1, money: "12.34", timestamp: "1721206072" });
+  };
+  try {
+    const adapter = createProviderAdapter("EPAY", epayRsaConfig);
+    const result = await adapter.query!({ orderNo: "ORD-EP-5", paymentOrderNo: "TRADE-9", amount: 1234 });
+    assert.deepEqual(result, { provider: "EPAY", verified: true, orderNo: "ORD-EP-5", paymentOrderNo: "TRADE-9", amount: 1234, status: "PAID", message: "EPAY_QUERY" });
+    const body = new URLSearchParams(await requests[0]!.text());
+    assert.equal(requests[0]!.url, "https://epay.example/api/pay/query");
+    assert.equal(body.get("out_trade_no"), "ORD-EP-5");
+    assert.ok(body.get("sign"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Epay V2 rejects unsigned query responses and legacy MD5 keeps no query support", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const adapter = createProviderAdapter("EPAY", epayRsaConfig);
+    globalThis.fetch = async () => new Response(JSON.stringify({ code: 0, trade_no: "TRADE-9", out_trade_no: "ORD-EP-5", status: 1, money: "12.34", timestamp: "1721206072", sign_type: "RSA", sign: "forged" }), { status: 200 });
+    const result = await adapter.query!({ orderNo: "ORD-EP-5", amount: 1234 });
+    assert.deepEqual(result, { provider: "EPAY", verified: false, orderNo: "ORD-EP-5", paymentOrderNo: undefined, status: "PENDING", message: "EPAY_QUERY_FAILED" });
+
+    const legacy = createProviderAdapter("EPAY", epayConfig);
+    assert.equal(legacy.query, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Epay configuration defaults to legacy MD5 and requires the matching secrets", () => {
+  assert.equal(parseEpayConfig(JSON.stringify(epayConfig)).signType, "MD5");
+  assert.equal((parseProviderConfig("EPAY", JSON.stringify(epayConfig)) as { signType?: string }).signType, "MD5");
+  assert.equal(parseEpayConfig(JSON.stringify(epayRsaConfig)).signType, "RSA");
+  assert.throws(() => parseEpayConfig(JSON.stringify({ ...epayConfig, key: "" })), /key/);
+  assert.throws(() => parseEpayConfig(JSON.stringify({ ...epayRsaConfig, merchantPrivateKey: "" })), /merchantPrivateKey/);
+  assert.throws(() => parseEpayConfig(JSON.stringify({ ...epayRsaConfig, platformPublicKey: "" })), /platformPublicKey/);
+  assert.throws(() => parseEpayConfig(JSON.stringify({ ...epayConfig, signType: "SHA1" })), /signType/);
+});
+
 test("Epay adapter creates a signed redirect URL", async () => {
   const adapter = createProviderAdapter("EPAY", epayConfig);
   const payment = await adapter.create({ orderNo: "ORD-1", amount: 1234, subject: "Order", channel: "wxpay", notifyUrl: epayConfig.notifyUrl, returnUrl: epayConfig.returnUrl });
@@ -184,6 +373,41 @@ test("Epay adapter creates a signed redirect URL", async () => {
   assert.equal(url.searchParams.get("money"), "12.34");
   assert.equal(url.searchParams.get("sign_type"), "MD5");
   assert.ok(url.searchParams.get("sign"));
+});
+
+test("Epay V1 redirect matches the original URL and signature without a client IP", async () => {
+  for (const signType of [undefined, "MD5"]) {
+    const config = signType === undefined ? epayConfig : { ...epayConfig, signType };
+    const adapter = createProviderAdapter("EPAY", config);
+    for (const channel of [undefined, "alipay", "wxpay"] as const) {
+      for (const subject of ["Order 中文 & =", " "]) {
+        const values = { pid: config.pid, type: channel === "wxpay" ? "wxpay" : "alipay", out_trade_no: "ORD-V1", notify_url: config.notifyUrl, return_url: config.returnUrl, name: subject, money: "12.34" };
+        const sign = createHash("md5").update(Object.entries(values).filter(([, value]) => value !== "").sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${value}`).join("&") + config.key).digest("hex");
+        const payment = await adapter.create({ orderNo: "ORD-V1", amount: 1234, subject, channel, notifyUrl: config.notifyUrl, returnUrl: config.returnUrl });
+        assert.deepEqual(payment, { mode: "redirect", url: `${config.baseUrl}/submit.php?${new URLSearchParams({ ...values, sign, sign_type: "MD5" })}`, paymentOrderNo: "ORD-V1" });
+        assert.equal(adapter.query, undefined);
+      }
+    }
+  }
+});
+
+test("Epay V1 callbacks retain original sorting, whitespace and extension signing rules", async () => {
+  const adapter = createProviderAdapter("EPAY", epayConfig);
+  for (const signType of [undefined, "", "MD5"]) {
+    const values = { pid: "1000", out_trade_no: "ORD-V1", trade_no: "TRADE-V1", money: "12.34", trade_status: "TRADE_SUCCESS", name: " ", __meta: "extension", A: "upper", a: "lower", empty: "" };
+    const sign = createHash("md5").update(Object.entries(values).filter(([, value]) => value !== "").sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${value}`).join("&") + epayConfig.key).digest("hex");
+    const parameters = new URLSearchParams({ ...values, sign });
+    if (signType !== undefined) parameters.set("sign_type", signType);
+    for (const method of ["GET", "POST"]) {
+      const payload = normalizePaymentCallbackPayload(method, `https://shop.example/notify?${parameters}`, method === "POST" ? parameters.toString() : "", "EPAY");
+      const verified = await adapter.verify({ payload });
+      assert.equal(verified.verified, true);
+      assert.equal(verified.status, "PAID");
+      assert.equal(verified.amount, 1234);
+      assert.equal((await adapter.verify({ payload: { ...payload, __meta: "tampered" } })).verified, false);
+      assert.equal((await adapter.verify({ payload: { ...payload, sign_type: "RSA" } })).verified, false);
+    }
+  }
 });
 
 test("BEpusdt and Stripe adapters create provider requests and surface failures", async () => {

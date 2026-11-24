@@ -61,7 +61,7 @@ function orderAccess(ownerUserId: string | null, email?: string) {
 export class PaymentFlowService {
   constructor(private readonly database: D1Database, private readonly runtime: Record<string, unknown> = {}) {}
 
-  async create(input: PaymentCreateInput, ownerUserId: string | null, locale?: StorefrontLocale): Promise<PaymentCreateResult> {
+  async create(input: PaymentCreateInput, ownerUserId: string | null, locale?: StorefrontLocale, clientIp?: string | null): Promise<PaymentCreateResult> {
     const definition = getProviderDefinition(input.paymentProvider);
     if (!definition) appError("PAYMENT_PROVIDER_NOT_AVAILABLE");
     const provider = await getEnabledPaymentProvider(this.database, input.paymentProvider);
@@ -94,7 +94,7 @@ export class PaymentFlowService {
       const site = await getSiteSettings(this.database);
       const urls = resolvePaymentUrls(provider.provider, site.siteUrl, config);
       const adapter = definition.createAdapter(config);
-      const result = await adapter.create({ orderNo: created.orderNo, amount: created.amount, subject: paymentSubject(locale, created.orderNo), channel, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, created.orderNo) });
+      const result = await adapter.create({ orderNo: created.orderNo, amount: created.amount, subject: paymentSubject(locale, created.orderNo), channel, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, created.orderNo), clientIp: clientIp ?? undefined });
       await repository.completeAttempt(attemptId, result.paymentOrderNo);
       await logs.writeBestEffort({ orderId: created.id, provider: provider.provider, orderNo: created.orderNo, paymentOrderNo: result.paymentOrderNo, eventType: "CREATE", verifyStatus: "PENDING", payload: { ...result, currency: created.currency, exchangeRate: created.exchangeRate } });
       return { ...created, payment: result };
@@ -107,7 +107,7 @@ export class PaymentFlowService {
     }
   }
 
-  async resume(orderNo: string, ownerUserId: string | null, email?: string, locale?: StorefrontLocale): Promise<PaymentCreateResult> {
+  async resume(orderNo: string, ownerUserId: string | null, email?: string, locale?: StorefrontLocale, clientIp?: string | null): Promise<PaymentCreateResult> {
     const access = orderAccess(ownerUserId, email);
     if (!orderNo.trim() || !access) appError("ORDER_NOT_FOUND");
     const db = createDrizzleDb(this.database);
@@ -139,7 +139,7 @@ export class PaymentFlowService {
       const config = JSON.parse(provider.configJson) as Record<string, unknown>;
       const site = await getSiteSettings(this.database);
       const urls = resolvePaymentUrls(provider.provider, site.siteUrl, config);
-      const payment = await definition.createAdapter(config).create({ orderNo: record.orderNo, amount: record.amount, subject: paymentSubject(locale ?? (isStorefrontLocale(record.locale) ? record.locale : undefined), record.orderNo), channel: record.paymentChannel as PaymentChannel | undefined, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, record.orderNo) });
+      const payment = await definition.createAdapter(config).create({ orderNo: record.orderNo, amount: record.amount, subject: paymentSubject(locale ?? (isStorefrontLocale(record.locale) ? record.locale : undefined), record.orderNo), channel: record.paymentChannel as PaymentChannel | undefined, notifyUrl: urls.notifyUrl, returnUrl: paymentReturnUrl(urls.returnUrl, record.orderNo), clientIp: clientIp ?? undefined });
       await repository.completeAttempt(attemptId, payment.paymentOrderNo);
       await new PaymentLogService(this.database).writeBestEffort({ orderId: record.id, provider: provider.provider, orderNo: record.orderNo, paymentOrderNo: payment.paymentOrderNo, eventType: "RESUME", verifyStatus: "PENDING", payload: { ...payment, currency: record.currency, exchangeRate: record.exchangeRate } });
       return { orderNo: record.orderNo, amount: record.amount, currency: record.currency, paymentStatus: "UNPAID", payment };

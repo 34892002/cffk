@@ -14,11 +14,20 @@ export type AlipayConfig = {
   returnUrl: string;
 };
 
+export type EpaySignType = "MD5" | "RSA";
+
 export type EpayConfig = {
   schemaVersion: 1;
   baseUrl: string;
   pid: string;
+  /** MD5 selects the legacy V1 endpoints, RSA selects the V2 RSA-SHA256 endpoints. */
+  signType: EpaySignType;
+  /** MD5 shared secret, only used when signType is MD5. */
   key: string;
+  /** Merchant PKCS#8 private key, only used when signType is RSA. */
+  merchantPrivateKey: string;
+  /** Platform public key used to verify responses and notifications, only used when signType is RSA. */
+  platformPublicKey: string;
   epayChannels: Array<"alipay" | "wxpay">;
   notifyUrl: string;
   returnUrl: string;
@@ -176,14 +185,25 @@ export function parseAlipayConfig(json: string): AlipayConfig {
   };
 }
 
+function optionalString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function parseEpayConfig(json: string): EpayConfig {
   const value = parseJsonObject(json, "Epay");
   requireSchemaVersion(value, "schemaVersion");
+  // Stored configurations created before V2 support have no signType and must
+  // keep parsing as legacy MD5 so they stay editable and enableable.
+  const signType = value.signType === undefined ? "MD5" : value.signType;
+  if (signType !== "MD5" && signType !== "RSA") throw new Error("Invalid configuration: signType must be MD5 or RSA");
   return {
     schemaVersion: 1,
     baseUrl: requireUrl(value.baseUrl, "baseUrl"),
     pid: requireString(value.pid, "pid"),
-    key: requireString(value.key, "key"),
+    signType,
+    key: signType === "MD5" ? requireString(value.key, "key") : optionalString(value.key),
+    merchantPrivateKey: signType === "RSA" ? requireString(value.merchantPrivateKey, "merchantPrivateKey") : optionalString(value.merchantPrivateKey),
+    platformPublicKey: signType === "RSA" ? requireString(value.platformPublicKey, "platformPublicKey") : optionalString(value.platformPublicKey),
     epayChannels: requireStringArray(value.epayChannels, "epayChannels", ["alipay", "wxpay"], 1) as EpayConfig["epayChannels"],
     notifyUrl: requirePaymentUrl(value.notifyUrl, "notifyUrl", true),
     returnUrl: requirePaymentUrl(value.returnUrl, "returnUrl", true),

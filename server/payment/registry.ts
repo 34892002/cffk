@@ -68,14 +68,17 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     title: "易支付",
     schemaVersion: 1,
     fields: [
-      { key: "baseUrl", label: "网关地址", type: "url", required: true },
+      { key: "baseUrl", label: "网关地址", type: "url", required: true, description: "V1（MD5）请求 {网关}/submit.php；V2（RSA）请求 {网关}/api/pay/create。" },
       { key: "pid", label: "商户 PID", type: "text", required: true },
-      { key: "key", label: "商户密钥", type: "password", required: true, secret: true },
+      { key: "signType", label: "接口版本", type: "select", required: true, options: [{ label: "V1（MD5，旧接口）", value: "MD5" }, { label: "V2（RSA-SHA256，推荐）", value: "RSA" }] },
+      { key: "key", label: "商户密钥（MD5）", type: "password", required: true, secret: true, visibleWhen: { key: "signType", in: ["MD5"] } },
+      { key: "merchantPrivateKey", label: "商户私钥（RSA）", type: "textarea", required: true, secret: true, visibleWhen: { key: "signType", in: ["RSA"] }, description: "商户后台 API 信息页生成的商户私钥，支持裸 Base64 或 PKCS#8 PEM（不支持 PKCS#1）。" },
+      { key: "platformPublicKey", label: "平台公钥（RSA）", type: "textarea", required: true, visibleWhen: { key: "signType", in: ["RSA"] }, description: "用于校验平台响应和异步通知签名；若创建支付报签名失败，请确认商户后台已开通 RSA 并复制最新公钥。" },
       { key: "epayChannels", label: "支付子渠道", type: "multi_select", required: true, min: 1, options: [{ label: "支付宝", value: "alipay" }, { label: "微信", value: "wxpay" }] },
       common.notifyUrl,
       common.returnUrl,
     ],
-    defaults: { schemaVersion: 1, baseUrl: "", pid: "", epayChannels: ["alipay", "wxpay"], notifyUrl: "", returnUrl: "" },
+    defaults: { schemaVersion: 1, baseUrl: "", pid: "", signType: "MD5", epayChannels: ["alipay", "wxpay"], notifyUrl: "", returnUrl: "" },
     parseConfig: parseEpayConfig,
     getChannels: (config) => "epayChannels" in config ? config.epayChannels : [],
     createAdapter: (config) => createProviderAdapter("EPAY", config),
@@ -187,7 +190,9 @@ export function parseProviderConfig(provider: string, configJson: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("PAYMENT_CONFIG_INVALID");
   const allowed = new Set(["schemaVersion", ...definition.fields.map((field) => field.key)]);
   if (Object.keys(value).some((key) => !allowed.has(key))) throw new Error("PAYMENT_CONFIG_INVALID");
-  validateJsonFormValues(definition.fields, value as Record<string, unknown>);
+  // Validate against the same defaults the admin form pre-fills so fields added
+  // after a configuration was stored do not invalidate it.
+  validateJsonFormValues(definition.fields, { ...definition.defaults, ...(value as Record<string, unknown>) });
   return definition.parseConfig(configJson);
 }
 

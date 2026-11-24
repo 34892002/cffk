@@ -4,11 +4,11 @@ import type { StorefrontLocale } from "@/lib/i18n/locale";
 import { requirePaymentFlowService } from "./flow-service";
 import type { PaymentCreateInput } from "./types";
 
-type TelefuncContext = { user?: { id: string } | null; locale?: StorefrontLocale };
+type TelefuncContext = { user?: { id: string } | null; locale?: StorefrontLocale; clientIp?: string | null };
 
 async function internalOnCreatePayment(input: PaymentCreateInput) {
   const context = getContext<TelefuncContext>();
-  return requirePaymentFlowService().create(input, context.user?.id ?? null, context.locale);
+  return requirePaymentFlowService().create(input, context.user?.id ?? null, context.locale, context.clientIp);
 }
 
 export const onCreatePayment = telefuncAction(internalOnCreatePayment);

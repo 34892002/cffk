@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { parseBepusdtConfig, parseEpayConfig, parseHashpayConfig, parseStripeConfig, parsePerpayConfig } from "@/lib/config-schemas";
 import { amountToMinor, isCurrencyCode, minorToAmount } from "@/lib/money";
 import { createPerpayAdapter } from "./perpay";
+import { createEpayAdapter } from "./epay";
 import { createAlipayPayment, queryAlipayPayment, verifyAlipayCallback } from "./alipay";
 import type { PaymentAdapter, PaymentNotifyResult } from "./types";
 import type { PaymentChannel, PaymentProviderKind } from "./registry";
@@ -77,13 +78,7 @@ export function createProviderAdapter(provider: PaymentProviderKind, config: Rec
     verify: async ({ payload }) => result(provider, { verified: await verifyAlipayCallback(json, payload), orderNo: payload.out_trade_no, paymentOrderNo: payload.trade_no, amount: amount(payload.total_amount), status: payload.trade_status === "TRADE_SUCCESS" || payload.trade_status === "TRADE_FINISHED" ? "PAID" : "FAILED", message: "ALIPAY_CALLBACK" }),
     query: async ({ orderNo, amount }) => queryAlipayPayment(json, orderNo, amount),
   };
-  if (provider === "EPAY") {
-    const parsed = parseEpayConfig(json);
-    return {
-      create: async (input) => { const values = { pid: parsed.pid, type: input.channel === "wxpay" ? "wxpay" : "alipay", out_trade_no: input.orderNo, notify_url: input.notifyUrl, return_url: input.returnUrl, name: input.subject, money: (input.amount / 100).toFixed(2) }; return { mode: "redirect", url: `${parsed.baseUrl.replace(/\/+$/, "")}/submit.php?${new URLSearchParams({ ...values, sign: sign(values, parsed.key), sign_type: "MD5" })}`, paymentOrderNo: input.orderNo }; },
-      verify: async ({ payload }) => { const values = { ...payload }; delete values.sign; delete values.sign_type; const tradeStatus = payload.trade_status || payload.status || ""; return result(provider, { verified: payload.pid === parsed.pid && timingSafeStringEqual(payload.sign ?? "", sign(values, parsed.key)), orderNo: payload.out_trade_no, paymentOrderNo: payload.trade_no, amount: amount(payload.money), status: tradeStatus === "TRADE_SUCCESS" || tradeStatus === "success" ? "PAID" : tradeStatus ? "FAILED" : "PENDING", message: "EPAY_CALLBACK" }); },
-    };
-  }
+  if (provider === "EPAY") return createEpayAdapter(parseEpayConfig(json));
   if (provider === "BEPUSDT") {
     const parsed = parseBepusdtConfig(json);
     return {

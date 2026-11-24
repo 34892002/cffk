@@ -61,7 +61,15 @@ export function mergePaymentProviderConfig(input: {
     } catch { /* Invalid stored JSON cannot block a complete replacement. */ }
   }
   let config: Record<string, unknown>;
-  try { config = mergeJsonFormValues(definition.fields, input.values ?? {}, existing); } catch { appError("PAYMENT_CONFIG_INVALID"); }
+  const submittedValues: JsonFormSubmitValues = { ...(input.values ?? {}) };
+  // Fields added after a configuration was stored fall back to their declared
+  // default, matching what the admin form pre-fills on open.
+  for (const field of definition.fields) {
+    if (field.secret || field.key in submittedValues || field.key in existing) continue;
+    const fallback = definition.defaults[field.key];
+    if (fallback !== undefined) submittedValues[field.key] = fallback;
+  }
+  try { config = mergeJsonFormValues(definition.fields, submittedValues, existing); } catch { appError("PAYMENT_CONFIG_INVALID"); }
   config.schemaVersion = definition.schemaVersion;
   const configJson = JSON.stringify(config);
   try { parseProviderConfig(input.provider, configJson); } catch { appError("PAYMENT_CONFIG_INVALID"); }

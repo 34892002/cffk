@@ -13,6 +13,8 @@ export type JsonFormFieldDefinition = {
   min?: number;
   max?: number;
   options?: Array<{ label: string; value: string }>;
+  /** Renders and validates this field only while the referenced field holds one of these values. */
+  visibleWhen?: { key: string; in: string[] };
 };
 export type JsonFormDefinition = {
   provider: string;
@@ -35,6 +37,17 @@ export function normalizeJsonFormInputValue(type: string, value: unknown): JsonF
 }
 
 type JsonFormValidationIssue = "required" | "invalid";
+
+export function isJsonFormFieldVisible(field: JsonFormFieldDefinition, values: Record<string, unknown>) {
+  const rule = field.visibleWhen;
+  if (!rule) return true;
+  const value = values[rule.key];
+  return typeof value === "string" && rule.in.includes(value);
+}
+
+export function visibleJsonFormFields(fields: readonly JsonFormFieldDefinition[], values: Record<string, unknown>) {
+  return fields.filter((field) => isJsonFormFieldVisible(field, values));
+}
 
 function jsonFormValidationIssue(field: JsonFormFieldDefinition, value: unknown, configuredSecret = false): JsonFormValidationIssue | null {
   const missing = value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
@@ -63,7 +76,7 @@ function jsonFormValidationIssue(field: JsonFormFieldDefinition, value: unknown,
 export function getJsonFormErrors(fields: readonly JsonFormFieldDefinition[], values: Record<string, unknown>, configuredSecrets: readonly string[] = []) {
   const configured = new Set(configuredSecrets);
   const errors: Record<string, string> = {};
-  for (const field of fields) {
+  for (const field of visibleJsonFormFields(fields, values)) {
     const issue = jsonFormValidationIssue(field, values[field.key], configured.has(field.key));
     if (issue === "required") errors[field.key] = `请填写${field.label}。`;
     else if (issue === "invalid") errors[field.key] = `${field.label}格式无效。`;
@@ -72,7 +85,7 @@ export function getJsonFormErrors(fields: readonly JsonFormFieldDefinition[], va
 }
 
 export function validateJsonFormValues(fields: readonly JsonFormFieldDefinition[], values: Record<string, unknown>) {
-  for (const field of fields) {
+  for (const field of visibleJsonFormFields(fields, values)) {
     const issue = jsonFormValidationIssue(field, values[field.key]);
     if (issue === "required") throw new Error(`Required JSON form field: ${field.key}`);
     if (issue === "invalid") throw new Error(`Invalid JSON form field: ${field.key}`);
@@ -107,6 +120,15 @@ export function mergeJsonFormValues(
     result[key] = value;
   }
 
+  // A field that the submitted values no longer reveal (for example RSA keys after
+  // switching back to MD5) must not stay in the stored configuration. Legacy
+  // payloads without the controlling field keep their existing values.
+  for (const field of fields) {
+    const rule = field.visibleWhen;
+    if (!rule || !(rule.key in result)) continue;
+    if (!isJsonFormFieldVisible(field, result)) delete result[field.key];
+  }
+
   return result;
 }
 
@@ -115,17 +137,21 @@ export function buildJsonFormSubmission(
   values: JsonFormValues,
   clearedSecrets: readonly string[] = [],
 ) {
-  const submitted: JsonFormSubmitValues = { ...values };
+  const submitted: JsonFormSubmitValues = {};
   const cleared = new Set(clearedSecrets);
 
-  for (const field of fields) {
-    if (!field.secret) continue;
+  for (const field of visibleJsonFormFields(fields, values)) {
+    if (!field.secret) {
+      if (Object.hasOwn(values, field.key)) submitted[field.key] = values[field.key] ?? "";
+      continue;
+    }
     if (cleared.has(field.key)) {
       submitted[field.key] = null;
       continue;
     }
-    const value = submitted[field.key];
-    if (typeof value !== "string" || !value.trim()) delete submitted[field.key];
+    const value = values[field.key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    submitted[field.key] = value;
   }
 
   return submitted;

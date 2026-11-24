@@ -33,12 +33,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { normalizeJsonFormInputValue, type JsonFormFieldDefinition, type JsonFormInputValue, type JsonFormValues } from "@/lib/json-form-values";
+import { normalizeJsonFormInputValue, visibleJsonFormFields, type JsonFormFieldDefinition, type JsonFormInputValue, type JsonFormValues } from "@/lib/json-form-values";
 
 const props = defineProps<{ fields: JsonFormFieldDefinition[]; values: JsonFormValues; configuredSecrets: string[]; errors?: Record<string, string> }>();
 const errors = computed(() => props.errors ?? {});
 const emit = defineEmits<{ "update:values": [values: JsonFormValues] }>();
-const visibleFields = computed(() => props.fields.filter((field) => field.key !== "notifyUrl" && field.key !== "returnUrl"));
+const visibleFields = computed(() => visibleJsonFormFields(props.fields, props.values).filter((field) => field.key !== "notifyUrl" && field.key !== "returnUrl"));
 function setValue(key: string, value: JsonFormInputValue) { emit("update:values", { ...props.values, [key]: value }); }
 function stringValue(key: string) { const value = props.values[key]; return typeof value === "string" || typeof value === "number" ? String(value) : ""; }
 function arrayValue(key: string) { const value = props.values[key]; return Array.isArray(value) ? value : []; }

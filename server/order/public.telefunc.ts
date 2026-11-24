@@ -66,7 +66,7 @@ async function internalOnResumeOrderPayment(input: {
     clientIp: context.clientIp,
   });
 
-  return new PaymentFlowService(context.env.DB, context.env).resume(input.orderNo, userId, input.email, context.locale);
+  return new PaymentFlowService(context.env.DB, context.env).resume(input.orderNo, userId, input.email, context.locale, context.clientIp);
 }
 
 async function internalOnQueryOrder(input: {

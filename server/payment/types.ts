@@ -62,7 +62,7 @@ export type PaymentNotifyResult = {
 };
 
 export type PaymentAdapter = {
-  create(input: { orderNo: string; amount: number; subject: string; notifyUrl: string; returnUrl: string; channel?: PaymentChannel }): Promise<PaymentResult>;
+  create(input: { orderNo: string; amount: number; subject: string; notifyUrl: string; returnUrl: string; channel?: PaymentChannel; clientIp?: string }): Promise<PaymentResult>;
   verify(input: { payload: Record<string, string>; rawBody?: string; rawBodyBytes?: Uint8Array; headers?: Headers }): Promise<PaymentNotifyResult>;
   query?(input: { orderNo: string; paymentOrderNo?: string; amount: number }): Promise<PaymentQueryResult>;
 };
