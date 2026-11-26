@@ -443,7 +443,10 @@ export const guestOrderRecoveryChallenge = sqliteTable(
     consumedAt: integer("consumedAt", { mode: "timestamp_ms" }),
     createdAt,
   },
-  (table) => [index("guestRecovery_email_createdAt_idx").on(table.emailNormalized, table.createdAt)],
+  (table) => [
+    index("guestRecovery_email_createdAt_idx").on(table.emailNormalized, table.createdAt),
+    index("guestRecovery_expiresAt_idx").on(table.expiresAt),
+  ],
 );
 
 export const emailTemplate = sqliteTable(

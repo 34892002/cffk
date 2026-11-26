@@ -1,6 +1,7 @@
 import { reportUnexpectedServerError } from "./error-handling";
 import { retryDuePushes } from "./push/service";
 import { closeExpiredPendingOrders, processPendingAutomaticDeliveries } from "./order/service";
+import { pruneGuestOrderRecoveryChallenges } from "./order/recovery-service";
 import { processOrderEvents } from "./email/order-events";
 import { recordScheduledMaintenanceFailure } from "./scheduled-task-log";
 import { reconcilePendingAlipayPayments } from "./payment/reconciliation-service";
@@ -14,6 +15,7 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
   const runFiveMinuteMaintenance = now.getUTCMinutes() % 5 === 0;
   let reconciliation: Awaited<ReturnType<typeof reconcilePendingAlipayPayments>> | null = null;
   let orderCleanup: Awaited<ReturnType<typeof closeExpiredPendingOrders>> | null = null;
+  let recoveryChallengeCleanup: number | null = null;
   let automaticDelivery: Awaited<ReturnType<typeof processPendingAutomaticDeliveries>> | null = null;
   let orderEvents: Awaited<ReturnType<typeof processOrderEvents>> | null = null;
   let pushRetry: Awaited<ReturnType<typeof retryDuePushes>> | null = null;
@@ -54,6 +56,15 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
       failedTasks += 1;
       failures.push(`自动发货: ${errorMessage(automaticDeliveryResult.reason)}`);
       reportUnexpectedServerError("scheduled-automatic-delivery", automaticDeliveryResult.reason);
+    }
+
+    attemptedTasks += 1;
+    try {
+      recoveryChallengeCleanup = await pruneGuestOrderRecoveryChallenges(database, now);
+    } catch (cause) {
+      failedTasks += 1;
+      failures.push(`恢复码清理: ${errorMessage(cause)}`);
+      reportUnexpectedServerError("scheduled-recovery-challenge-cleanup", cause);
     }
   }
 
@@ -117,7 +128,7 @@ export async function runScheduledMaintenance(database: D1Database, runtime: Rec
     }
   }
 
-  return { runFiveMinuteMaintenance, reconciliation, orderCleanup, automaticDelivery, supplierOrders, supplierMaintenance, orderEvents, pushRetry };
+  return { runFiveMinuteMaintenance, reconciliation, orderCleanup, automaticDelivery, supplierOrders, supplierMaintenance, orderEvents, pushRetry, recoveryChallengeCleanup };
 }
 
 function errorMessage(cause: unknown) {

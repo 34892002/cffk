@@ -248,7 +248,7 @@ const messages = {
     title: "订单中心",
     description: "通过本机记录、订单号和下单邮箱查询或恢复匿名订单。",
     lookup: { title: "查询匿名订单", description: "使用订单号和对应的下单邮箱查询详情。", orderNumber: "订单号", placeholder: "ORD...", email: "下单邮箱", failed: "查询失败", loading: "查询中...", notFound: "订单不存在，或下单邮箱不匹配。", emailRequired: "请输入该匿名订单的下单邮箱后查询。" },
-    recovery: { title: "邮箱 OTP 恢复", description: "验证下单邮箱后，以服务端最近的匿名订单原子覆盖该邮箱的本机分组。", email: "下单邮箱", code: "6 位验证码", changeEmail: "更换邮箱", sendCode: "发送验证码", verify: "验证并恢复", submitting: "处理中...", truncatedNote: "仅恢复最近 50 个匿名订单；更早记录未写入本机。", codeSent: "验证码已发送，请检查邮箱。", sendFailed: "验证码发送失败，请稍后再试。", storageFailed: "验证成功，但无法写入浏览器存储；原有本机订单未更改。", verifyFailed: "验证失败，原有本机订单未更改。", recovered: "已恢复 {count} 个匿名订单。", truncated: "仅恢复最近 50 个匿名订单，更早记录未写入本机。", captchaRequired: "请先完成人机验证。", captchaFailed: "人机验证未通过，请刷新页面后重试。", captchaLoadFailed: "人机验证加载失败，请刷新页面后重试。" },
+    recovery: { title: "邮箱 OTP 恢复", description: "验证下单邮箱后，以服务端最近的匿名订单原子覆盖该邮箱的本机分组。", email: "下单邮箱", code: "6 位验证码", changeEmail: "更换邮箱", sendCode: "发送验证码", verify: "验证并恢复", submitting: "处理中...", truncatedNote: "仅恢复最近 50 个匿名订单；更早记录未写入本机。", codeSent: "如果该邮箱有匿名订单，验证码将发送到该邮箱，请检查收件箱。", sendFailed: "验证码发送失败，请稍后再试。", storageFailed: "验证成功，但无法写入浏览器存储；原有本机订单未更改。", verifyFailed: "验证失败，原有本机订单未更改。", recovered: "已恢复 {count} 个匿名订单。", truncated: "仅恢复最近 50 个匿名订单，更早记录未写入本机。", captchaRequired: "请先完成人机验证。", captchaFailed: "人机验证未通过，请刷新页面后重试。", captchaLoadFailed: "人机验证加载失败，请刷新页面后重试。" },
     validation: { orderNumberRequired: "请输入订单号。", emailInvalid: "请输入有效的下单邮箱。", codeInvalid: "请输入 6 位数字验证码。" },
     back: "返回",
     backAriaLabel: "返回匿名订单列表",

@@ -299,7 +299,7 @@ export default {
     title: "訂單中心",
     description: "透過本機記錄、訂單號碼和下單電子郵件查詢或復原匿名訂單。",
     lookup: { title: "查詢匿名訂單", description: "使用訂單號碼和對應的下單電子郵件查詢詳情。", orderNumber: "訂單號碼", placeholder: "ORD...", email: "下單電子郵件", failed: "查詢失敗", loading: "查詢中...", notFound: "訂單不存在，或下單電子郵件不符。", emailRequired: "請輸入該匿名訂單的下單電子郵件後查詢。" },
-    recovery: { title: "電子郵件 OTP 復原", description: "驗證下單電子郵件後，以伺服器最近的匿名訂單原子覆寫該電子郵件的本機分組。", email: "下單電子郵件", code: "6 位驗證碼", changeEmail: "更換電子郵件", sendCode: "傳送驗證碼", verify: "驗證並復原", submitting: "處理中...", truncatedNote: "僅復原最近 50 個匿名訂單；更早記錄未寫入本機。", codeSent: "驗證碼已傳送，請檢查電子郵件。", sendFailed: "驗證碼傳送失敗，請稍後再試。", storageFailed: "驗證成功，但無法寫入瀏覽器儲存；原有本機訂單未變更。", verifyFailed: "驗證失敗，原有本機訂單未變更。", recovered: "已復原 {count} 個匿名訂單。", truncated: "僅復原最近 50 個匿名訂單，更早記錄未寫入本機。", captchaRequired: "請先完成人機驗證。", captchaFailed: "人機驗證未通過，請重新整理頁面後再試。", captchaLoadFailed: "人機驗證載入失敗，請重新整理頁面後再試。" },
+    recovery: { title: "電子郵件 OTP 復原", description: "驗證下單電子郵件後，以伺服器最近的匿名訂單原子覆寫該電子郵件的本機分組。", email: "下單電子郵件", code: "6 位驗證碼", changeEmail: "更換電子郵件", sendCode: "傳送驗證碼", verify: "驗證並復原", submitting: "處理中...", truncatedNote: "僅復原最近 50 個匿名訂單；更早記錄未寫入本機。", codeSent: "如果該電子郵件有匿名訂單，驗證碼將寄送至該信箱，請檢查收件匣。", sendFailed: "驗證碼傳送失敗，請稍後再試。", storageFailed: "驗證成功，但無法寫入瀏覽器儲存；原有本機訂單未變更。", verifyFailed: "驗證失敗，原有本機訂單未變更。", recovered: "已復原 {count} 個匿名訂單。", truncated: "僅復原最近 50 個匿名訂單，更早記錄未寫入本機。", captchaRequired: "請先完成人機驗證。", captchaFailed: "人機驗證未通過，請重新整理頁面後再試。", captchaLoadFailed: "人機驗證載入失敗，請重新整理頁面後再試。" },
     validation: { orderNumberRequired: "請輸入訂單號碼。", emailInvalid: "請輸入有效的下單電子郵件。", codeInvalid: "請輸入 6 位數字驗證碼。" },
     back: "返回",
     backAriaLabel: "返回匿名訂單列表",

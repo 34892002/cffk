@@ -1,0 +1,1 @@
+CREATE INDEX `guestRecovery_expiresAt_idx` ON `guestOrderRecoveryChallenge` (`expiresAt`);

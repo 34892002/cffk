@@ -1,29 +1,15 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { guestOrderRecoveryChallenge, order } from "@/database/drizzle/schema";
+import { guestOrderRecoveryChallenge } from "@/database/drizzle/schema";
 import { appError } from "@/lib/app-error";
-
 import { formatMinor, isCurrencyCode } from "@/lib/money";
 import type { StorefrontLocale } from "@/lib/i18n/locale";
-import { dispatchPush } from "@/server/push/service";
-import type { PushDispatchInput } from "@/server/push/types";
-import { getSiteSettings } from "@/server/site/public-settings";
-import { enforceOrderRequestRateLimit } from "@/server/order/rate-limit";
-import { verifyTurnstileToken } from "@/server/security/turnstile";
 import { telefuncAction } from "@/server/telefunc-action";
 import { getContext } from "telefunc";
-import { generateRecoveryCode, hashRecoveryCode, normalizeRecoveryEmail } from "./recovery-code";
+import { hashRecoveryCode, normalizeRecoveryEmail } from "./recovery-code";
+import { sendGuestOrderRecoveryCode, type RecoveryRuntime } from "./recovery-service";
 
-const PURPOSE = "GUEST_ORDER_RECOVERY";
-const CODE_TTL_MS = 10 * 60 * 1000;
-const RESEND_INTERVAL_MS = 60 * 1000;
-const HOURLY_SEND_LIMIT = 5;
 const MAX_VERIFY_ATTEMPTS = 5;
-
-type RecoveryRuntime = Record<string, unknown> & {
-  DB?: D1Database;
-  BETTER_AUTH_SECRET?: string;
-};
 
 type TelefuncContext = {
   env?: RecoveryRuntime;
@@ -63,79 +49,9 @@ function constantTimeEqual(left: string, right: string) {
 }
 
 
-async function insertRateLimitedChallenge(database: D1Database, values: {
-  id: string;
-  emailNormalized: string;
-  codeHash: string;
-  expiresAt: number;
-  createdAt: number;
-}) {
-  const result = await database.prepare(`INSERT INTO guestOrderRecoveryChallenge
-    (id, emailNormalized, codeHash, expiresAt, attemptCount, consumedAt, createdAt)
-    SELECT ?, ?, ?, ?, 0, NULL, ?
-    WHERE NOT EXISTS (
-      SELECT 1 FROM guestOrderRecoveryChallenge
-      WHERE emailNormalized = ? AND createdAt > ?
-    ) AND (
-      SELECT COUNT(*) FROM guestOrderRecoveryChallenge
-      WHERE emailNormalized = ? AND createdAt > ?
-    ) < ?`).bind(
-    values.id,
-    values.emailNormalized,
-    values.codeHash,
-    values.expiresAt,
-    values.createdAt,
-    values.emailNormalized,
-    values.createdAt - RESEND_INTERVAL_MS,
-    values.emailNormalized,
-    values.createdAt - 60 * 60 * 1000,
-    HOURLY_SEND_LIMIT,
-  ).run();
-  return result.meta.changes === 1;
-}
-
 async function internalOnSendGuestOrderRecoveryCode(input: { email: string; turnstileToken?: string }) {
-  const emailNormalized = normalizeRecoveryEmail(input?.email);
   const { database, runtime, secret, clientIp, locale } = recoveryContext();
-  await verifyTurnstileToken(runtime, input?.turnstileToken, clientIp);
-  await enforceOrderRequestRateLimit(database, { action: "RECOVERY", userId: null, clientIp });
-  const [matchingOrder] = await createDrizzleDb(database).select({ id: order.id }).from(order).where(and(
-    isNull(order.ownerUserId),
-    eq(order.contactType, "EMAIL"),
-    eq(order.contactEmailNormalized, emailNormalized),
-  )).limit(1);
-  if (!matchingOrder) appError("ORDER_NOT_FOUND");
-  const challengeId = crypto.randomUUID();
-  const code = generateRecoveryCode();
-  const createdAt = Date.now();
-  const inserted = await insertRateLimitedChallenge(database, {
-    id: challengeId,
-    emailNormalized,
-    codeHash: await hashRecoveryCode(secret, challengeId, code),
-    expiresAt: createdAt + CODE_TTL_MS,
-    createdAt,
-  });
-  if (!inserted) appError("OTP_RATE_LIMITED");
-
-  const settings = await getSiteSettings(database);
-  const pushInput = {
-    scene: PURPOSE,
-    messageType: "NORMAL",
-    recipient: { type: "CUSTOMER", address: emailNormalized },
-    variables: { siteName: settings.siteName, code, expiresMinutes: CODE_TTL_MS / 60_000 },
-    source: `guest-order-recovery:${challengeId}`,
-    ...(locale ? { locale } : {}),
-  } as PushDispatchInput;
-
-  try {
-    const results = await dispatchPush(database, runtime, pushInput);
-    if (!results.length || results.some(result => result.status !== "SUCCESS")) appError("EMAIL_SEND_FAILED");
-  } catch {
-    await database.prepare("UPDATE guestOrderRecoveryChallenge SET consumedAt = ? WHERE id = ? AND consumedAt IS NULL").bind(Date.now(), challengeId).run();
-    appError("EMAIL_SEND_FAILED");
-  }
-
-  return { challengeId, expiresAt: new Date(createdAt + CODE_TTL_MS) };
+  return sendGuestOrderRecoveryCode(input, { database, runtime, secret, clientIp, locale });
 }
 
 async function invalidAttempt(database: D1Database, challengeId: string, now: number): Promise<never> {
