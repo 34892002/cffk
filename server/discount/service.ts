@@ -20,7 +20,7 @@ type DiscountCandidate = {
 };
 
 type PurchasableProduct = {
-  id: number;
+  productId: number;
   price: number;
   minBuy: number;
   maxBuy: number;
@@ -66,7 +66,7 @@ export async function validateDiscountForItem(database: ReturnType<typeof create
   const originalAmount = item.price * quantity;
   const [candidate] = await database.select().from(discountCode).where(eq(discountCode.code, code)).limit(1);
   if (!candidate) appError("DISCOUNT_CODE_NOT_FOUND");
-  return { originalAmount, ...validateDiscountCandidate(candidate, item.id, originalAmount) };
+  return { originalAmount, ...validateDiscountCandidate(candidate, item.productId, originalAmount) };
 }
 
 export async function previewDiscount(database: D1Database, input: { productId: number; productSkuId: number; quantity: number; discountCode: string }) {
@@ -74,7 +74,7 @@ export async function previewDiscount(database: D1Database, input: { productId: 
   const productSkuId = positiveInteger(input.productSkuId, "PRODUCT_SKU_ID");
   const requestedQuantity = positiveInteger(input.quantity, "QUANTITY");
   const db = createDrizzleDb(database);
-  const [item] = await db.select({ id: productSku.productId, price: productSku.price, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy }).from(productSku).innerJoin(productV2, eq(productSku.productId, productV2.id)).where(and(eq(productSku.id, productSkuId), eq(productSku.productId, productId), eq(productSku.status, "ACTIVE"), eq(productV2.status, "ACTIVE"))).limit(1);
+  const [item] = await db.select({ productId: productSku.productId, price: productSku.price, minBuy: productSku.minBuy, maxBuy: productSku.maxBuy }).from(productSku).innerJoin(productV2, eq(productSku.productId, productV2.id)).where(and(eq(productSku.id, productSkuId), eq(productSku.productId, productId), eq(productSku.status, "ACTIVE"), eq(productV2.status, "ACTIVE"))).limit(1);
   if (!item) appError("PRODUCT_NOT_AVAILABLE");
 
   const quantity = Math.max(item.minBuy, Math.min(item.maxBuy, requestedQuantity));
