@@ -76,10 +76,7 @@ async function onSubmit() {
       email: email.value,
       password: password.value,
       fetchOptions: {
-        headers: {
-          "x-cffk-admin-login": "1",
-          ...turnstileHeaders(),
-        },
+        headers: turnstileHeaders(),
       },
     });
     if (res.error) {

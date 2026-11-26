@@ -5,7 +5,7 @@ import type { RuntimeAdapter } from "@universal-middleware/core";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { captcha, twoFactor } from "better-auth/plugins";
 import { getDrizzleDb } from "../database/drizzle";
 import { schema } from "../database/drizzle/schema";
@@ -106,6 +106,25 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, o
         await getDrizzleDb(runtime).update(schema.user)
           .set({ emailChangeRequestedAt: new Date(), emailChangePendingEmail: null })
           .where(sql`${schema.user.id} = ${user.id} AND ${schema.user.emailChangePendingEmail} = ${user.email}`);
+      },
+    },
+    // Runs after credentials are verified, so anonymous probes cannot use the
+    // response to enumerate disabled accounts. Better Auth has already returned
+    // the same generic error for unknown emails and wrong passwords by then.
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session) => {
+            const [account] = await getDrizzleDb(runtime)
+              .select({ disabledAt: schema.user.disabledAt })
+              .from(schema.user)
+              .where(eq(schema.user.id, session.userId))
+              .limit(1);
+            if (account?.disabledAt) {
+              throw new APIError("FORBIDDEN", { code: "ACCOUNT_DISABLED", message: "Account is disabled." });
+            }
+          },
+        },
       },
     },
     hooks: {

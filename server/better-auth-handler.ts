@@ -8,7 +8,7 @@ import { betterAuth } from "better-auth";
 import { getAuthConfig } from "./better-auth";
 import { resolveRequestLocale, type StorefrontLocale } from "@/lib/i18n/locale";
 import { resolveAuthOrigin, rewriteRequestOrigin, withAuthNoStore } from "./auth-origin";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { schema } from "../database/drizzle/schema";
 import { getDrizzleDb } from "../database/drizzle";
 import { hasRoot } from "./admin";
@@ -111,35 +111,6 @@ export const betterAuthHandler = enhance(
         { code: "SITE_URL_REQUIRED", message: "Set the site URL in system settings before using email authentication." },
         { status: 503 },
       ));
-    }
-
-    if (authRequest.method === "POST" && authPath.endsWith("/sign-in/email")) {
-      const body = await authRequest.clone().json().catch(() => null) as { email?: unknown } | null;
-      const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-      const isAdminLogin = authRequest.headers.get("x-cffk-admin-login") === "1";
-      if (email) {
-        const [account] = await getDrizzleDb(runtime)
-          .select({ disabledAt: schema.user.disabledAt, rootUserId: schema.adminBootstrap.userId })
-          .from(schema.user)
-          .leftJoin(schema.adminBootstrap, eq(schema.adminBootstrap.userId, schema.user.id))
-          .where(sql`lower(${schema.user.email}) = ${email}`)
-          .limit(1);
-        if (isAdminLogin && (!account || account.disabledAt || !account.rootUserId)) {
-          return withAuthNoStore(Response.json(
-            { code: "INVALID_ADMIN_CREDENTIALS", message: "Invalid credentials." },
-            { status: 401 },
-          ));
-        }
-        if (!isAdminLogin && account?.rootUserId) {
-          return withAuthNoStore(Response.json(
-            { code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid email or password" },
-            { status: 401 },
-          ));
-        }
-        if (account?.disabledAt) {
-          return withAuthNoStore(Response.json({ code: "ACCOUNT_DISABLED", message: "Account is disabled." }, { status: 403 }));
-        }
-      }
     }
 
     return withAuthNoStore(await getAuth(runtime, publicOrigin ?? undefined, locale).handler(authRequest));
