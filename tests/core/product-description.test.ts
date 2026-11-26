@@ -110,6 +110,21 @@ test("filters inline styles to the allowlist", () => {
   assert.ok(!clean.includes("position"), clean);
 });
 
+test("escapes inline style values so quotes cannot inject new attributes", () => {
+  const payloads = [
+    '<span style=\'color:red" onmouseover="alert(1)\'>x</span>',
+    '<span style="color:red&quot; onmouseover=&quot;alert(1)">x</span>',
+    '<span style="color:red&#34; onmouseover=&#34;alert(1)">x</span>',
+    '<mark style="background-color:yellow&quot; onmouseover=&quot;alert(1)">x</mark>',
+  ];
+
+  for (const payload of payloads) {
+    const clean = sanitizeProductDescription(payload)!;
+    // Only one `style` attribute survives; escaped quotes stay inside it.
+    assert.match(clean, /^<(span|mark) style="[^"]*">x<\/\1>$/i, clean);
+  }
+});
+
 test("drops comments and returns null for empty output", () => {
   assert.equal(sanitizeProductDescription("a<!-- hidden -->b"), "ab");
   assert.equal(sanitizeProductDescription("   "), null);
