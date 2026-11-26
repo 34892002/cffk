@@ -13,6 +13,8 @@ import { schema } from "../database/drizzle/schema";
 import { getDrizzleDb } from "../database/drizzle";
 import { hasRoot } from "./admin";
 
+const EMAIL_LINK_PATHS = ["/sign-up/email", "/request-password-reset", "/send-verification-email", "/change-email"];
+
 // On Cloudflare the D1 binding is request-scoped (fresh instance per request); elsewhere it's memoized.
 function getAuth(runtime: RuntimeAdapter, publicOrigin?: string, locale?: StorefrontLocale) {
   return betterAuth(getAuthConfig(runtime, publicOrigin, locale ? { locale } : {}));
@@ -24,9 +26,11 @@ function getAuth(runtime: RuntimeAdapter, publicOrigin?: string, locale?: Storef
  * @link {@see https://better-auth.com/docs/concepts/session-management}
  */
 export async function getRequestSession(request: Request, runtime: RuntimeAdapter) {
-  const publicOrigin = await resolveAuthOrigin(request, runtime);
-  const authRequest = rewriteRequestOrigin(request, publicOrigin);
-  return getAuth(runtime, publicOrigin).api.getSession({ headers: authRequest.headers });
+  // Without a configured site URL there is no trusted public origin to rewrite
+  // to; keep the request untouched instead of trusting the incoming Host.
+  const publicOrigin = await resolveAuthOrigin(runtime);
+  const authRequest = publicOrigin ? rewriteRequestOrigin(request, publicOrigin) : request;
+  return getAuth(runtime, publicOrigin ?? undefined).api.getSession({ headers: authRequest.headers });
 }
 
 export const betterAuthSessionMiddleware: UniversalMiddleware = enhance(
@@ -83,8 +87,8 @@ export const betterAuthSessionMiddleware: UniversalMiddleware = enhance(
  **/
 export const betterAuthHandler = enhance(
   async (request, _context, runtime) => {
-    const publicOrigin = await resolveAuthOrigin(request, runtime);
-    const authRequest = rewriteRequestOrigin(request, publicOrigin);
+    const publicOrigin = await resolveAuthOrigin(runtime);
+    const authRequest = publicOrigin ? rewriteRequestOrigin(request, publicOrigin) : request;
     const locale = resolveRequestLocale({
       cookie: request.headers.get("cookie"),
       acceptLanguage: request.headers.get("accept-language"),
@@ -95,6 +99,16 @@ export const betterAuthHandler = enhance(
     if (isEmailSignUp && !(await hasRoot(runtime))) {
       return withAuthNoStore(Response.json(
         { code: "SIGN_UP_UNAVAILABLE", message: "Sign-up is currently unavailable." },
+        { status: 503 },
+      ));
+    }
+
+    // These endpoints put a link in an outgoing email. They must only use the
+    // administrator-configured site URL, so fail fast rather than letting
+    // Better Auth derive a link base from the request Host.
+    if (!publicOrigin && authRequest.method === "POST" && EMAIL_LINK_PATHS.some((suffix) => authPath.endsWith(suffix))) {
+      return withAuthNoStore(Response.json(
+        { code: "SITE_URL_REQUIRED", message: "Set the site URL in system settings before using email authentication." },
         { status: 503 },
       ));
     }
@@ -128,7 +142,7 @@ export const betterAuthHandler = enhance(
       }
     }
 
-    return withAuthNoStore(await getAuth(runtime, publicOrigin, locale).handler(authRequest));
+    return withAuthNoStore(await getAuth(runtime, publicOrigin ?? undefined, locale).handler(authRequest));
   },
   {
     name: "my-app:better-auth-handler",

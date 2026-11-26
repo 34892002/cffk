@@ -36,6 +36,17 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, o
       return;
     }
 
+    // Never build auth email links from the request Host. Until the admin saves
+    // a site URL there is no trusted origin, so refuse to send (setup has no
+    // visitor-facing email link and skips this guard).
+    if (!publicOrigin) {
+      if (options.allowSetupRegistration) return;
+      throw new APIError("SERVICE_UNAVAILABLE", {
+        code: "SITE_URL_REQUIRED",
+        message: "Set the site URL in system settings before using email authentication.",
+      });
+    }
+
     try {
       const [settings] = await getDrizzleDb(runtime)
         .select({ siteName: schema.siteSetting.siteName })

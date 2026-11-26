@@ -13,17 +13,17 @@ function normalizeOrigin(value: string): string | null {
 
 // The configured public site URL is authoritative when a third-party CDN
 // changes the request Host while proxying to a Cloudflare Worker custom domain.
-// Before the first configuration is saved, use the current request origin so
-// Better Auth always receives an explicit baseURL.
-export async function resolveAuthOrigin(request: Request, runtime: RuntimeAdapter): Promise<string> {
-  const requestOrigin = new URL(request.url).origin;
-  if (runtime.runtime !== "workerd" || !runtime.env?.DB) return requestOrigin;
+// Never fall back to the request origin: auth emails must only link to the
+// administrator-configured domain, so a forged Host header cannot poison
+// password reset or verification links. Callers treat null as "not configured".
+export async function resolveAuthOrigin(runtime: RuntimeAdapter): Promise<string | null> {
+  if (runtime.runtime !== "workerd" || !runtime.env?.DB) return null;
 
   try {
     const setting = await getSiteSettings(runtime.env.DB as D1Database);
-    return setting.siteUrl ? normalizeOrigin(setting.siteUrl) ?? requestOrigin : requestOrigin;
+    return setting.siteUrl ? normalizeOrigin(setting.siteUrl) : null;
   } catch {
-    return requestOrigin;
+    return null;
   }
 }
 
