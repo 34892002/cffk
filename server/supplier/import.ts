@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { appError } from "@/lib/app-error";
+import { AppError, appError } from "@/lib/app-error";
+import { sanitizeProductDescription } from "@/server/catalog/product-description";
 
 import { slugify } from "@/lib/slugify";
 import { supplierPurchaseContextSchema } from "./schema";
@@ -33,6 +34,20 @@ function uniqueSlug(base: string, suffix: string) {
   return `${value}-${slugify(suffix) || "item"}`.slice(0, 180);
 }
 
+function importedDescription(raw: string, fallback: string): string | null {
+  const candidate = raw.trim() ? raw : fallback;
+  try {
+    return sanitizeProductDescription(candidate) ?? sanitizeProductDescription(fallback);
+  } catch (cause) {
+    // Upstream allows much longer HTML than the storefront. Keep the import
+    // moving with the sanitized product name instead of failing the whole sync.
+    if (cause instanceof AppError && cause.code === "PRODUCT_DESCRIPTION_TOO_LONG") {
+      return sanitizeProductDescription(fallback);
+    }
+    throw cause;
+  }
+}
+
 export async function importSupplierProduct(db: SupplierDb, input: SupplierImportInput, catalogProduct: SupplierProduct) {
   if (catalogProduct.id !== input.productId) appError("SUPPLIER_PRODUCT_NOT_FOUND");
   const selected = catalogProduct.skus.filter((sku) => input.skuIds.includes(sku.id));
@@ -46,7 +61,7 @@ export async function importSupplierProduct(db: SupplierDb, input: SupplierImpor
     ? [undefined]
     : await db.select({ id: category.id }).from(category).where(and(eq(category.slug, "default"), eq(category.status, "ACTIVE"))).limit(1);
   if (!existing && !defaultCategory) appError("PRODUCT_CATEGORY_REQUIRED");
-  const localProduct = existing ? (await db.select().from(productV2).where(eq(productV2.id, existing.productId)).limit(1))[0] : (await db.insert(productV2).values({ categoryId: defaultCategory!.id, name: catalogProduct.name, slug: uniqueSlug(catalogProduct.name, `${input.provider}-${input.productId}`), description: catalogProduct.description || catalogProduct.name, status: "DRAFT", createdAt: now, updatedAt: now }).returning())[0];
+  const localProduct = existing ? (await db.select().from(productV2).where(eq(productV2.id, existing.productId)).limit(1))[0] : (await db.insert(productV2).values({ categoryId: defaultCategory!.id, name: catalogProduct.name, slug: uniqueSlug(catalogProduct.name, `${input.provider}-${input.productId}`), description: importedDescription(catalogProduct.description, catalogProduct.name), status: "DRAFT", createdAt: now, updatedAt: now }).returning())[0];
   if (!localProduct) appError("SUPPLIER_IMPORT_FAILED");
   // A previous import may have created one synthetic SKU using the product
   // code. Once ACG exposes category SKUs, that binding is stale and must not

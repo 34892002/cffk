@@ -1,4 +1,5 @@
 import { appError } from "@/lib/app-error";
+import * as xss from "xss";
 
 export const PRODUCT_DESCRIPTION_LIMITS = {
   rawHtml: 100_000,
@@ -7,78 +8,106 @@ export const PRODUCT_DESCRIPTION_LIMITS = {
   attribute: 500,
 } as const;
 
-const allowedTags = new Set(["p", "br", "h1", "h2", "h3", "strong", "em", "blockquote", "ul", "ol", "li", "a", "img", "hr", "span", "mark"]);
-const voidTags = new Set(["br", "img", "hr"]);
-const dangerousBlocks = /<(script|style|iframe|object|embed|form)(?:\s[^>]*)?>[\s\S]*?<\/\1\s*>/gi;
-const tagPattern = /<!--[\s\S]*?-->|<\/?[a-z][^>]*>/gi;
-const attributePattern = /\s+([:\w-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/gi;
+const whiteList = {
+  p: [],
+  br: [],
+  h1: [],
+  h2: [],
+  h3: [],
+  h4: [],
+  h5: [],
+  h6: [],
+  strong: [],
+  b: [],
+  em: [],
+  i: [],
+  s: [],
+  del: [],
+  strike: [],
+  code: ["class"],
+  pre: [],
+  blockquote: [],
+  ul: [],
+  ol: [],
+  li: [],
+  a: ["href", "title"],
+  img: ["src", "alt", "title"],
+  hr: [],
+  span: ["style"],
+  mark: ["style", "data-color"],
+};
 
+function escapeAttribute(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
-function safeUrl(value: string, image: boolean) {
-  const url = value.trim();
-  if (!url || url.length > PRODUCT_DESCRIPTION_LIMITS.url || [...url].some((character) => character.charCodeAt(0) < 32)) return null;
-  if (image) {
-    if (url.startsWith("/media/proxy/")) return url;
-    try { const parsed = new URL(url); return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : null; } catch { return null; }
-  }
-  try {
-    const parsed = new URL(url, "https://invalid.local");
-    if (["http:", "https:", "mailto:"].includes(parsed.protocol) && (url.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(url))) return url;
-  } catch { /* invalid URL */ }
+function safeColor(value: string) {
+  const color = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+  if (/^rgba\((?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\s*,\s*(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\s*,\s*(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\s*,\s*(?:0|1|0?\.\d+|1\.0+)\s*\)$/i.test(color)) return color;
   return null;
 }
 
-function sanitizeInlineStyle(value: string) {
-  return value.split(";")
-    .map((declaration) => declaration.trim())
-    .filter((declaration) => declaration && !/(?:javascript\s*:|expression\s*\()/i.test(declaration))
-    .join(";");
-}
-
-function attributes(tag: string, name: string) {
-  const match = tag.match(/^<[a-z][^>]*>/i);
-  if (!match) return "";
-  const result: string[] = [];
-  const source = match[0].slice(1, -1);
-  const attributeSource = source.slice(name.length);
-  attributePattern.lastIndex = 0;
-  let item: RegExpExecArray | null;
-  while ((item = attributePattern.exec(attributeSource))) {
-    const key = item[1].toLowerCase();
-    const value = item[2] ?? item[3] ?? item[4] ?? "";
-    if (value.length > PRODUCT_DESCRIPTION_LIMITS.attribute) continue;
-    if (name === "a" && key === "href") { const url = safeUrl(value, false); if (url) result.push(` href="${escapeAttribute(url)}"`); }
-    if (name === "img" && (key === "src" || key === "alt" || key === "title")) {
-      const normalized = key === "src" ? safeUrl(value, true) : value.trim();
-      if (normalized) result.push(` ${key}="${escapeAttribute(normalized)}"`);
-    }
-    if ((name === "span" || name === "mark") && key === "style") {
-      const normalized = sanitizeInlineStyle(value);
-      if (normalized) result.push(` style="${normalized}"`);
-    }
+function safeUrl(value: string, image: boolean) {
+  const url = value.trim();
+  if (!url || url.length > PRODUCT_DESCRIPTION_LIMITS.url) return null;
+  for (const character of url) {
+    if (character.charCodeAt(0) < 32) return null;
   }
-  if (name === "img" && !result.some((value) => value.startsWith(" src="))) return "";
-  if (name === "a" && result.some((value) => value.startsWith(" href="))) result.push(' rel="noopener noreferrer" target="_blank"');
-  return result.join("");
+  if (image) {
+    if (url.startsWith("/media/proxy/")) return url;
+    return /^https?:\/\//i.test(url) ? url : null;
+  }
+  if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) return url;
+  // Root-relative only: `//host` is protocol-relative and would leave the site.
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
+  return null;
 }
 
-function escapeAttribute(value: string) { return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+const sanitizer = new xss.FilterXSS({
+  whiteList,
+  stripIgnoreTag: true,
+  stripIgnoreTagBody: ["script", "style", "iframe", "object", "embed", "form"],
+  allowCommentTag: false,
+  css: {
+    whiteList: {
+      color: true,
+      "background-color": true,
+      "font-weight": true,
+      "font-style": true,
+      "text-decoration": true,
+    },
+  },
+  onTagAttr(tag: string, name: string, value: string, isWhiteAttr: boolean) {
+    if (!isWhiteAttr) return;
+    if (tag === "a" && name === "href") {
+      const url = safeUrl(value, false);
+      // `onTagAttr` output is inserted as-is, so escape the URL ourselves.
+      return url ? `href="${escapeAttribute(url)}" rel="noopener noreferrer" target="_blank"` : "";
+    }
+    if (tag === "img" && name === "src") {
+      const url = safeUrl(value, true);
+      return url ? `src="${escapeAttribute(url)}"` : "";
+    }
+    if (tag === "code" && name === "class") {
+      const className = value.trim();
+      return /^language-[a-z0-9_-]{1,32}$/i.test(className) ? `class="${escapeAttribute(className)}"` : "";
+    }
+    if (tag === "mark" && name === "data-color") {
+      const color = safeColor(value);
+      return color ? `data-color="${escapeAttribute(color)}"` : "";
+    }
+    if (value.length > PRODUCT_DESCRIPTION_LIMITS.attribute) return "";
+  },
+});
 
 export function sanitizeProductDescription(html: string): string | null {
   if (typeof html !== "string" || html.length > PRODUCT_DESCRIPTION_LIMITS.rawHtml) appError("PRODUCT_DESCRIPTION_TOO_LONG");
-  const source = html.replace(dangerousBlocks, "");
-  const output = source.replace(tagPattern, (raw) => {
-    const closing = /^<\//.test(raw);
-    const nameMatch = raw.match(/^<\/?\s*([a-z0-9]+)/i);
-    const name = nameMatch?.[1]?.toLowerCase();
-    if (!name || !allowedTags.has(name)) return "";
-    if (closing) return `</${name}>`;
-    if (voidTags.has(name)) {
-      const cleanedAttributes = attributes(raw, name);
-      return cleanedAttributes || name !== "img" ? `<${name}${cleanedAttributes}>` : "";
-    }
-    return `<${name}${attributes(raw, name)}>`;
-  }).trim();
+  const output = sanitizer
+    .process(html)
+    // Drop images whose src was rejected; an empty <img> only renders a broken icon.
+    .replace(/<img\b[^>]*>/gi, (tag) => (/\bsrc\s*=/i.test(tag) ? tag : ""))
+    .trim();
   if (output.length > PRODUCT_DESCRIPTION_LIMITS.cleanHtml) appError("PRODUCT_DESCRIPTION_TOO_LONG");
-  return output.replace(/<((?:p|h1|h2|h3|blockquote|ul|ol|li|a|strong|em|img|hr|br|span|mark)(?:\s[^>]*)?)>\s*<\/\1>/gi, "") || null;
+  return output || null;
 }

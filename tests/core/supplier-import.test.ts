@@ -7,6 +7,7 @@ import { category, order, productSku, productV2, supplierAccount, supplierBindin
 import { importSupplierProduct } from "../../server/supplier/import";
 import { assertSupplierSkuPublishable } from "../../server/supplier/eligibility";
 import { getPublicProductDetail } from "../../server/catalog/public";
+import { PRODUCT_DESCRIPTION_LIMITS } from "../../server/catalog/product-description";
 import { createOrder } from "../../server/order/service";
 import { createTestDatabase } from "../helpers/sqlite-d1";
 
@@ -81,6 +82,73 @@ describe("supplier import", () => {
       expect(product).toMatchObject({ status: "DRAFT", categoryId: 1 });
       expect(sku).toMatchObject({ fulfillmentSource: "SUPPLIER", deliveryType: "SUPPLIER", status: "INACTIVE", physicalStock: null });
       expect(binding).toMatchObject({ productSkuId: sku?.id, upstreamProductId: "product-1", upstreamSkuId: "sku-1", remoteStatus: "active", referenceCostMinor: "100", maxCostMinor: "110" });
+    } finally {
+      close();
+    }
+  });
+
+  test("sanitizes upstream rich text before storing it", async () => {
+    const { database, close } = createTestDatabase();
+    try {
+      const db = createDrizzleDb(database);
+      const now = new Date();
+      await createDefaultCategory(db, now);
+      await db.insert(supplierAccount).values({
+        id: "account-1",
+        ...source,
+        baseUrl: source.normalizedApiOrigin,
+        name: "Primary account",
+        credentialsJson: "{}",
+        enabled: true,
+        balanceMinor: "1000",
+        healthStatus: "healthy",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await importSupplierProduct(
+        db,
+        { ...source, productId: "product-1", skuIds: ["sku-1"], fixedMarkupMinor: "10", markupBps: 0, publish: false },
+        {
+          ...catalogProduct,
+          description: '<p>Hello</p><img src=x onerror="alert(1)"><script>alert(2)</script><a href="javascript:alert(3)">link</a><svg onload="alert(4)"></svg><strong>bold</strong>',
+        },
+      );
+
+      const [product] = await db.select().from(productV2);
+      expect(product?.description).toBe("<p>Hello</p><a>link</a><strong>bold</strong>");
+    } finally {
+      close();
+    }
+  });
+
+  test("falls back to the sanitized name for oversized upstream descriptions", async () => {
+    const { database, close } = createTestDatabase();
+    try {
+      const db = createDrizzleDb(database);
+      const now = new Date();
+      await createDefaultCategory(db, now);
+      await db.insert(supplierAccount).values({
+        id: "account-1",
+        ...source,
+        baseUrl: source.normalizedApiOrigin,
+        name: "Primary account",
+        credentialsJson: "{}",
+        enabled: true,
+        balanceMinor: "1000",
+        healthStatus: "healthy",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await importSupplierProduct(
+        db,
+        { ...source, productId: "product-1", skuIds: ["sku-1"], fixedMarkupMinor: "10", markupBps: 0, publish: false },
+        { ...catalogProduct, name: "Safe product", description: `<p>${"a".repeat(PRODUCT_DESCRIPTION_LIMITS.rawHtml + 1)}</p>` },
+      );
+
+      const [product] = await db.select().from(productV2);
+      expect(product?.description).toBe("Safe product");
     } finally {
       close();
     }

@@ -4,7 +4,6 @@ import { requireAdmin } from "@/server/telefunc-context";
 import { appError } from "@/lib/app-error";
 import { slugify } from "@/lib/slugify";
 import { formatCentsAsYuan, parseAmountToCents } from "@/lib/payment-utils";
-import { sanitizeProductDescription } from "./product-description";
 import { CATEGORY_TRANSLATION_FIELDS, PRODUCT_TRANSLATION_FIELDS, SKU_TRANSLATION_FIELDS, normalizeContentTranslations, readContentTranslations, serializeContentTranslations, type ContentTranslation, type ContentTranslationLocale, type ContentTranslations } from "@/lib/content-translations";
 import { card, category, order, productV2, productSku, supplierBinding } from "@/database/drizzle/schema";
 import { assertSupplierSkuPublishable } from "@/server/supplier/eligibility";
@@ -78,15 +77,11 @@ function normalizeCategoryTranslations(input: unknown) {
 }
 
 function normalizeProductTranslations(input: unknown) {
-  return normalizeTranslationFields(input, PRODUCT_TRANSLATION_FIELDS, (content) => {
-    const description = content.description ? sanitizeProductDescription(content.description) : null;
-    if (content.description && !description) appError("PRODUCT_DESCRIPTION_INVALID");
-    return {
-      name: content.name ? requiredText(content.name, "PRODUCT_NAME_REQUIRED", 120, "PRODUCT_NAME_TOO_LONG") : undefined,
-      subtitle: content.subtitle ? optionalText(content.subtitle, 300, "PRODUCT_SUBTITLE_INVALID") ?? undefined : undefined,
-      description: description ?? undefined,
-    };
-  });
+  return normalizeTranslationFields(input, PRODUCT_TRANSLATION_FIELDS, (content) => ({
+    name: content.name ? requiredText(content.name, "PRODUCT_NAME_REQUIRED", 120, "PRODUCT_NAME_TOO_LONG") : undefined,
+    subtitle: content.subtitle ? optionalText(content.subtitle, 300, "PRODUCT_SUBTITLE_INVALID") ?? undefined : undefined,
+    description: content.description ? requiredText(content.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG") : undefined,
+  }));
 }
 
 function normalizeSkuTranslations(input: unknown) {
@@ -304,7 +299,7 @@ async function internalOnSaveProduct(input: {
     slug: resolveSlug(input.slug, name),
     subtitle: optionalText(input.subtitle, 300, "PRODUCT_SUBTITLE_INVALID"),
     coverImage: resolveCoverImage(input.coverImage),
-    description: sanitizeProductDescription(requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG")) ?? (appError("PRODUCT_DESCRIPTION_REQUIRED"), null),
+    description: requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG"),
     manualDeliveryHint: optionalText(input.manualDeliveryHint, 2_000, "PRODUCT_MANUAL_DELIVERY_HINT_INVALID"),
     purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"),
     translationsJson: serializeContentTranslations(normalizeProductTranslations(input.translations), PRODUCT_TRANSLATION_FIELDS),
@@ -466,7 +461,7 @@ async function internalOnSaveSupplierProductPresentation(input: {
     const status = input.status === "ACTIVE" && boundSkuIds.has(sku.id) ? "ACTIVE" : sku.status;
     await db.update(productSku).set({ name: sku.name, price: sku.price, status, sort: sku.sort, translationsJson: sku.translationsJson, updatedAt: now }).where(and(eq(productSku.id, sku.id), eq(productSku.productId, input.id)));
   }
-  const [saved] = await db.update(productV2).set({ categoryId, name, slug: resolveSlug(input.slug, name), subtitle: optionalText(input.subtitle, 300, "PRODUCT_SUBTITLE_INVALID"), coverImage: resolveCoverImage(input.coverImage), description: sanitizeProductDescription(requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG")) ?? (appError("PRODUCT_DESCRIPTION_REQUIRED"), null), purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"), translationsJson: serializeContentTranslations(normalizeProductTranslations(input.translations), PRODUCT_TRANSLATION_FIELDS), status: input.status, sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"), updatedAt: now }).where(eq(productV2.id, input.id)).returning();
+  const [saved] = await db.update(productV2).set({ categoryId, name, slug: resolveSlug(input.slug, name), subtitle: optionalText(input.subtitle, 300, "PRODUCT_SUBTITLE_INVALID"), coverImage: resolveCoverImage(input.coverImage), description: requiredText(input.description, "PRODUCT_DESCRIPTION_REQUIRED", 100_000, "PRODUCT_DESCRIPTION_TOO_LONG"), purchaseNote: optionalText(input.purchaseNote, 2_000, "PRODUCT_PURCHASE_NOTE_INVALID"), translationsJson: serializeContentTranslations(normalizeProductTranslations(input.translations), PRODUCT_TRANSLATION_FIELDS), status: input.status, sort: nonNegativeInteger(input.sort, "PRODUCT_SORT_INVALID"), updatedAt: now }).where(eq(productV2.id, input.id)).returning();
   if (!saved) appError("PRODUCT_NOT_FOUND");
   return saved;
 }

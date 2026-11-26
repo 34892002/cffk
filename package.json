@@ -52,6 +52,7 @@
     "vue": "^3.5.40",
     "vue-sonner": "^2.0.9",
     "worker-mailer": "^1.2.1",
+    "xss": "^1.0.17",
     "zod": "^3.24.0"
   },
   "devDependencies": {
