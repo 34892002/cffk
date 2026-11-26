@@ -11,6 +11,7 @@ import { getDrizzleDb } from "../database/drizzle";
 import { schema } from "../database/drizzle/schema";
 import { dispatchPush } from "./push/service";
 import { allowPasswordResetRequest } from "./auth/reset-rate-limit";
+import { requestEmailChange } from "./auth/email-change";
 import { getSiteSettings } from "./site/public-settings";
 
 const APP_NAME = "CFFK 发卡";
@@ -23,8 +24,6 @@ type AuthConfigOptions = {
 };
 
 const REGISTRATION_DISABLED_MESSAGE = "本站还未开启注册功能，如需帮助请联系客服。";
-const EMAIL_CHANGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const EMAIL_CHANGE_RESEND_INTERVAL_MS = 60 * 1000;
 
 export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, options: AuthConfigOptions = {}): BetterAuthOptions {
   const runtimeEnv = (runtime && "env" in runtime ? runtime.env : undefined) as AuthRuntimeEnv | undefined;
@@ -148,13 +147,9 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, o
           if (!userId) throw new APIError("UNAUTHORIZED", { message: "Authentication is required." });
           if (!newEmail) throw new APIError("BAD_REQUEST", { message: "A new email is required." });
 
-          const requestedAt = new Date();
-          const result = await getDrizzleDb(runtime)
-            .update(schema.user)
-            .set({ emailChangePendingEmail: newEmail, emailChangeLastSentAt: requestedAt })
-            .where(sql`${schema.user.id} = ${userId} AND (${schema.user.emailChangeRequestedAt} IS NULL OR ${schema.user.emailChangeRequestedAt} <= ${new Date(requestedAt.getTime() - EMAIL_CHANGE_INTERVAL_MS)}) AND (${schema.user.emailChangeLastSentAt} IS NULL OR ${schema.user.emailChangeLastSentAt} <= ${new Date(requestedAt.getTime() - EMAIL_CHANGE_RESEND_INTERVAL_MS)})`)
-            .returning({ id: schema.user.id });
-          if (!result.length) throw new APIError("TOO_MANY_REQUESTS", { message: "Email change request rate limit exceeded." });
+          if (!(await requestEmailChange(database, userId, newEmail))) {
+            throw new APIError("TOO_MANY_REQUESTS", { message: "Email change request rate limit exceeded." });
+          }
           return;
         }
 
