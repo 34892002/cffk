@@ -200,6 +200,7 @@ export const zhTWErrorMessages: Record<string, string> = {
   CONTACT_EMAIL_INVALID: "請輸入有效的聯絡電子郵件。",
   RECEIVER_INFO_REQUIRED: "請填寫完整的收件資訊。",
   DISCOUNT_CODE_NOT_FOUND: "優惠券不存在。",
+  DISCOUNT_CODE_UNAVAILABLE: "優惠券目前無法使用。",
   DISCOUNT_CODE_DISABLED: "優惠券已停用。",
   DISCOUNT_CODE_EXPIRED: "優惠券已過期。",
   DISCOUNT_CODE_EXHAUSTED: "優惠券已達使用上限。",

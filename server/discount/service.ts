@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { createDrizzleDb } from "@/database/drizzle";
-import { appError } from "@/lib/app-error";
+import { AppError, appError } from "@/lib/app-error";
 import { convertFromBaseMinor, formatMinor } from "@/lib/money";
 import { getSiteSettings, storeCurrency, storeExchangeRate } from "@/server/site/public-settings";
 import { discountCode, productSku, productV2 } from "@/database/drizzle/schema";
@@ -42,6 +42,27 @@ export function calculateDiscount(type: "FIXED" | "PERCENT", value: number, amou
   return type === "FIXED" ? Math.min(value, amount) : Math.floor(amount * value / 100);
 }
 
+const DISCOUNT_CODE_PATTERN = /^[A-Z0-9_-]{2,64}$/;
+
+const publicDiscountErrorCodes = new Set([
+  "DISCOUNT_CODE_NOT_FOUND",
+  "DISCOUNT_CODE_DISABLED",
+  "DISCOUNT_CODE_EXPIRED",
+  "DISCOUNT_CODE_EXHAUSTED",
+  "DISCOUNT_CODE_MIN_AMOUNT",
+  "DISCOUNT_CODE_PRODUCT_NOT_ALLOWED",
+]);
+
+/**
+ * Collapses coupon validation failures into one code on public endpoints.
+ * Distinct codes would tell a guessed code apart from a missing one and turn
+ * the endpoint into an enumeration oracle.
+ */
+export function maskDiscountError(cause: unknown): never {
+  if (cause instanceof AppError && publicDiscountErrorCodes.has(cause.code)) appError("DISCOUNT_CODE_UNAVAILABLE");
+  throw cause;
+}
+
 export function discountAllowsProduct(productIds: string | null, productId: number) {
   if (!productIds?.trim()) return true;
   const allowed = productIds.split(",").map((value) => Number.parseInt(value.trim(), 10)).filter(Number.isInteger);
@@ -61,8 +82,9 @@ export function validateDiscountCandidate(candidate: DiscountCandidate, productI
 
 
 export async function validateDiscountForItem(database: ReturnType<typeof createDrizzleDb>, item: PurchasableProduct, quantity: number, rawCode: string) {
-  const code = rawCode.trim().toUpperCase();
-  if (!code) appError("DISCOUNT_CODE_NOT_FOUND");
+  const code = typeof rawCode === "string" ? rawCode.trim().toUpperCase() : "";
+  // Reject malformed input before querying D1; it cannot match a stored code.
+  if (!DISCOUNT_CODE_PATTERN.test(code)) appError("DISCOUNT_CODE_NOT_FOUND");
   const originalAmount = item.price * quantity;
   const [candidate] = await database.select().from(discountCode).where(eq(discountCode.code, code)).limit(1);
   if (!candidate) appError("DISCOUNT_CODE_NOT_FOUND");

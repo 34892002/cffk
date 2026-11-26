@@ -200,6 +200,7 @@ export const zhCNErrorMessages: Record<string, string> = {
   CONTACT_EMAIL_INVALID: "请输入有效的联系邮箱。",
   RECEIVER_INFO_REQUIRED: "请填写完整收件信息。",
   DISCOUNT_CODE_NOT_FOUND: "优惠券不存在。",
+  DISCOUNT_CODE_UNAVAILABLE: "优惠券当前不可用。",
   DISCOUNT_CODE_DISABLED: "优惠券已停用。",
   DISCOUNT_CODE_EXPIRED: "优惠券已过期。",
   DISCOUNT_CODE_EXHAUSTED: "优惠券已达使用上限。",

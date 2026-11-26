@@ -200,6 +200,7 @@ export const enUSErrorMessages: Record<string, string> = {
   CONTACT_EMAIL_INVALID: "Enter a valid contact email address.",
   RECEIVER_INFO_REQUIRED: "Enter complete recipient information.",
   DISCOUNT_CODE_NOT_FOUND: "The discount code does not exist.",
+  DISCOUNT_CODE_UNAVAILABLE: "This discount code is currently unavailable.",
   DISCOUNT_CODE_DISABLED: "The discount code is disabled.",
   DISCOUNT_CODE_EXPIRED: "The discount code has expired.",
   DISCOUNT_CODE_EXHAUSTED: "The discount code has reached its usage limit.",
