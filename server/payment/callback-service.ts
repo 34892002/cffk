@@ -18,7 +18,7 @@ export class PaymentCallbackService {
   async handle(provider: PaymentProviderKind, input: { payload: Record<string, string>; rawBody?: string; rawBodyBytes?: Uint8Array; headers?: Headers }) {
     const logs = new PaymentLogService(this.database);
     const configured = await getPaymentProvider(this.database, provider);
-    if (!configured || configured.configStatus !== "valid") {
+    if (!configured || configured.configStatus !== "valid" || !configured.isEnabled) {
       await logs.writeBestEffort({ provider, eventType: "NOTIFY", verifyStatus: "FAILED", message: "PAYMENT_PROVIDER_NOT_AVAILABLE", payload: input.payload });
       return this.response(provider, false, input);
     }

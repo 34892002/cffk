@@ -240,13 +240,27 @@ export function parseHashpayConfig(json: string): HashpayConfig {
   requireSchemaVersion(value, "schemaVersion");
   return {
     schemaVersion: 1,
-    baseUrl: requireUrl(value.baseUrl, "baseUrl"),
+    baseUrl: hashpayOrigin(requireUrl(value.baseUrl, "baseUrl")),
     merchantId: requireString(value.merchantId, "merchantId"),
     privateKey: requireString(value.privateKey, "privateKey"),
     currency: requireString(value.currency, "currency").toUpperCase(),
     notifyUrl: requirePaymentUrl(value.notifyUrl, "notifyUrl", true),
     returnUrl: requirePaymentUrl(value.returnUrl, "returnUrl", true),
   };
+}
+
+// The signed order query treats its response as the payment source of truth, which
+// only holds over TLS. Loopback HTTP stays available for local development.
+function hashpayOrigin(baseUrl: string) {
+  const url = new URL(baseUrl);
+  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]" || url.hostname === "::1";
+  if (url.username || url.password || url.search || url.hash || url.pathname !== "/") {
+    throw new Error("Invalid configuration: baseUrl must be an origin");
+  }
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error("Invalid configuration: baseUrl must use HTTPS");
+  }
+  return url.origin;
 }
 
 function requirePerpaySecret(value: unknown, field: string) {

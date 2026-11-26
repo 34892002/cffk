@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { createHash, createHmac, generateKeyPairSync, sign as signData } from "node:crypto";
+import { createHash, createHmac, createVerify, generateKeyPairSync, sign as signData } from "node:crypto";
 // @ts-expect-error Tests run with Bun, while this project intentionally omits Bun's global type package.
 import { test } from "bun:test";
 import { AppError } from "../../lib/app-error";
 import { canonicalizeAlipayParameters } from "../../lib/payment-utils";
 import { mergePaymentProviderConfig, mergePaymentUrls, rebasePaymentUrl } from "../../server/payment/admin.telefunc";
-import { parseEpayConfig } from "../../lib/config-schemas";
+import { parseEpayConfig, parseHashpayConfig } from "../../lib/config-schemas";
 import { createProviderAdapter } from "../../server/payment/providers";
 import { normalizePaymentCallbackPayload } from "../../server/payment/callback-payload";
 import { paymentCallbackResponse } from "../../server/payment/callback-service";
@@ -590,6 +590,7 @@ test("HashPay adapter creates a signed provider request", async () => {
     const payment = await adapter.create({ orderNo: "ORD-6", amount: 999, subject: "Order", notifyUrl: "https://shop.example/api/payments/hashpay/notify", returnUrl: "https://shop.example/result" });
     assert.deepEqual(payment, { mode: "redirect", url: "https://hashpay.example/checkout", paymentOrderNo: "HP-1" });
     assert.equal(request!.headers.get("X-Merchant-Id"), "merchant-1");
+    assert.equal(request!.redirect, "manual");
     assert.ok(request!.headers.get("X-Signature"));
   } finally {
     globalThis.fetch = originalFetch;
@@ -610,6 +611,263 @@ test("HashPay callbacks reject invalid decrypted business fields", async () => {
   }
   const invalidTimestamp = await adapter.verify({ payload: {}, rawBody: await encryptHashpayCallback({ timestamp: "not-an-integer", payload: { merchantNo: "ORD-HP-1", amount: 1 } }) });
   assert.equal(invalidTimestamp.verified, false);
+});
+
+const hashpayConfig = {
+  schemaVersion: 1,
+  baseUrl: "https://hashpay.example",
+  merchantId: "merchant-1",
+  privateKey: testPrivateKey,
+  currency: "USD",
+  notifyUrl: "https://shop.example/api/payments/hashpay/notify",
+  returnUrl: "https://shop.example/result",
+};
+
+function hashpayAdapter() {
+  return createProviderAdapter("HASHPAY", hashpayConfig);
+}
+
+function hashpayCallback(payload: Record<string, unknown>, timestamp = Math.floor(Date.now() / 1000)) {
+  return encryptHashpayCallback({ timestamp, payload });
+}
+
+test("HashPay configuration requires an HTTPS origin and allows loopback HTTP", () => {
+  const base = {
+    schemaVersion: 1,
+    merchantId: "merchant-1",
+    privateKey: "private-key",
+    currency: "USD",
+    notifyUrl: "",
+    returnUrl: "",
+  };
+  assert.equal(parseHashpayConfig(JSON.stringify({ ...base, baseUrl: "https://hashpay.example" })).baseUrl, "https://hashpay.example");
+  assert.equal(parseHashpayConfig(JSON.stringify({ ...base, baseUrl: "http://localhost:8787" })).baseUrl, "http://localhost:8787");
+  assert.throws(() => parseHashpayConfig(JSON.stringify({ ...base, baseUrl: "http://hashpay.example" })), /HTTPS/);
+  assert.throws(() => parseHashpayConfig(JSON.stringify({ ...base, baseUrl: "https://hashpay.example/prefix" })), /origin/);
+  assert.throws(() => parseHashpayConfig(JSON.stringify({ ...base, baseUrl: "https://user:pass@hashpay.example" })), /origin/);
+});
+
+test("HashPay rejects an oversized gateway order id without querying", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", orderId: "x".repeat(200), amount: 9.99, status: "paid" }),
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.message, "HASHPAY_CALLBACK_INVALID");
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("HashPay callbacks never query the gateway without a gateway order id", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", amount: 9.99, status: "paid" }),
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.message, "HASHPAY_CALLBACK_INVALID");
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("HashPay callbacks cannot confirm an order the gateway still reports pending", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Request[] = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push(new Request(input, init));
+    return new Response(JSON.stringify({
+      id: "HP-ORDER-1",
+      merchantId: "merchant-1",
+      merchantNo: "ORD-HP-1",
+      amount: 9.99,
+      currency: "USD",
+      status: "pending",
+      paidAt: null,
+    }), { status: 200 });
+  };
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", orderId: "HP-ORDER-1", amount: 9.99, status: "paid" }),
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.status, "PENDING");
+    assert.equal(result.message, "HASHPAY_QUERY_MISMATCH");
+    assert.equal(result.orderNo, "ORD-HP-1");
+    assert.equal(result.paymentOrderNo, "HP-ORDER-1");
+    assert.equal(requests.length, 1);
+    const request = requests[0]!;
+    assert.equal(request.method, "GET");
+    assert.equal(request.redirect, "manual");
+    assert.equal(new URL(request.url).pathname, "/api/order/HP-ORDER-1");
+    assert.equal(request.headers.get("X-Merchant-Id"), "merchant-1");
+    const timestamp = request.headers.get("X-Timestamp")!;
+    const signature = request.headers.get("X-Signature")!;
+    assert.match(timestamp, /^\d+$/);
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(`GET\n/api/order/HP-ORDER-1\n${timestamp}\n`);
+    assert.equal(verifier.verify(testPublicKey, signature, "base64"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("HashPay confirms an order only when the gateway reports it paid and matching", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    id: "HP-ORDER-1",
+    merchantId: "merchant-1",
+    merchantNo: "ORD-HP-1",
+    amount: 9.99,
+    currency: "USD",
+    status: "paid",
+    paidAt: 1_800_000_123,
+  }), { status: 200 });
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", orderId: "HP-ORDER-1", amount: 9.99, status: "paid" }),
+    });
+    assert.deepEqual(result, {
+      provider: "HASHPAY",
+      verified: true,
+      orderNo: "ORD-HP-1",
+      paymentOrderNo: "HP-ORDER-1",
+      amount: 999,
+      currency: "USD",
+      status: "PAID",
+      message: "HASHPAY_QUERY_VERIFIED",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("HashPay rejects a gateway-paid order whose merchant order number differs", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    id: "HP-ORDER-1",
+    merchantId: "merchant-1",
+    merchantNo: "ORD-HP-OTHER",
+    amount: 9.99,
+    currency: "USD",
+    status: "paid",
+    paidAt: 1_800_000_123,
+  }), { status: 200 });
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", orderId: "HP-ORDER-1", amount: 9.99, status: "paid" }),
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.status, "PENDING");
+    assert.equal(result.message, "HASHPAY_QUERY_MISMATCH");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("HashPay rejects a paid order reported for another merchant id", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    id: "HP-ORDER-1",
+    merchantId: "other-merchant",
+    merchantNo: "ORD-HP-1",
+    amount: 9.99,
+    currency: "USD",
+    status: "paid",
+    paidAt: 1_800_000_123,
+  }), { status: 200 });
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", orderId: "HP-ORDER-1", amount: 9.99, status: "paid" }),
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.message, "HASHPAY_QUERY_MISMATCH");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("HashPay rejects a paid gateway order whose amount differs from the callback", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    id: "HP-ORDER-1",
+    merchantId: "merchant-1",
+    merchantNo: "ORD-HP-1",
+    amount: 1,
+    currency: "USD",
+    status: "paid",
+    paidAt: 1_800_000_123,
+  }), { status: 200 });
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", orderId: "HP-ORDER-1", amount: 9.99, status: "paid" }),
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.message, "HASHPAY_QUERY_MISMATCH");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("HashPay treats an unavailable order query as retryable, not verified", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("not found", { status: 404 });
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", orderId: "HP-ORDER-1", amount: 9.99, status: "paid" }),
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.status, "PENDING");
+    assert.equal(result.message, "HASHPAY_QUERY_FAILED");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("HashPay rejects a forged paid callback when the gateway reports the order expired", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    id: "HP-ORDER-1",
+    merchantId: "merchant-1",
+    merchantNo: "ORD-HP-1",
+    amount: 9.99,
+    currency: "USD",
+    status: "expired",
+    paidAt: null,
+  }), { status: 200 });
+  try {
+    const result = await hashpayAdapter().verify({
+      payload: {},
+      rawBody: await hashpayCallback({ merchantNo: "ORD-HP-1", orderId: "HP-ORDER-1", amount: 9.99, status: "paid" }),
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.status, "FAILED");
+    assert.equal(result.message, "HASHPAY_QUERY_MISMATCH");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("Epay and BEpusdt callbacks enforce signed provider status", async () => {

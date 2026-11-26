@@ -113,7 +113,7 @@ export const paymentProviderDefinitions: Record<PaymentProviderKind, ProviderDef
     provider: "HASHPAY",
     title: "HashPay",
     schemaVersion: 1,
-    fields: [{ key: "baseUrl", label: "网关地址", type: "url", required: true }, { key: "merchantId", label: "商户 ID", type: "text", required: true }, { key: "privateKey", label: "PKCS#8 私钥", type: "textarea", required: true, secret: true }, { key: "currency", label: "币种", type: "text", required: true }, common.notifyUrl, common.returnUrl],
+    fields: [{ key: "baseUrl", label: "网关地址", type: "url", required: true }, { key: "merchantId", label: "商户 ID", type: "text", required: true }, { key: "privateKey", label: "PKCS#8 私钥", type: "textarea", required: true, secret: true }, { key: "currency", label: "币种", type: "text", required: true }, { ...common.notifyUrl, description: "请在 HashPay 商户后台填写此回调地址；HashPay 不支持按订单传回调地址。" }, common.returnUrl],
     defaults: { schemaVersion: 1, baseUrl: "", merchantId: "", privateKey: "", currency: "CNY", notifyUrl: "", returnUrl: "" },
     parseConfig: parseHashpayConfig,
     getChannels: () => [],

@@ -186,3 +186,12 @@ for (const type of ["checkout.session.completed", "checkout.session.async_paymen
     assert.deepEqual(context.order(), { paymentStatus: "UNPAID", deliveryStatus: "NOT_DELIVERED" });
   });
 }
+
+test("Stripe rejects callbacks for a disabled provider", async () => {
+  const context = fixture();
+  context.sqlite.query("UPDATE paymentProvider SET isEnabled=0 WHERE provider='STRIPE'").run();
+  const response = await context.service.handle("STRIPE", signedInput("checkout.session.completed", session));
+  assert.equal(response.status, 400);
+  assert.deepEqual(context.order(), { paymentStatus: "UNPAID", deliveryStatus: "NOT_DELIVERED" });
+  assert.deepEqual(context.notifications(), [{ verifyStatus: "FAILED", message: "PAYMENT_PROVIDER_NOT_AVAILABLE" }]);
+});
