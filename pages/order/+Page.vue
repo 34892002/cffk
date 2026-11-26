@@ -71,6 +71,7 @@
                     </Field>
                   </VeeField>
                 </FieldGroup>
+                <div v-show="!recoveryChallengeId && turnstileSiteKey" ref="turnstileElement" class="mt-4 min-h-16" />
                 <p v-if="recoveryTruncated" class="mt-4 text-xs leading-5 text-muted-foreground">{{ messages.guestOrders.recovery.truncatedNote }}</p>
               </CardContent>
               <CardFooter class="gap-2 pt-5">
@@ -186,6 +187,7 @@ import { clearAllLocalOrders, deleteLocalOrdersForEmail, getLocalOrderGroups, re
 import { cacheQrPayment } from "@/lib/payment-utils";
 import CurrencyHint from "@/components/storefront/CurrencyHint.vue";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
+import { useTurnstile } from "@/lib/use-turnstile";
 import { runTelefunc, userErrorMessage } from "@/lib/telefunc-client";
 import { onQueryOrder, onResumeOrderPayment, type PublicOrder } from "@/server/order/public.telefunc";
 import { onSendGuestOrderRecoveryCode, onVerifyGuestOrderRecoveryCode } from "@/server/order/recovery.telefunc";
@@ -196,6 +198,13 @@ type RecoveryValues = { recoveryEmail: string; recoveryCode?: string };
 
 
 const { messages, t } = useStorefrontPreferences();
+const {
+  element: turnstileElement,
+  siteKey: turnstileSiteKey,
+  token: turnstileToken,
+  load: loadTurnstile,
+  reset: resetTurnstile,
+} = useTurnstile();
 const pageContext = usePageContext();
 const rawOrderNo = pageContext.urlParsed.search.orderNo;
 const requestedOrderNo = (typeof rawOrderNo === "string" ? rawOrderNo : "").trim();
@@ -245,6 +254,7 @@ function backToGuestList() {
 
 onMounted(() => {
   loadGuestGroups();
+  void loadTurnstile().catch(() => { toast.error(messages.value.guestOrders.recovery.captchaLoadFailed); });
   nextTick(() => {
     updateSidebarHeight();
     if (orderSidebar.value && typeof ResizeObserver !== "undefined") {
@@ -307,12 +317,18 @@ async function submitRecovery(values: Record<string, unknown>, actions: { resetF
   const email = String(values.recoveryEmail ?? "").trim().toLowerCase();
   recoveryTruncated.value = false;
   if (!recoveryChallengeId.value) {
+    if (turnstileSiteKey.value && !turnstileToken.value) {
+      toast.error(messages.value.guestOrders.recovery.captchaRequired);
+      return;
+    }
     try {
-      const response = await runTelefunc(() => onSendGuestOrderRecoveryCode({ email }), { notifyError: false });
+      const response = await runTelefunc(() => onSendGuestOrderRecoveryCode({ email, turnstileToken: turnstileToken.value }), { notifyError: false });
+      resetTurnstile();
       recoveryChallengeId.value = response.challengeId;
       actions.resetForm({ values: { recoveryEmail: email, recoveryCode: "" } });
       toast.success(messages.value.guestOrders.recovery.codeSent);
     } catch (cause) {
+      resetTurnstile();
       toast.error(userErrorMessage(cause, messages.value.guestOrders.recovery.sendFailed));
     }
     return;
@@ -346,6 +362,7 @@ async function submitRecovery(values: Record<string, unknown>, actions: { resetF
 function resetRecovery() {
   recoveryChallengeId.value = "";
   recoveryTruncated.value = false;
+  resetTurnstile();
 }
 
 async function queryOrder(input: { orderNo: string; email?: string }) {

@@ -2,6 +2,8 @@ export const zhTWErrorMessages: Record<string, string> = {
   AUTH_REQUIRED: "請先登入後再繼續操作。",
   ADMIN_ACCESS_REQUIRED: "管理員身分已失效，請重新登入。",
   DATABASE_UNAVAILABLE: "服務暫時無法使用，請稍後再試。",
+  TURNSTILE_REQUIRED: "請先完成人機驗證。",
+  TURNSTILE_FAILED: "人機驗證未通過，請重新整理頁面後再試。",
   ROOT_SETUP_NOT_FOUND: "初始化頁面不存在。",
 
   ROOT_SETUP_USERNAME_INVALID: "使用者名稱格式無效。",

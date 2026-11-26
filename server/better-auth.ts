@@ -157,7 +157,7 @@ export function getAuthConfig(runtime?: RuntimeAdapter, publicOrigin?: string, o
     appName: APP_NAME,
     plugins: [
       twoFactor({ issuer: "CFFK 发卡" }),
-      ...(turnstile.enabled ? [captcha({ provider: "cloudflare-turnstile", secretKey: turnstile.secretKey!, endpoints: ["/sign-in/email", "/request-password-reset"] })] : []),
+      ...(turnstile.enabled ? [captcha({ provider: "cloudflare-turnstile", secretKey: turnstile.secretKey!, endpoints: ["/sign-in/email", "/sign-up/email", "/request-password-reset", "/change-email", "/send-verification-email"] })] : []),
     ],
   };
 }

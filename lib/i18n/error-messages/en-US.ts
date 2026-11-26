@@ -2,6 +2,8 @@ export const enUSErrorMessages: Record<string, string> = {
   AUTH_REQUIRED: "Please sign in to continue.",
   ADMIN_ACCESS_REQUIRED: "Your administrator session has expired. Please sign in again.",
   DATABASE_UNAVAILABLE: "The service is temporarily unavailable. Please try again later.",
+  TURNSTILE_REQUIRED: "Complete the CAPTCHA first.",
+  TURNSTILE_FAILED: "Human verification failed. Refresh the page and try again.",
   ROOT_SETUP_NOT_FOUND: "The setup page does not exist.",
 
   ROOT_SETUP_USERNAME_INVALID: "Invalid username format.",

@@ -9,6 +9,7 @@ import { dispatchPush } from "@/server/push/service";
 import type { PushDispatchInput } from "@/server/push/types";
 import { getSiteSettings } from "@/server/site/public-settings";
 import { enforceOrderRequestRateLimit } from "@/server/order/rate-limit";
+import { verifyTurnstileToken } from "@/server/security/turnstile";
 import { telefuncAction } from "@/server/telefunc-action";
 import { getContext } from "telefunc";
 import { generateRecoveryCode, hashRecoveryCode, normalizeRecoveryEmail } from "./recovery-code";
@@ -93,9 +94,10 @@ async function insertRateLimitedChallenge(database: D1Database, values: {
   return result.meta.changes === 1;
 }
 
-async function internalOnSendGuestOrderRecoveryCode(input: { email: string }) {
+async function internalOnSendGuestOrderRecoveryCode(input: { email: string; turnstileToken?: string }) {
   const emailNormalized = normalizeRecoveryEmail(input?.email);
   const { database, runtime, secret, clientIp, locale } = recoveryContext();
+  await verifyTurnstileToken(runtime, input?.turnstileToken, clientIp);
   await enforceOrderRequestRateLimit(database, { action: "RECOVERY", userId: null, clientIp });
   const [matchingOrder] = await createDrizzleDb(database).select({ id: order.id }).from(order).where(and(
     isNull(order.ownerUserId),

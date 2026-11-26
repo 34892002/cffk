@@ -69,8 +69,8 @@
         </section>
 
         <section v-else aria-labelledby="turnstile-title" class="grid gap-6">
-          <div><h2 id="turnstile-title" class="text-xl font-semibold tracking-normal">Cloudflare Turnstile</h2><p class="mt-1 text-sm text-muted-foreground">为登录与找回密码增加人机验证，降低自动化撞库、爆破与邮件轰炸风险。</p></div>
-          <Alert :class="status.turnstile.enabled ? undefined : 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400'"><ShieldCheckIcon v-if="status.turnstile.enabled" class="size-4" /><ShieldAlertIcon v-else class="size-4" /><AlertTitle>{{ status.turnstile.enabled ? "Turnstile 已启用" : "Turnstile 未完整配置" }}</AlertTitle><AlertDescription :class="status.turnstile.enabled ? undefined : 'text-orange-600 dark:text-orange-400'">{{ status.turnstile.enabled ? "登录与找回密码会强制校验 Turnstile 令牌。" : "须同时配置「站点密钥」和「密钥」才会启用。" }}</AlertDescription></Alert>
+          <div><h2 id="turnstile-title" class="text-xl font-semibold tracking-normal">Cloudflare Turnstile</h2><p class="mt-1 text-sm text-muted-foreground">为登录、注册、找回密码、修改邮箱与匿名订单验证码增加人机验证，降低自动化撞库、爆破与邮件轰炸风险。</p></div>
+          <Alert :class="status.turnstile.enabled ? undefined : 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400'"><ShieldCheckIcon v-if="status.turnstile.enabled" class="size-4" /><ShieldAlertIcon v-else class="size-4" /><AlertTitle>{{ status.turnstile.enabled ? "Turnstile 已启用" : "Turnstile 未完整配置" }}</AlertTitle><AlertDescription :class="status.turnstile.enabled ? undefined : 'text-orange-600 dark:text-orange-400'">{{ status.turnstile.enabled ? "登录、注册、找回密码、修改邮箱与匿名订单验证码会强制校验 Turnstile 令牌。" : "须同时配置「站点密钥」和「密钥」才会启用。" }}</AlertDescription></Alert>
           <div class="rounded-md border bg-muted/30 p-4 text-sm leading-6">
             <p>获取位置：Cloudflare Dashboard → <span class="font-medium">Turnstile</span> → 选择站点 → <span class="font-medium">Widget 密钥</span>。</p>
             <ul class="mt-3 grid gap-2">

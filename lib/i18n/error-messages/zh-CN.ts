@@ -2,6 +2,8 @@ export const zhCNErrorMessages: Record<string, string> = {
   AUTH_REQUIRED: "请先登录后再继续操作。",
   ADMIN_ACCESS_REQUIRED: "管理员身份已失效，请重新登录。",
   DATABASE_UNAVAILABLE: "服务暂时不可用，请稍后重试。",
+  TURNSTILE_REQUIRED: "请先完成人机验证。",
+  TURNSTILE_FAILED: "人机验证未通过，请刷新页面后重试。",
   ROOT_SETUP_NOT_FOUND: "初始化页面不存在。",
 
   ROOT_SETUP_USERNAME_INVALID: "用户名格式无效。",

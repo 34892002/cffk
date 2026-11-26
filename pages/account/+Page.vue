@@ -64,6 +64,7 @@
                 </Field>
               </VeeField>
               <p class="text-sm text-muted-foreground">{{ messages.account.email.verificationNotice }}</p>
+              <div v-if="turnstileSiteKey" ref="turnstileElement" class="min-h-16" />
             </CardContent>
             <CardFooter class="justify-end"><Button type="submit" :disabled="savingEmail || emailCooldown > 0">{{ savingEmail ? messages.account.email.sending : emailCooldown > 0 ? t(messages.account.email.resendAfter, { seconds: emailCooldown }) : messages.account.email.change }}</Button></CardFooter>
           </VeeForm>
@@ -198,11 +199,21 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import { classifyAuthError } from "@/lib/auth-error-messages";
 import { runTelefunc } from "@/lib/telefunc-client";
+import { useTurnstile } from "@/lib/use-turnstile";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
 import { onCreateAddress, onDeleteAddress, onListAddresses, onSetDefaultAddress, onUpdateAddress } from "@/server/address/index.telefunc";
 
 const { messages, t } = useStorefrontPreferences();
+const {
+  element: turnstileElement,
+  siteKey: turnstileSiteKey,
+  token: turnstileToken,
+  load: loadTurnstile,
+  reset: resetTurnstile,
+  headers: turnstileHeaders,
+} = useTurnstile();
 const ADDRESS_LIMIT = 10;
 const phonePattern = /^[0-9+()\-\s]{5,32}$/;
 const postalCodePattern = /^[A-Za-z0-9][A-Za-z0-9\- ]{0,19}$/;
@@ -302,17 +313,23 @@ async function submitEmailChange(form: Record<string, unknown>) {
     toast.info(messages.value.account.email.sameAsCurrent);
     return;
   }
+  if (turnstileSiteKey.value && !turnstileToken.value) {
+    toast.error(messages.value.account.email.captchaRequired);
+    return;
+  }
 
   savingEmail.value = true;
   try {
-    const result = await authClient.changeEmail({ newEmail: parsed.data.email, callbackURL: "/account" });
+    const result = await authClient.changeEmail({ newEmail: parsed.data.email, callbackURL: "/account", ...(turnstileToken.value ? { fetchOptions: { headers: turnstileHeaders() } } : {}) });
+    resetTurnstile();
     if (result.error) {
-      toast.error(messages.value.account.email.sendFailedWithLimit);
+      toast.error(classifyAuthError(result.error) === "captcha" ? messages.value.account.email.captchaFailed : messages.value.account.email.sendFailedWithLimit);
       return;
     }
     startEmailCooldown();
     toast.success(messages.value.account.email.verificationSent);
   } catch {
+    resetTurnstile();
     toast.error(messages.value.account.email.sendFailed);
   } finally {
     savingEmail.value = false;
@@ -426,7 +443,10 @@ function formatAddress(address: Address) {
   return [address.country, address.province, address.city, address.district, address.addressLine].filter(Boolean).join(" ");
 }
 
-onMounted(loadAddresses);
+onMounted(() => {
+  void loadAddresses();
+  void loadTurnstile().catch(() => { toast.error(messages.value.account.email.captchaLoadFailed); });
+});
 onBeforeUnmount(() => {
   if (emailCooldownTimer) clearInterval(emailCooldownTimer);
 });

@@ -18,6 +18,7 @@
               <Label for="email"><span class="text-destructive">*</span> 邮箱</Label>
               <Input id="email" v-model="profile.email" type="email" autocomplete="email" maxlength="320" required />
             </div>
+            <div v-if="turnstileSiteKey" ref="turnstileElement" class="min-h-16" />
           </CardContent>
           <CardFooter class="justify-end">
             <Button type="submit" :disabled="savingProfile">{{ savingProfile ? "保存中..." : "保存资料" }}</Button>
@@ -61,8 +62,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { classifyAuthError } from "@/lib/auth-error-messages";
+import { useTurnstile } from "@/lib/use-turnstile";
 import { toast } from "vue-sonner";
-import { reactive, ref, watch } from "vue";
+import { onMounted, reactive, ref, watch } from "vue";
 import { usePageContext } from "vike-vue/usePageContext";
 
 const pageContext = usePageContext();
@@ -70,6 +73,14 @@ const profile = reactive({ name: "", email: "" });
 const password = reactive({ current: "", next: "", confirm: "" });
 const savingProfile = ref(false);
 const savingPassword = ref(false);
+const {
+  element: turnstileElement,
+  siteKey: turnstileSiteKey,
+  token: turnstileToken,
+  load: loadTurnstile,
+  reset: resetTurnstile,
+  headers: turnstileHeaders,
+} = useTurnstile();
 
 watch(
   () => pageContext.user,
@@ -80,12 +91,19 @@ watch(
   { immediate: true },
 );
 
+onMounted(() => { void loadTurnstile().catch(() => { toast.error("人机验证加载失败，请刷新页面后重试。"); }); });
+
 async function saveProfile() {
   savingProfile.value = true;
   try {
     const name = profile.name.trim();
     const email = profile.email.trim();
     const currentEmail = pageContext.user?.email?.trim() ?? "";
+    const emailChanged = email !== currentEmail;
+    if (emailChanged && turnstileSiteKey.value && !turnstileToken.value) {
+      toast.error("请先完成人机验证。");
+      return;
+    }
 
     const profileResult = await authClient.updateUser({ name });
     if (profileResult.error) {
@@ -93,13 +111,15 @@ async function saveProfile() {
       return;
     }
 
-    if (email !== currentEmail) {
+    if (emailChanged) {
       const emailResult = await authClient.changeEmail({
         newEmail: email,
         callbackURL: pageContext.urlPathname,
+        ...(turnstileToken.value ? { fetchOptions: { headers: turnstileHeaders() } } : {}),
       });
+      resetTurnstile();
       if (emailResult.error) {
-        toast.error("邮箱保存失败，请检查邮箱地址。");
+        toast.error(classifyAuthError(emailResult.error) === "captcha" ? "人机验证未通过，请刷新页面后重试。" : "邮箱保存失败，请检查邮箱地址。");
         return;
       }
     }

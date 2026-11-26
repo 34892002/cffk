@@ -48,6 +48,7 @@
               </Field>
             </VeeField>
           </FieldGroup>
+          <div v-if="turnstileSiteKey" ref="turnstileElement" class="mt-5 min-h-16" />
         </CardContent>
         <CardFooter class="mt-6 flex-col gap-3">
           <Button class="w-full" type="submit" :disabled="isSubmitting">{{ isSubmitting ? messages.auth.signup.signingUp : messages.auth.signup.signUp }}</Button>
@@ -63,6 +64,7 @@ import { toTypedSchema } from "@vee-validate/zod";
 import { Field as VeeField, useForm } from "vee-validate";
 
 import { usePageContext } from "vike-vue/usePageContext";
+import { onMounted } from "vue";
 import { toast } from "vue-sonner";
 import { z } from "zod";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -72,13 +74,23 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import StorefrontPreferences from "@/components/storefront/StorefrontPreferences.vue";
 import { authClient } from "@/lib/auth-client";
+import { classifyAuthError } from "@/lib/auth-error-messages";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
+import { useTurnstile } from "@/lib/use-turnstile";
 
 const pageContext = usePageContext() as ReturnType<typeof usePageContext> & {
   rootInitialized?: boolean;
   registrationEnabled?: boolean;
 };
 const { messages } = useStorefrontPreferences();
+const {
+  element: turnstileElement,
+  siteKey: turnstileSiteKey,
+  token: turnstileToken,
+  load: loadTurnstile,
+  reset: resetTurnstile,
+  headers: turnstileHeaders,
+} = useTurnstile();
 const rootInitialized = Boolean(pageContext.rootInitialized);
 const registrationEnabled = pageContext.registrationEnabled === true;
 const schema = z.object({
@@ -96,15 +108,24 @@ const { handleSubmit, isSubmitting } = useForm({
 
 const submit = handleSubmit(async ({ confirmPassword: _confirmPassword, ...input }) => {
   if (!rootInitialized || !registrationEnabled) return;
+  if (turnstileSiteKey.value && !turnstileToken.value) {
+    toast.error(messages.value.auth.signup.captchaRequired);
+    return;
+  }
   try {
-    const result = await authClient.signUp.email(input);
+    const result = await authClient.signUp.email({ ...input, ...(turnstileToken.value ? { fetchOptions: { headers: turnstileHeaders() } } : {}) });
     if (result.error) {
-      toast.error(messages.value.auth.signup.failed);
+      resetTurnstile();
+      toast.error(classifyAuthError(result.error) === "captcha" ? messages.value.auth.signup.captchaFailed : messages.value.auth.signup.failed);
       return;
     }
     toast.success(messages.value.auth.signup.submitted);
+    resetTurnstile();
   } catch {
+    resetTurnstile();
     toast.error(messages.value.auth.signup.requestFailed);
   }
 });
+
+onMounted(() => { void loadTurnstile().catch(() => { toast.error(messages.value.auth.signup.captchaLoadFailed); }); });
 </script>

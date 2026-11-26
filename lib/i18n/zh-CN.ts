@@ -109,6 +109,9 @@ const messages = {
       failed: "注册未能完成，请检查填写的信息或稍后重试。",
       submitted: "注册申请已提交，请检查邮箱并完成验证后登录。",
       requestFailed: "接口异常，请稍后重试。",
+      captchaRequired: "请先完成人机验证。",
+      captchaFailed: "人机验证未通过，请刷新页面后重试。",
+      captchaLoadFailed: "人机验证加载失败，请刷新页面后重试。",
     },
     continue: {
       redirecting: "正在完成登录...",
@@ -234,7 +237,7 @@ const messages = {
   account: {
     title: "账户", description: "查看账户资料并管理常用收货地址。", avatarFallback: "账",
     profile: { title: "个人资料", description: "管理购买和通知中使用的账户名称。", nameUnset: "未设置名称", unchanged: "资料没有变化。", saveFailed: "资料保存失败，请稍后重试。", updated: "资料已更新。" },
-    email: { title: "邮箱地址", description: "用于通知、找回账户及邮箱密码登录。", current: "当前邮箱", verified: "已验证", unverified: "未验证", unset: "未设置邮箱", new: "新邮箱", verificationNotice: "验证邮件发送后，需在新邮箱中完成验证才会生效。每 24 小时只能修改一次。", sending: "发送中...", resendAfter: "{seconds} 秒后可重发", change: "更换邮箱", sameAsCurrent: "新邮箱与当前邮箱相同。", sendFailedWithLimit: "邮箱验证邮件发送失败。每 24 小时只能修改一次。", sendFailed: "邮箱验证邮件发送失败，请稍后重试。", verificationSent: "验证邮件已发送至新邮箱，请完成验证后生效。" },
+    email: { title: "邮箱地址", description: "用于通知、找回账户及邮箱密码登录。", current: "当前邮箱", verified: "已验证", unverified: "未验证", unset: "未设置邮箱", new: "新邮箱", verificationNotice: "验证邮件发送后，需在新邮箱中完成验证才会生效。每 24 小时只能修改一次。", sending: "发送中...", resendAfter: "{seconds} 秒后可重发", change: "更换邮箱", sameAsCurrent: "新邮箱与当前邮箱相同。", sendFailedWithLimit: "邮箱验证邮件发送失败。每 24 小时只能修改一次。", sendFailed: "邮箱验证邮件发送失败，请稍后重试。", verificationSent: "验证邮件已发送至新邮箱，请完成验证后生效。", captchaRequired: "请先完成人机验证。", captchaFailed: "人机验证未通过，请刷新页面后重试。", captchaLoadFailed: "人机验证加载失败，请刷新页面后重试。" },
     password: { title: "修改密码", description: "修改前需要验证当前密码；完成后其他登录会话将退出。", current: "当前密码", new: "新密码", confirm: "确认新密码", changing: "修改中...", changeFailedInvalid: "密码修改失败，请确认当前密码和新密码符合要求。", changed: "密码已修改，其他登录会话已退出。", changeFailed: "密码修改失败，请稍后重试。" },
     actions: { save: "保存", saving: "保存中...", cancel: "取消", delete: "删除", deleting: "删除中..." },
     addresses: { title: "地址簿", description: "保存常用收货地址，最多 {limit} 条。", add: "新增地址", limitReached: "已达到 {limit} 条地址上限，请先删除不再使用的地址。", loading: "正在读取地址簿...", emptyTitle: "暂无收货地址", emptyDescription: "新增地址后可在购买实物商品时使用。", addFirst: "新增第一个地址", defaultBadge: "默认", editAriaLabel: "编辑地址", postalCodeValue: "邮政编码：{postalCode}", setDefault: "设为默认", editTitle: "编辑地址", createTitle: "新增地址", editorDescription: "填写完整的收件信息，带星号的项目为必填项。", save: "保存地址", deleteTitle: "确认删除地址", deleteDescription: "将删除 {recipientName} 的收货地址。此操作无法撤销。", confirmDelete: "确认删除", defaultCountry: "中国", loadFailed: "地址簿读取失败，请稍后重试。", limitToast: "地址簿最多保存 {limit} 条地址。", updated: "地址已更新。", created: "地址已新增。", defaultUpdated: "默认地址已更新。", deleted: "地址已删除。", invalidForm: "请检查标记的必填项和输入格式。" },
@@ -245,7 +248,7 @@ const messages = {
     title: "订单中心",
     description: "通过本机记录、订单号和下单邮箱查询或恢复匿名订单。",
     lookup: { title: "查询匿名订单", description: "使用订单号和对应的下单邮箱查询详情。", orderNumber: "订单号", placeholder: "ORD...", email: "下单邮箱", failed: "查询失败", loading: "查询中...", notFound: "订单不存在，或下单邮箱不匹配。", emailRequired: "请输入该匿名订单的下单邮箱后查询。" },
-    recovery: { title: "邮箱 OTP 恢复", description: "验证下单邮箱后，以服务端最近的匿名订单原子覆盖该邮箱的本机分组。", email: "下单邮箱", code: "6 位验证码", changeEmail: "更换邮箱", sendCode: "发送验证码", verify: "验证并恢复", submitting: "处理中...", truncatedNote: "仅恢复最近 50 个匿名订单；更早记录未写入本机。", codeSent: "验证码已发送，请检查邮箱。", sendFailed: "验证码发送失败，请稍后再试。", storageFailed: "验证成功，但无法写入浏览器存储；原有本机订单未更改。", verifyFailed: "验证失败，原有本机订单未更改。", recovered: "已恢复 {count} 个匿名订单。", truncated: "仅恢复最近 50 个匿名订单，更早记录未写入本机。" },
+    recovery: { title: "邮箱 OTP 恢复", description: "验证下单邮箱后，以服务端最近的匿名订单原子覆盖该邮箱的本机分组。", email: "下单邮箱", code: "6 位验证码", changeEmail: "更换邮箱", sendCode: "发送验证码", verify: "验证并恢复", submitting: "处理中...", truncatedNote: "仅恢复最近 50 个匿名订单；更早记录未写入本机。", codeSent: "验证码已发送，请检查邮箱。", sendFailed: "验证码发送失败，请稍后再试。", storageFailed: "验证成功，但无法写入浏览器存储；原有本机订单未更改。", verifyFailed: "验证失败，原有本机订单未更改。", recovered: "已恢复 {count} 个匿名订单。", truncated: "仅恢复最近 50 个匿名订单，更早记录未写入本机。", captchaRequired: "请先完成人机验证。", captchaFailed: "人机验证未通过，请刷新页面后重试。", captchaLoadFailed: "人机验证加载失败，请刷新页面后重试。" },
     validation: { orderNumberRequired: "请输入订单号。", emailInvalid: "请输入有效的下单邮箱。", codeInvalid: "请输入 6 位数字验证码。" },
     back: "返回",
     backAriaLabel: "返回匿名订单列表",

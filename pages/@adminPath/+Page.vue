@@ -37,8 +37,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { classifyAuthError, type AuthErrorKind } from "@/lib/auth-error-messages";
+import { useTurnstile } from "@/lib/use-turnstile";
 import { navigate } from "vike/client/router";
-import { nextTick, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import { usePageContext } from "vike-vue/usePageContext";
 
 const pageContext = usePageContext();
@@ -57,29 +58,14 @@ const loginErrorMessages: Record<AuthErrorKind, string> = {
   credentials: "管理员邮箱或密码不正确。",
   unknown: "登录失败，请稍后重试。",
 };
-const turnstileElement = ref<HTMLElement | null>(null);
-const turnstileSiteKey = ref<string | null>(null);
-const turnstileToken = ref("");
-const turnstileWidgetId = ref<string | null>(null);
-
-declare global { interface Window { turnstile?: { render: (element: HTMLElement, options: { sitekey: string; callback: (token: string) => void; "expired-callback": () => void }) => string; reset: (widgetId?: string) => void; }; } }
-
-async function loadTurnstile() {
-  const config = await fetch("/api/security/turnstile").then((response) => response.json() as Promise<{ enabled: boolean; siteKey: string | null }>);
-  if (!config.enabled || !config.siteKey) return;
-  turnstileSiteKey.value = config.siteKey;
-  await nextTick();
-  await new Promise<void>((resolve, reject) => {
-    if (window.turnstile) { resolve(); return; }
-    const script = window.document.createElement("script"); script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; script.async = true; script.onload = () => resolve(); script.onerror = () => reject(new Error("TURNSTILE_LOAD_FAILED")); window.document.head.appendChild(script);
-  });
-  if (turnstileElement.value) turnstileWidgetId.value = window.turnstile?.render(turnstileElement.value, { sitekey: config.siteKey, callback: (token) => { turnstileToken.value = token; }, "expired-callback": () => { turnstileToken.value = ""; } }) ?? null;
-}
-
-function resetTurnstile() {
-  turnstileToken.value = "";
-  if (turnstileWidgetId.value) window.turnstile?.reset(turnstileWidgetId.value);
-}
+const {
+  element: turnstileElement,
+  siteKey: turnstileSiteKey,
+  token: turnstileToken,
+  load: loadTurnstile,
+  reset: resetTurnstile,
+  headers: turnstileHeaders,
+} = useTurnstile();
 
 async function onSubmit() {
   error.value = null;
@@ -92,7 +78,7 @@ async function onSubmit() {
       fetchOptions: {
         headers: {
           "x-cffk-admin-login": "1",
-          ...(turnstileToken.value ? { "x-captcha-response": turnstileToken.value } : {}),
+          ...turnstileHeaders(),
         },
       },
     });

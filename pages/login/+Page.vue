@@ -47,7 +47,7 @@ import { toTypedSchema } from "@vee-validate/zod";
 import { Field as VeeField, useForm } from "vee-validate";
 import { navigate } from "vike/client/router";
 import { usePageContext } from "vike-vue/usePageContext";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import { z } from "zod";
 import { ArrowRightIcon, LockKeyholeIcon, PackageCheckIcon, ShieldCheckIcon, ShoppingCartIcon } from "@lucide/vue";
@@ -60,6 +60,7 @@ import StorefrontPreferences from "@/components/storefront/StorefrontPreferences
 import { authClient } from "@/lib/auth-client";
 import { classifyAuthError, type AuthErrorKind } from "@/lib/auth-error-messages";
 import { useStorefrontPreferences } from "@/lib/storefront-preferences";
+import { useTurnstile } from "@/lib/use-turnstile";
 import logoUrl from "@/assets/logo.svg?url";
 
 type Site = { name?: string | null; logo?: string | null };
@@ -68,10 +69,14 @@ const { messages } = useStorefrontPreferences();
 const siteName = computed(() => pageContext.site?.name?.trim() || "CFFK-Shop");
 const brandLogoUrl = computed(() => pageContext.site?.logo || logoUrl);
 
-const turnstileElement = ref<HTMLElement | null>(null);
-const turnstileSiteKey = ref<string | null>(null);
-const turnstileToken = ref("");
-const turnstileWidgetId = ref<string | null>(null);
+const {
+  element: turnstileElement,
+  siteKey: turnstileSiteKey,
+  token: turnstileToken,
+  load: loadTurnstile,
+  reset: resetTurnstile,
+  headers: turnstileHeaders,
+} = useTurnstile();
 const formError = ref<string | null>(null);
 const loginErrorMessages = computed<Record<AuthErrorKind, string>>(() => ({
   captcha: messages.value.auth.login.captchaFailed,
@@ -82,25 +87,6 @@ const loginErrorMessages = computed<Record<AuthErrorKind, string>>(() => ({
   credentials: messages.value.auth.login.invalidCredentials,
   unknown: messages.value.auth.login.requestFailed,
 }));
-
-declare global { interface Window { turnstile?: { render: (element: HTMLElement, options: { sitekey: string; callback: (token: string) => void; "expired-callback": () => void }) => string; reset: (widgetId?: string) => void; }; } }
-
-async function loadTurnstile() {
-  const config = await fetch("/api/security/turnstile").then((response) => response.json() as Promise<{ enabled: boolean; siteKey: string | null }>);
-  if (!config.enabled || !config.siteKey) return;
-  turnstileSiteKey.value = config.siteKey;
-  await nextTick();
-  await new Promise<void>((resolve, reject) => {
-    if (window.turnstile) { resolve(); return; }
-    const script = window.document.createElement("script"); script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; script.async = true; script.onload = () => resolve(); script.onerror = () => reject(new Error("TURNSTILE_LOAD_FAILED")); window.document.head.appendChild(script);
-  });
-  if (turnstileElement.value) turnstileWidgetId.value = window.turnstile?.render(turnstileElement.value, { sitekey: config.siteKey, callback: (token) => { turnstileToken.value = token; }, "expired-callback": () => { turnstileToken.value = ""; } }) ?? null;
-}
-
-function resetTurnstile() {
-  turnstileToken.value = "";
-  if (turnstileWidgetId.value) window.turnstile?.reset(turnstileWidgetId.value);
-}
 
 const { handleSubmit, isSubmitting } = useForm({
   validationSchema: toTypedSchema(z.object({
@@ -117,7 +103,7 @@ const submit = handleSubmit(async (input) => {
       formError.value = messages.value.auth.login.captchaRequired;
       return;
     }
-    const result = await authClient.signIn.email({ ...input, ...(turnstileToken.value ? { fetchOptions: { headers: { "x-captcha-response": turnstileToken.value } } } : {}) });
+    const result = await authClient.signIn.email({ ...input, ...(turnstileToken.value ? { fetchOptions: { headers: turnstileHeaders() } } : {}) });
     if (result.error) {
       resetTurnstile();
       formError.value = loginErrorMessages.value[classifyAuthError(result.error)];
