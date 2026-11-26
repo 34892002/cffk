@@ -49,12 +49,15 @@ async function errorCode(operation: () => Promise<unknown>) {
 }
 
 describe("public order request rate limiting", () => {
-  test("uses separate guest and account limits for query and resume", () => {
+  test("uses separate guest and account limits per action", () => {
     assert.equal(orderRequestLimit("QUERY", false), 10);
     assert.equal(orderRequestLimit("RESUME", false), 3);
     assert.equal(orderRequestLimit("RECOVERY", false), 3);
+    assert.equal(orderRequestLimit("PREVIEW_DISCOUNT", false), 20);
+    assert.equal(orderRequestLimit("CREATE_PAYMENT", false), 10);
     assert.equal(orderRequestLimit("QUERY", true), 60);
     assert.equal(orderRequestLimit("RESUME", true), 10);
+    assert.equal(orderRequestLimit("CREATE_PAYMENT", true), 30);
   });
 
   test("hashes action and requester identity without storing raw identifiers", async () => {
@@ -87,6 +90,24 @@ describe("public order request rate limiting", () => {
         ...input,
         now: new Date(base.getTime() + 60_000),
       });
+    } finally {
+      close();
+    }
+  });
+
+  test("caps order creation bursts per requester", async () => {
+    const { database, close } = sqliteD1Database();
+    const base = new Date("2026-08-13T00:00:00.000Z");
+    const input = { action: "CREATE_PAYMENT" as const, userId: null, clientIp: "203.0.113.10" };
+
+    try {
+      for (let count = 0; count < orderRequestLimit("CREATE_PAYMENT", false); count += 1) {
+        await enforceOrderRequestRateLimit(database, { ...input, now: base });
+      }
+      assert.equal(
+        await errorCode(() => enforceOrderRequestRateLimit(database, { ...input, now: base })),
+        "ORDER_QUERY_RATE_LIMITED",
+      );
     } finally {
       close();
     }

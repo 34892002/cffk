@@ -1,16 +1,16 @@
-import { getContext } from "telefunc";
 import { maskDiscountError } from "@/server/discount/service";
+import { enforceOrderRequestRateLimit } from "@/server/order/rate-limit";
+import { requireDatabase } from "@/server/telefunc-context";
 import { telefuncAction } from "@/server/telefunc-action";
-import type { StorefrontLocale } from "@/lib/i18n/locale";
 import { requirePaymentFlowService } from "./flow-service";
 import type { PaymentCreateInput } from "./types";
 
-type TelefuncContext = { user?: { id: string } | null; locale?: StorefrontLocale; clientIp?: string | null };
-
 async function internalOnCreatePayment(input: PaymentCreateInput) {
-  const context = getContext<TelefuncContext>();
+  const { database, context } = requireDatabase();
+  const userId = context.user?.id ?? null;
+  await enforceOrderRequestRateLimit(database, { action: "CREATE_PAYMENT", userId, clientIp: context.clientIp });
   try {
-    return await requirePaymentFlowService().create(input, context.user?.id ?? null, context.locale, context.clientIp);
+    return await requirePaymentFlowService().create(input, userId, context.locale, context.clientIp);
   } catch (cause) {
     return maskDiscountError(cause);
   }
